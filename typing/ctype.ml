@@ -566,7 +566,7 @@ let really_closed = ref None
    and only returns a [variable list].
  *)
 let rec free_vars_rec real ty =
-  mark_type_node_with ty
+  mark_type_node ty ~after:
     begin fun ty -> match ty.desc, !really_closed with
       Tvar _, _ ->
         free_variables := (ty, real) :: !free_variables
@@ -813,7 +813,7 @@ let rec normalize_package_path env p =
 
 let check_scope_escape env level ty =
   let rec loop ty =
-    mark_type_node_with ty
+    mark_type_node ty ~after:
       begin fun ty ->
 	if level < ty.scope then
           raise(Trace.scope_escape ty);
@@ -2096,7 +2096,7 @@ let expand_trace env trace =
 (* Return whether [t0] occurs in [ty]. Objects are also traversed. *)
 let deep_occur t0 ty =
   let rec occur_rec ty =
-    mark_type_node_with ty
+    mark_type_node ty ~after:
       begin fun ty ->
 	if ty == t0 then raise Occur;
 	iter_type_expr occur_rec ty
@@ -2414,7 +2414,7 @@ let mcomp env t1 t2 =
 let find_lowest_level ty =
   let lowest = ref (mirror_level generic_level) in
   let rec find ty =
-    mark_type_node_with ty
+    mark_type_node ty ~after:
       begin fun ty ->
 	if ty.level > !lowest then lowest := ty.level;
 	iter_type_expr find ty
@@ -3466,7 +3466,7 @@ let moregeneral env inst_nongen pat_sch subj_sch =
 (* Simpler, no? *)
 
 let rec rigidify_rec vars ty =
-  mark_type_node_with ty
+  mark_type_node ty ~after:
     begin fun ty -> match ty.desc with
     | Tvar _ ->
         if not (List.memq ty !vars) then vars := ty :: !vars
