@@ -19,13 +19,19 @@ open Asttypes
 
 (* Type expressions for the core language *)
 
-type type_expr =
-  { mutable desc: type_desc;
+type has_link = Has_link
+
+type type_view =
+  { desc: unit type_desc;
+    expr: type_expr }
+
+and type_expr =
+  { mutable _desc: has_link type_desc;
     mutable level: int;
     mutable scope: int;
     id: int }
 
-and type_desc =
+and _ type_desc =
     Tvar of string option
   | Tarrow of arg_label * type_expr * type_expr * commutable
   | Ttuple of type_expr list
@@ -33,8 +39,8 @@ and type_desc =
   | Tobject of type_expr * (Path.t * type_expr list) option ref
   | Tfield of string * field_kind * type_expr * type_expr
   | Tnil
-  | Tlink of type_expr
-  | Tsubst of type_expr         (* for copying *)
+  | Tlink : type_expr -> has_link type_desc
+  | Tsubst of type_expr     (* for copying *)
   | Tvariant of row_desc
   | Tunivar of string option
   | Tpoly of type_expr * type_expr list
@@ -81,7 +87,7 @@ end
 
 module Internal = struct
   type type_expr_internal = type_expr =
-      { mutable desc: type_desc;
+      { mutable _desc: has_link type_desc;
 	mutable level: int;
 	mutable scope: int;
 	id: int }

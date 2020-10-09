@@ -55,13 +55,20 @@ open Asttypes
 
     Note on mutability: TBD.
  *)
-type type_expr = private
-  { mutable desc: type_desc;
+
+type has_link = Has_link
+      
+type type_view =
+  { desc: unit type_desc;
+    expr: type_expr }
+
+and type_expr = private
+  { mutable _desc: has_link type_desc;
     mutable level: int;
     mutable scope: int;
     id: int }
 
-and type_desc =
+and _ type_desc =
   | Tvar of string option
   (** [Tvar (Some "a")] ==> ['a] or ['_a]
       [Tvar None]       ==> [_] *)
@@ -105,10 +112,10 @@ and type_desc =
   | Tnil
   (** [Tnil] ==> [<...; >] *)
 
-  | Tlink of type_expr
+  | Tlink : type_expr -> has_link type_desc
   (** Indirection used by unification engine. *)
 
-  | Tsubst of type_expr         (* for copying *)
+  | Tsubst of type_expr    (* for copying *)
   (** [Tsubst] is used temporarily to store information in low-level
       functions manipulating representation of types, such as
       instantiation or copy.
@@ -235,7 +242,7 @@ and commutable =
 
 module Internal : sig
   type type_expr_internal =
-      { mutable desc: type_desc;
+      { mutable _desc: has_link type_desc;
 	mutable level: int;
 	mutable scope: int;
 	id: int }

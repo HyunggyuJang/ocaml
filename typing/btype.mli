@@ -28,9 +28,9 @@ module TypeHash : Hashtbl.S with type key = type_expr
 
 val generic_level: int
 
-val newty2: int -> type_desc -> type_expr
+val newty2: int -> has_link type_desc -> type_expr
         (* Create a type *)
-val newgenty: type_desc -> type_expr
+val newgenty: has_link type_desc -> type_expr
         (* Create a generic type *)
 val newgenvar: ?name:string -> unit -> type_expr
         (* Return a fresh generic variable *)
@@ -44,12 +44,12 @@ val newmarkedgenvar: unit -> type_expr
 
 (**** Types ****)
 
-val is_Tvar: type_expr -> bool
-val is_Tunivar: type_expr -> bool
-val is_Tconstr: type_expr -> bool
+val is_Tvar: type_view -> bool
+val is_Tunivar: type_view -> bool
+val is_Tconstr: type_view -> bool
 val dummy_method: label
 
-val repr: type_expr -> type_expr
+val repr: type_expr -> type_view
         (* Return the canonical representative of a type. *)
 
 val field_kind_repr: field_kind -> field_kind
@@ -66,7 +66,7 @@ val row_repr: row_desc -> row_desc
 val row_field_repr: row_field -> row_field
 val row_field: label -> row_desc -> row_field
         (* Return the canonical representative of a row field *)
-val row_more: row_desc -> type_expr
+val row_more: row_desc -> type_view
         (* Return the extension variable of the row *)
 
 val is_fixed: row_desc -> bool
@@ -90,15 +90,15 @@ val static_row: row_desc -> bool
 val hash_variant: label -> int
         (* Hash function for variant tags *)
 
-val proxy: type_expr -> type_expr
+val proxy: type_expr -> type_view
         (* Return the proxy representative of the type: either itself
            or a row variable *)
 
 (**** Utilities for private abbreviations with fixed rows ****)
-val row_of_type: type_expr -> type_expr
-val has_constr_row: type_expr -> bool
+val row_of_type: type_expr -> type_view
+val has_constr_row: type_view -> bool
 val is_row_name: string -> bool
-val is_constr_row: allow_ident:bool -> type_expr -> bool
+val is_constr_row: allow_ident:bool -> type_view -> bool
 
 (* Set the polymorphic variant row_name field *)
 val set_row_name : type_declaration -> Path.t -> unit
@@ -106,6 +106,7 @@ val set_row_name : type_declaration -> Path.t -> unit
 (**** Utilities for type traversal ****)
 
 val iter_type_expr: (type_expr -> unit) -> type_expr -> unit
+val iter_type_view: (type_expr -> unit) -> type_view -> unit
         (* Iteration on types *)
 val fold_type_expr: ('a -> type_expr -> 'a) -> 'a -> type_expr -> 'a
 val iter_row: (type_expr -> unit) -> row_desc -> unit
@@ -138,7 +139,7 @@ val unmark_iterators: type_iterators
         (* Unmark any structure containing types. See [unmark_type] below. *)
 
 val copy_type_desc:
-    ?keep_names:bool -> (type_expr -> type_expr) -> type_desc -> type_desc
+    ?keep_names:bool -> (type_expr -> type_expr) -> 'a type_desc -> 'b type_desc
         (* Copy on types *)
 val copy_row:
     (type_expr -> type_expr) ->
@@ -154,7 +155,7 @@ module For_copy : sig
            While it is possible to circumvent that discipline in various
            ways, you should NOT do that. *)
 
-  val save_desc: copy_scope -> type_expr -> type_desc -> unit
+  val save_desc: copy_scope -> type_expr -> has_link type_desc -> unit
         (* Save a type description *)
 
   val dup_kind: copy_scope -> field_kind option ref -> unit
@@ -172,13 +173,13 @@ val mirror_level: int -> int
         (* Type marking: ty.level <- pivot_level - ty.level *)
         (* mirror_level is used for unmarking; it must be involutive,
 	   invert order *)
-val mark_type: type_expr -> unit
-        (* Mark a type *)
 val mark_type_node:
-        ?guard:(type_expr -> bool) -> ?after:(type_expr -> unit) ->
+        ?guard:(type_view -> bool) -> ?after:(type_view -> unit) ->
         type_expr -> unit
         (* If the node is not already marked and [guard] returns true
 	   (the default), then mark it and run [after]. *)
+val mark_type: type_expr -> unit
+        (* Mark a type *)
 val mark_type_params: type_expr -> unit
         (* Mark the sons of a type node *)
 val unmark_type: type_expr -> unit
@@ -239,7 +240,7 @@ val undo_compress: snapshot -> unit
 val link_type: type_expr -> type_expr -> unit
         (* Set the desc field of [t1] to [Tlink t2], logging the old
            value if there is an active snapshot *)
-val set_type_desc: type_expr -> type_desc -> unit
+val set_type_desc: type_expr -> has_link type_desc -> unit
         (* Set directly the desc field, without sharing *)
 val set_level: type_expr -> int -> unit
 val set_scope: type_expr -> int -> unit

@@ -127,10 +127,10 @@ let to_subst_by_type_function s p =
 let new_id = ref (-1)
 let reset_for_saving () = new_id := -1
 
-let newpersty desc =
+let newpersty _desc =
   decr new_id;
   Internal.lock
-    { desc; level = generic_level; scope = Btype.lowest_level; id = !new_id }
+    { _desc; level = generic_level; scope = Btype.lowest_level; id = !new_id }
 
 (* ensure that all occurrences of 'Tvar None' are physically shared *)
 let tvar_none = Tvar None
@@ -145,15 +145,16 @@ let ctype_apply_env_empty = ref (fun _ -> assert false)
 (* Similar to [Ctype.nondep_type_rec]. *)
 let rec typexp copy_scope s ty =
   let ty = repr ty in
+  let te = ty.expr in
   match ty.desc with
     Tvar _ | Tunivar _ as desc ->
-      if s.for_saving || ty.id < 0 then
+      if s.for_saving || te.id < 0 then
         let ty' =
           if s.for_saving then newpersty (norm desc)
-          else newty2 ty.level desc
+          else newty2 te.level desc
         in
         For_copy.save_desc copy_scope ty desc;
-        (Internal.unlock ty).desc <- Tsubst ty';
+        (Internal.unlock te)._desc <- Tsubst ty';
 	(* TODO: move this line to btype.ml
 	   there is a similar problem also in ctype.ml *)
         ty'
@@ -161,9 +162,9 @@ let rec typexp copy_scope s ty =
   | Tsubst ty ->
       ty
   | Tfield (m, k, _t1, _t2) when not s.for_saving && m = dummy_method
-      && field_kind_repr k <> Fabsent && (repr ty).level < generic_level ->
+      && field_kind_repr k <> Fabsent && te.level < generic_level ->
       (* do not copy the type of self when it is not generalized *)
-      ty
+      te
 (* cannot do it, since it would omit substitution
   | Tvariant row when not (static_row row) ->
       ty

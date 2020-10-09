@@ -116,7 +116,7 @@ val set_levels: levels -> unit
 
 val create_scope : unit -> int
 
-val newty: type_desc -> type_expr
+val newty: has_link type_desc -> type_expr
 val newvar: ?name:string -> unit -> type_expr
 val newvar2: ?name:string -> int -> type_expr
         (* Return a fresh variable *)
