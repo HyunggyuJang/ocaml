@@ -52,6 +52,9 @@ val dummy_method: label
 val repr: type_expr -> type_view
         (* Return the canonical representative of a type. *)
 
+val repr_expr: type_expr -> type_expr
+        (* Apply repr then expr *)
+    
 val field_kind_repr: field_kind -> field_kind
         (* Return the canonical representative of an object field
            kind. *)
@@ -237,7 +240,7 @@ val undo_compress: snapshot -> unit
            Does not call [cleanup_abbrev] *)
 
 (* Functions to use when modifying a type (only Ctype?) *)
-val link_type: type_expr -> type_expr -> unit
+val link_type: type_view -> type_expr -> unit
         (* Set the desc field of [t1] to [Tlink t2], logging the old
            value if there is an active snapshot *)
 val set_type_desc: type_expr -> has_link type_desc -> unit

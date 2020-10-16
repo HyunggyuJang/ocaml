@@ -142,6 +142,8 @@ let repr (t : type_expr) : type_view =
   | Tpackage _ as d ->
       {desc=d; expr=t}
 
+let repr_expr ty = (repr ty).expr
+
 let rec commu_repr = function
     Clink r when !r <> Cunknown -> commu_repr !r
   | c -> c
@@ -323,7 +325,7 @@ let rec fold_row f init row =
 let iter_row f row =
   fold_row (fun () v -> f v) () row
 
-let fold_type_expr f init ty =
+let rec fold_type_expr f init ty =
   match ty._desc with
     Tvar _              -> init
   | Tarrow (_, ty1, ty2, _) ->
@@ -343,7 +345,7 @@ let fold_type_expr f init ty =
     let result = f init ty1 in
     f result ty2
   | Tnil                -> init
-  | Tlink ty            -> f init ty
+  | Tlink ty            -> fold_type_expr f init ty
   | Tsubst ty           -> f init ty
   | Tunivar _           -> init
   | Tpoly (ty, tyl)     ->
@@ -763,7 +765,9 @@ let last_snapshot = ref 0
 
 let log_type ty =
   if ty.id <= !last_snapshot then log_change (Ctype (ty, ty._desc))
-let link_type ty ty' =
+let link_type tv ty' =
+  let ty = tv.expr in
+  assert (tv.desc == Obj.magic ty._desc);
   log_type ty;
   let desc = ty._desc in
   (Internal.unlock ty)._desc <- Tlink ty';

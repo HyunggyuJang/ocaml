@@ -27,18 +27,19 @@ let free_vars ?(param=false) ty =
     mark_type_node ty ~after:
       begin fun ty -> match ty.desc with
       | Tvar _ ->
-          ret := TypeSet.add ty !ret
+          ret := TypeSet.add ty.expr !ret
       | Tvariant row ->
           let row = row_repr row in
           iter_row loop row;
           if not (static_row row) then begin
-            match row.row_more.desc with
-            | Tvar _ when param -> ret := TypeSet.add ty !ret
-            | _ -> loop row.row_more
+	    let more_view = repr row.row_more in
+            match more_view.desc with
+            | Tvar _ when param -> ret := TypeSet.add ty.expr !ret
+            | _ -> loop more_view.expr
           end
       (* XXX: What about Tobject ? *)
       | _ ->
-          iter_type_expr loop ty
+          iter_type_view loop ty
       end
   in
   loop ty;
@@ -181,7 +182,7 @@ let extension_descr ~current_unit path_ext ext =
     }
 
 let none = Internal.lock
- {desc = Ttuple []; level = -1; scope = Btype.generic_level; id = -1}
+ {_desc = Ttuple []; level = -1; scope = Btype.generic_level; id = -1}
                                         (* Clearly ill-formed type *)
 let dummy_label =
   { lbl_name = ""; lbl_res = none; lbl_arg = none; lbl_mut = Immutable;

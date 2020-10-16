@@ -1162,7 +1162,7 @@ let find_type_expansion path env =
   match decl.type_manifest with
   | Some body when decl.type_private = Public
               || decl.type_kind <> Type_abstract
-              || Btype.has_constr_row body ->
+              || Btype.has_constr_row (repr body) ->
       (decl.type_params, body, decl.type_expansion_scope)
   (* The manifest type of Private abstract data types without
      private row are still considered unknown to the type system.

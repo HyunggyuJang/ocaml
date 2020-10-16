@@ -144,17 +144,17 @@ let ctype_apply_env_empty = ref (fun _ -> assert false)
 
 (* Similar to [Ctype.nondep_type_rec]. *)
 let rec typexp copy_scope s ty =
-  let ty = repr ty in
-  let te = ty.expr in
-  match ty.desc with
+  let tv = repr ty in
+  let ty = tv.expr in
+  match tv.desc with
     Tvar _ | Tunivar _ as desc ->
-      if s.for_saving || te.id < 0 then
+      if s.for_saving || ty.id < 0 then
         let ty' =
           if s.for_saving then newpersty (norm desc)
-          else newty2 te.level desc
+          else newty2 ty.level desc
         in
         For_copy.save_desc copy_scope ty desc;
-        (Internal.unlock te)._desc <- Tsubst ty';
+        (Internal.unlock ty)._desc <- Tsubst ty';
 	(* TODO: move this line to btype.ml
 	   there is a similar problem also in ctype.ml *)
         ty'
@@ -162,25 +162,25 @@ let rec typexp copy_scope s ty =
   | Tsubst ty ->
       ty
   | Tfield (m, k, _t1, _t2) when not s.for_saving && m = dummy_method
-      && field_kind_repr k <> Fabsent && te.level < generic_level ->
+      && field_kind_repr k <> Fabsent && ty.level < generic_level ->
       (* do not copy the type of self when it is not generalized *)
-      te
+      ty
 (* cannot do it, since it would omit substitution
   | Tvariant row when not (static_row row) ->
       ty
 *)
   | _ ->
-    let desc = ty.desc in
+    let desc = ty._desc in
     For_copy.save_desc copy_scope ty desc;
     let tm = row_of_type ty in
     let has_fixed_row =
-      not (is_Tconstr ty) && is_constr_row ~allow_ident:false tm in
+      not (is_Tconstr tv) && is_constr_row ~allow_ident:false tm in
     (* Make a stub *)
     let ty' = if s.for_saving then newpersty (Tvar None) else newgenvar () in
     (Internal.unlock ty').scope <- ty.scope;
     (* TODO: figure out why not use set_scope *)
-    (Internal.unlock ty).desc <- Tsubst ty';
-    (Internal.unlock ty').desc <-
+    (Internal.unlock ty)._desc <- Tsubst ty';
+    (Internal.unlock ty')._desc <-
       begin if has_fixed_row then
         match tm.desc with (* PR#7348 *)
           Tconstr (Pdot(m,i), tl, _abbrev) ->
@@ -211,32 +211,33 @@ let rec typexp copy_scope s ty =
           Tobject (t1', ref name')
       | Tvariant row ->
           let row = row_repr row in
-          let more = repr row.row_more in
+          let morev = repr row.row_more in
+	  let more = morev.expr in
           (* We must substitute in a subtle way *)
           (* Tsubst takes a tuple containing the row var and the variant *)
-          begin match more.desc with
-            Tsubst {desc = Ttuple [_;ty2]} ->
+          begin match morev.desc with
+            Tsubst {_desc = Ttuple [_;ty2]} ->
               (* This variant type has been already copied *)
-              (Internal.unlock ty).desc <- Tsubst ty2;
+              (Internal.unlock ty)._desc <- Tsubst ty2;
 	      (* avoid Tlink in the new type *)
               Tlink ty2
           | _ ->
               let dup =
                 s.for_saving || more.level = generic_level || static_row row ||
-                match more.desc with Tconstr _ -> true | _ -> false in
+                match morev.desc with Tconstr _ -> true | _ -> false in
               (* Various cases for the row variable *)
               let more' =
-                match more.desc with
+                match morev.desc with
                   Tsubst ty -> ty
                 | Tconstr _ | Tnil -> typexp copy_scope s more
                 | Tunivar _ | Tvar _ ->
-                    For_copy.save_desc copy_scope more more.desc;
-                    if s.for_saving then newpersty (norm more.desc) else
-                    if dup && is_Tvar more then newgenty more.desc else more
+                    For_copy.save_desc copy_scope more more._desc;
+                    if s.for_saving then newpersty (norm more._desc) else
+                    if dup && is_Tvar morev then newgenty more._desc else more
                 | _ -> assert false
               in
               (* Register new type first for recursion *)
-              (Internal.unlock more).desc <- Tsubst(newgenty(Ttuple[more';ty']));
+              (Internal.unlock more)._desc <- Tsubst(newgenty(Ttuple[more';ty']));
 	      (* TODO: check if more' can be eliminated *)
               (* Return a new copy *)
               let row =
