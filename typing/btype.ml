@@ -57,9 +57,9 @@ let newmarkedgenvar () =
 
 (**** Check some types ****)
 
-let is_Tvar = function {desc=Tvar _} -> true | _ -> false
-let is_Tunivar = function {desc=Tunivar _} -> true | _ -> false
-let is_Tconstr = function {desc=Tconstr _} -> true | _ -> false
+let is_Tvar tv = match view_desc tv with Tvar _ -> true | _ -> false
+let is_Tunivar tv = match view_desc tv with Tunivar _ -> true | _ -> false
+let is_Tconstr tv = match view_desc tv with Tconstr _ -> true | _ -> false
 
 let dummy_method = "*dummy method*"
 
@@ -100,7 +100,7 @@ let rec field_kind_repr =
   | kind                        -> kind
 
 let rec repr_link compress (t : type_expr) d (t1 : type_expr) : type_view =
-  let d' = t1._desc in
+  let d' = (Internal.unlock t1)._desc in
   match d' with
   | Tlink t' -> repr_link true t d' t'
   | Tfield (_, k, _, t') when field_kind_repr k = Fabsent ->
@@ -118,12 +118,12 @@ let rec repr_link compress (t : type_expr) d (t1 : type_expr) : type_view =
   | Tpoly _
   | Tpackage _ as d1 ->
       if compress then begin
-	log_change (Ccompress (t, t._desc, d)); (Internal.unlock t)._desc <- d
+	log_change (Ccompress (t, (Internal.unlock t)._desc, d)); (Internal.unlock t)._desc <- d
       end;
-      { desc=d1; expr=t1 }
+      Internal.create_view d1 t1
 
 let repr (t : type_expr) : type_view =
-  match t._desc with
+  match (Internal.unlock t)._desc with
     Tlink t' as d ->
       repr_link false t d t'
   | Tfield (_, k, _, t') as d when field_kind_repr k = Fabsent ->
@@ -140,9 +140,43 @@ let repr (t : type_expr) : type_view =
   | Tunivar _
   | Tpoly _
   | Tpackage _ as d ->
-      {desc=d; expr=t}
+      Internal.create_view d t
 
-let repr_expr ty = (repr ty).expr
+let () = Types._repr := repr
+
+let repr_expr ty = Internal.unsafe_view_expr (repr ty)
+let repr_desc ty = Internal.unsafe_view_desc (repr ty)
+
+(*
+let rec low_level_repr_desc (t : type_expr) : unit type_desc =
+  match (Internal.unlock t)._desc with
+    Tlink t' ->
+      low_level_repr_desc t'
+  | Tfield (_, k, _, t') when field_kind_repr k = Fabsent ->
+      low_level_repr_desc t'
+  | Tfield _
+  | Tvar _
+  | Tarrow _
+  | Ttuple _
+  | Tconstr _
+  | Tobject _
+  | Tnil
+  | Tsubst _
+  | Tvariant _
+  | Tunivar _
+  | Tpoly _
+  | Tpackage _ as d ->
+      d
+
+let rec low_level_repr_expr t =
+  match (Internal.unlock t)._desc with
+    Tlink t' ->
+      low_level_repr_expr t'
+  | Tfield (_, k, _, t') when field_kind_repr k = Fabsent ->
+      low_level_repr_expr t'
+  | _ ->
+      t
+*)
 
 let rec commu_repr = function
     Clink r when !r <> Cunknown -> commu_repr !r
@@ -165,7 +199,7 @@ let rec rev_concat l ll =
   | l'::ll -> rev_concat (l'@l) ll
 
 let rec row_repr_aux ll row =
-  match (repr row.row_more).desc with
+  match repr_desc row.row_more with
   | Tvariant row' ->
       let f = row.row_fields in
       row_repr_aux (if f = [] then ll else f::ll) row'
@@ -180,15 +214,16 @@ let rec row_field tag row =
     | (tag',f) :: fields ->
         if tag = tag' then row_field_repr f else find fields
     | [] ->
-        match repr row.row_more with
-        | {desc=Tvariant row'} -> row_field tag row'
+        match repr_desc row.row_more with
+        | Tvariant row' -> row_field tag row'
         | _ -> Rabsent
   in find row.row_fields
 
 let rec row_more row =
-  match repr row.row_more with
-  | {desc=Tvariant row'} -> row_more row'
-  | ty -> ty
+  let tv = repr row.row_more in
+  match view_desc tv with
+  | Tvariant row' -> row_more row'
+  | _ -> tv
 
 let merge_fixed_explanation fixed1 fixed2 =
   match fixed1, fixed2 with
@@ -205,9 +240,9 @@ let fixed_explanation row =
   | Some _ as x -> x
   | None ->
       let more = repr row.row_more in
-      match more.desc with
+      match view_desc more with
       | Tvar _ | Tnil -> None
-      | Tunivar _ -> Some (Univar more.expr)
+      | Tunivar _ -> Some (Univar (view_expr more))
       | Tconstr (p,_,_) -> Some (Reified p)
       | _ -> assert false
 
@@ -237,14 +272,14 @@ let hash_variant s =
 
 let proxy ty =
   let ty0 = repr ty in
-  match ty0.desc with
+  match view_desc ty0 with
   | Tvariant row when not (static_row row) ->
       row_more row
   | Tobject (ty, _) ->
       let rec proxy_obj ty =
-        match ty._desc with
+        match (Internal.unlock ty)._desc with
           Tfield (_, _, _, ty) | Tlink ty -> proxy_obj ty
-        | Tvar _ | Tunivar _ | Tconstr _ as desc -> {desc; expr=ty}
+        | Tvar _ | Tunivar _ | Tconstr _ as desc -> Internal.create_view desc ty
         | Tnil -> ty0
         | _ -> assert false
       in proxy_obj ty
@@ -253,29 +288,29 @@ let proxy ty =
 (**** Utilities for fixed row private types ****)
 
 let row_of_type t =
-  let t = repr t in
-  match t.desc with
+  let tv = repr t in
+  match view_desc tv with
     Tobject(t,_) ->
       let rec get_row t =
-        let t = repr t in
-        match t.desc with
+        let tv = repr t in
+        match view_desc tv with
           Tfield(_,_,_,t) -> get_row t
-        | _ -> t
+        | _ -> tv
       in get_row t
   | Tvariant row ->
       row_more row
   | _ ->
-      t
+      tv
 
-let has_constr_row t =
-  not (is_Tconstr t) && is_Tconstr (row_of_type t.expr)
+let has_constr_row tv =
+  not (is_Tconstr tv) && is_Tconstr (row_of_type (view_expr tv))
 
 let is_row_name s =
   let l = String.length s in
   if l < 4 then false else String.sub s (l-4) 4 = "#row"
 
-let is_constr_row ~allow_ident t =
-  match t.desc with
+let is_constr_row ~allow_ident tv =
+  match view_desc tv with
     Tconstr (Path.Pident id, _, _) when allow_ident ->
       is_row_name (Ident.name id)
   | Tconstr (Path.Pdot (_, s), _, _) -> is_row_name s
@@ -287,12 +322,12 @@ let set_row_name decl path =
   match decl.type_manifest with
     None -> ()
   | Some ty ->
-      let ty = repr ty in
-      match ty.desc with
+      let tv = repr ty in
+      match view_desc tv with
         Tvariant row when static_row row ->
           let row = {(row_repr row) with
                      row_name = Some (path, decl.type_params)} in
-          (Internal.unlock ty.expr)._desc <- Tvariant row
+          (Internal.unlock (view_expr tv))._desc <- Tvariant row
       | _ -> ()
 
 
@@ -311,7 +346,7 @@ let rec fold_row f init row =
       init
       row.row_fields
   in
-  match (repr row.row_more).desc with
+  match repr_desc row.row_more with
     Tvariant row -> fold_row f result row
   | Tvar _ | Tunivar _ | Tsubst _ | Tconstr _ | Tnil ->
     begin match
@@ -326,7 +361,7 @@ let iter_row f row =
   fold_row (fun () v -> f v) () row
 
 let rec fold_type_expr f init ty =
-  match ty._desc with
+  match (Internal.unlock ty)._desc with
     Tvar _              -> init
   | Tarrow (_, ty1, ty2, _) ->
     let result = f init ty1 in
@@ -340,7 +375,7 @@ let rec fold_type_expr f init ty =
   | Tobject (ty, _)     -> f init ty
   | Tvariant row        ->
     let result = fold_row f init row in
-    f result (row_more row).expr
+    f result (view_expr (row_more row))
   | Tfield (_, _, ty1, ty2) ->
     let result = f init ty1 in
     f result ty2
@@ -356,8 +391,8 @@ let rec fold_type_expr f init ty =
 let iter_type_expr f ty =
   fold_type_expr (fun () v -> f v) () ty
 
-let iter_type_view f ty =
-  iter_type_expr f ty.expr
+let iter_type_view f tv =
+  iter_type_expr f (view_expr tv)
 
 let rec iter_abbrev f = function
     Mnil                   -> ()
@@ -469,7 +504,7 @@ let type_iterators =
     iter_type_expr_kind (it.it_type_expr it) kind
   and it_do_type_expr it ty =
     iter_type_expr (it.it_type_expr it) ty;
-    match ty._desc with
+    match (Internal.unlock ty)._desc with
       Tconstr (p, _, _)
     | Tobject (_, {contents=Some (p, _)})
     | Tpackage (p, _, _) ->
@@ -518,7 +553,7 @@ let copy_commu c =
 (* Since univars may be used as row variables, we need to do some
    encoding during substitution *)
 let rec norm_univar ty =
-  match ty._desc with
+  match (Internal.unlock ty)._desc with
     Tunivar _ | Tsubst _ -> ty
   | Tlink ty           -> norm_univar ty
   | Ttuple (ty :: _)   -> norm_univar ty
@@ -538,7 +573,7 @@ let rec copy_type_desc :
   | Tfield (p, k, ty1, ty2) -> (* the kind is kept shared *)
       Tfield (p, field_kind_repr k, f ty1, f ty2)
   | Tnil                -> Tnil
-  | Tlink ty            -> copy_type_desc f ty._desc
+  | Tlink ty            -> copy_type_desc f (Internal.unlock ty)._desc
   | Tsubst _            -> assert false
   | Tunivar _ as ty     -> ty (* always keep the name *)
   | Tpoly (ty, tyl)     ->
@@ -596,11 +631,11 @@ end
 let mirror_level level = pivot_level - level  
 
 let mark_type_node ?(guard = fun _ -> true) ?(after = fun _ -> ()) ty =
-  let ty = repr ty in
-  let ty' = ty.expr in
-  if ty'.level >= lowest_level && guard ty then begin
-    (Internal.unlock ty').level <- mirror_level ty'.level;
-    after ty
+  let tv = repr ty in
+  if view_level tv >= lowest_level && guard tv then begin
+    let ty' = Internal.unlock (view_expr tv) in
+    ty'.level <- mirror_level ty'.level;
+    after tv
   end
 
 let rec mark_type ty =
@@ -611,17 +646,17 @@ let mark_type_params ty =
 
 let type_iterators =
   let it_type_expr it ty =
-    mark_type_node ty ~after:(fun ty -> it.it_do_type_expr it ty.expr)
+    mark_type_node ty ~after:(fun ty -> it.it_do_type_expr it (view_expr ty))
   in
   {type_iterators with it_type_expr}
 
    
 (* Remove marks from a type. *)
 let rec unmark_type ty =
-  let ty = (repr ty).expr in
-  if ty.level < lowest_level then begin
+  let ty = repr_expr ty in
+  if (Internal.unlock ty).level < lowest_level then begin
     (* flip back the marked level *)
-    (Internal.unlock ty).level <- pivot_level - ty.level;
+    (Internal.unlock ty).level <- pivot_level - (Internal.unlock ty).level;
     iter_type_expr unmark_type ty
   end
 
@@ -764,22 +799,23 @@ type snapshot = changes ref * int
 let last_snapshot = ref 0
 
 let log_type ty =
-  if ty.id <= !last_snapshot then log_change (Ctype (ty, ty._desc))
+  if (Internal.unlock ty).id <= !last_snapshot then
+    log_change (Ctype (ty, (Internal.unlock ty)._desc))
 let link_type tv ty' =
-  let ty = tv.expr in
-  assert (tv.desc == Obj.magic ty._desc);
+  let ty = view_expr tv in
+  (* assert (tv.desc == Obj.magic ty._desc); *) (* included in view_expr *)
   log_type ty;
-  let desc = ty._desc in
+  let desc = (Internal.unlock ty)._desc in
   (Internal.unlock ty)._desc <- Tlink ty';
   (* Name is a user-supplied name for this unification variable (obtained
    * through a type annotation for instance). *)
-  match desc, ty'._desc with
+  match desc, (Internal.unlock ty')._desc with
     Tvar name, Tvar name' ->
       begin match name, name' with
       | Some _, None ->  log_type ty'; (Internal.unlock ty')._desc <- Tvar name
       | None, Some _ ->  ()
       | Some _, Some _ ->
-          if ty.level < ty'.level then
+          if (Internal.unlock ty).level < (Internal.unlock ty').level then
 	    (log_type ty'; (Internal.unlock ty')._desc <- Tvar name)
       | None, None   ->  ()
       end
@@ -788,21 +824,24 @@ let link_type tv ty' =
   (*  ; check_expans [] ty' *)
 (* TODO: consider eliminating set_type_desc, replacing it with link types *)
 let set_type_desc ty td =
-  if td != ty._desc then begin
+  if td != (Internal.unlock ty)._desc then begin
     log_type ty;
     (Internal.unlock ty)._desc <- td
   end
 (* TODO: separate set_level into two specific functions: *)
 (*  set_lower_level and set_generic_level *)
- let set_level ty level =
-  if level <> ty.level then begin
-    if ty.id <= !last_snapshot then log_change (Clevel (ty, ty.level));
+ let set_level tv level =
+  let ty = view_expr tv in
+  if level <> (Internal.unlock ty).level then begin
+    if (Internal.unlock ty).id <= !last_snapshot then
+      log_change (Clevel (ty, (Internal.unlock ty).level));
     (Internal.unlock ty).level <- level
   end
 (* TODO: introduce a guard and rename it to set_higher_scope? *)
-let set_scope ty scope =
-  if scope <> ty.scope then begin
-    if ty.id <= !last_snapshot then log_change (Cscope (ty, ty.scope));
+let set_scope tv scope =
+  let ty = view_expr tv in
+  if scope <> (Internal.unlock ty).scope then begin
+    if (Internal.unlock ty).id <= !last_snapshot then log_change (Cscope (ty, (Internal.unlock ty).scope));
     (Internal.unlock ty).scope <- scope
   end
 let set_univar rty ty =
@@ -866,7 +905,7 @@ let undo_compress (changes, _old) =
       let log = rev_compress_log [] changes in
       List.iter
         (fun r -> match !r with
-          Change (Ccompress (ty, desc, d), next) when ty._desc == d ->
+          Change (Ccompress (ty, desc, d), next) when (Internal.unlock ty)._desc == d ->
             (Internal.unlock ty)._desc <- desc; r := !next
         | _ -> ())
         log

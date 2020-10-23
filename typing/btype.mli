@@ -245,8 +245,8 @@ val link_type: type_view -> type_expr -> unit
            value if there is an active snapshot *)
 val set_type_desc: type_expr -> has_link type_desc -> unit
         (* Set directly the desc field, without sharing *)
-val set_level: type_expr -> int -> unit
-val set_scope: type_expr -> int -> unit
+val set_level: type_view -> int -> unit
+val set_scope: type_view -> int -> unit
 val set_name:
     (Path.t * type_expr list) option ref ->
     (Path.t * type_expr list) option -> unit

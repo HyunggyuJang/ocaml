@@ -58,15 +58,8 @@ open Asttypes
 
 type has_link = Has_link
       
-type type_view =
-  { desc: unit type_desc;
-    expr: type_expr }
-
-and type_expr = private
-  { mutable _desc: has_link type_desc;
-    mutable level: int;
-    mutable scope: int;
-    id: int }
+type type_expr
+  (** see [Internal.type_expr_internal] *)
 
 and _ type_desc =
   | Tvar of string option
@@ -240,6 +233,16 @@ and commutable =
   | Cunknown
   | Clink of commutable ref
 
+type type_view 
+
+val _repr : (type_expr -> type_view) ref
+      
+val view_desc : type_view -> unit type_desc
+val view_expr : type_view -> type_expr
+val view_level : type_view -> int
+val view_scope : type_view -> int
+val view_id : type_view -> int
+
 module Internal : sig
   type type_expr_internal =
       { mutable _desc: has_link type_desc;
@@ -248,6 +251,9 @@ module Internal : sig
 	id: int }
   val lock : type_expr_internal -> type_expr
   val unlock : type_expr -> type_expr_internal
+  val create_view : unit type_desc -> type_expr -> type_view
+  val unsafe_view_expr : type_view -> type_expr
+  val unsafe_view_desc : type_view -> unit type_desc
 end
 
 module TypeOps : sig

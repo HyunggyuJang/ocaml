@@ -22,8 +22,8 @@ open Asttypes
 type has_link = Has_link
 
 type type_view =
-  { desc: unit type_desc;
-    expr: type_expr }
+  { mutable desc: unit type_desc;
+    mutable expr: type_expr }
 
 and type_expr =
   { mutable _desc: has_link type_desc;
@@ -85,6 +85,28 @@ module TypeOps = struct
   let equal t1 t2 = t1 == t2
 end
 
+let _repr = ref (fun _ -> assert false : type_expr -> type_view)
+
+(*
+let view_refresh tv =
+  if tv.desc != (Obj.magic tv.expr._desc) then
+    let tv' = !_repr tv.expr in tv.desc <- tv'.desc; tv.expr <- tv'.expr
+
+let view_desc tv = view_refresh tv; tv.desc
+let view_expr tv = view_refresh tv; tv.expr
+let view_level tv = view_refresh tv; tv.expr.level
+let view_scope tv = view_refresh tv; tv.expr.scope
+let view_id tv = view_refresh tv; tv.expr.id
+*)
+
+let view_check tv = assert (tv.desc == (Obj.magic tv.expr._desc))
+
+let view_desc tv = view_check tv; tv.desc
+let view_expr tv = view_check tv; tv.expr
+let view_level tv = view_check tv; tv.expr.level
+let view_scope tv = view_check tv; tv.expr.scope
+let view_id tv = view_check tv; tv.expr.id
+
 module Internal = struct
   type type_expr_internal = type_expr =
       { mutable _desc: has_link type_desc;
@@ -93,6 +115,9 @@ module Internal = struct
 	id: int }
   let lock x = x
   let unlock x = x
+  let create_view desc expr = {desc; expr}
+  let unsafe_view_expr tv = tv.expr
+  let unsafe_view_desc tv = tv.desc
 end
 (* *)
 
