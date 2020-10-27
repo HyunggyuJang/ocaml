@@ -237,11 +237,12 @@ type type_view
 
 val _repr : (type_expr -> type_view) ref
       
-val view_desc : type_view -> unit type_desc
+val view_desc : type_view -> 'a type_desc
 val view_expr : type_view -> type_expr
 val view_level : type_view -> int
 val view_scope : type_view -> int
 val view_id : type_view -> int
+val any_type_desc : unit type_desc -> 'a type_desc (* identity *)
 
 module Internal : sig
   type type_expr_internal =
@@ -253,7 +254,7 @@ module Internal : sig
   val unlock : type_expr -> type_expr_internal
   val create_view : unit type_desc -> type_expr -> type_view
   val unsafe_view_expr : type_view -> type_expr
-  val unsafe_view_desc : type_view -> unit type_desc
+  val unsafe_view_desc : type_view -> 'a type_desc
 end
 
 module TypeOps : sig

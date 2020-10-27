@@ -158,7 +158,7 @@ module For_copy : sig
            While it is possible to circumvent that discipline in various
            ways, you should NOT do that. *)
 
-  val save_desc: copy_scope -> type_expr -> has_link type_desc -> unit
+  val save_desc: copy_scope -> type_expr -> unit
         (* Save a type description *)
 
   val dup_kind: copy_scope -> field_kind option ref -> unit

@@ -586,7 +586,7 @@ let rec copy_type_desc :
 module For_copy : sig
   type copy_scope
 
-  val save_desc: copy_scope -> type_expr -> has_link type_desc -> unit
+  val save_desc: copy_scope -> type_expr -> unit
 
   val dup_kind: copy_scope -> field_kind option ref -> unit
 
@@ -603,8 +603,9 @@ end = struct
     (* new kind variables *)
   }
 
-  let save_desc copy_scope ty desc =
-    copy_scope.saved_desc <- (ty, desc) :: copy_scope.saved_desc
+  let save_desc copy_scope ty =
+    copy_scope.saved_desc <-
+      (ty, (Internal.unlock ty)._desc) :: copy_scope.saved_desc
 
   let dup_kind copy_scope r =
     assert (Option.is_none !r);

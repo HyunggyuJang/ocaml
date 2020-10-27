@@ -99,9 +99,23 @@ let view_scope tv = view_refresh tv; tv.expr.scope
 let view_id tv = view_refresh tv; tv.expr.id
 *)
 
+let any_type_desc : unit type_desc -> 'a type_desc = function
+  | Tfield _
+  | Tvar _
+  | Tarrow _
+  | Ttuple _
+  | Tconstr _
+  | Tobject _
+  | Tnil
+  | Tsubst _
+  | Tvariant _
+  | Tunivar _
+  | Tpoly _
+  | Tpackage _ as d -> d
+
 let view_check tv = assert (tv.desc == (Obj.magic tv.expr._desc))
 
-let view_desc tv = view_check tv; tv.desc
+let view_desc tv = view_check tv; any_type_desc tv.desc
 let view_expr tv = view_check tv; tv.expr
 let view_level tv = view_check tv; tv.expr.level
 let view_scope tv = view_check tv; tv.expr.scope
@@ -117,7 +131,7 @@ module Internal = struct
   let unlock x = x
   let create_view desc expr = {desc; expr}
   let unsafe_view_expr tv = tv.expr
-  let unsafe_view_desc tv = tv.desc
+  let unsafe_view_desc tv = any_type_desc tv.desc
 end
 (* *)
 
