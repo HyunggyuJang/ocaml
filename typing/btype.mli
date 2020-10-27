@@ -53,7 +53,9 @@ val repr: type_expr -> type_view
         (* Return the canonical representative of a type. *)
 
 val repr_expr: type_expr -> type_expr
-        (* Apply repr then expr *)
+        (* Apply repr then view_expr *)
+val repr_desc: type_expr -> 'a type_desc
+        (* Apply repr then view_desc *)
     
 val field_kind_repr: field_kind -> field_kind
         (* Return the canonical representative of an object field

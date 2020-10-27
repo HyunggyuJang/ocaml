@@ -1202,11 +1202,12 @@ let rec is_functor_arg path env =
 let make_copy_of_types env0 =
   let memo = Hashtbl.create 16 in
   let copy t =
+    let v = repr t in
     try
-      Hashtbl.find memo t.id
+      Hashtbl.find memo (view_id v)
     with Not_found ->
-      let t2 = Subst.type_expr Subst.identity t in
-      Hashtbl.add memo t.id t2;
+      let t2 = Subst.type_expr Subst.identity (view_expr v) in
+      Hashtbl.add memo (view_id v) t2;
       t2
   in
   let f = function
@@ -2175,8 +2176,8 @@ let mark_extension_used usage ext =
 
 let mark_constructor_description_used usage env cstr =
   let ty_path =
-    match repr cstr.cstr_res with
-    | {desc=Tconstr(path, _, _)} -> path
+    match repr_desc cstr.cstr_res with
+    | Tconstr(path, _, _) -> path
     | _ -> assert false
   in
   mark_type_path_used env ty_path;
@@ -2186,8 +2187,8 @@ let mark_constructor_description_used usage env cstr =
 
 let mark_label_description_used () env lbl =
   let ty_path =
-    match repr lbl.lbl_res with
-    | {desc=Tconstr(path, _, _)} -> path
+    match repr_desc lbl.lbl_res with
+    | Tconstr(path, _, _) -> path
     | _ -> assert false
   in
   mark_type_path_used env ty_path
