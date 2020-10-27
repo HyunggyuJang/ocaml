@@ -142,8 +142,6 @@ let repr (t : type_expr) : type_view =
   | Tpackage _ as d ->
       Internal.create_view d t
 
-let () = Types._repr := repr
-
 let repr_expr ty = Internal.unsafe_view_expr (repr ty)
 let repr_desc ty = Internal.unsafe_view_desc (repr ty)
 

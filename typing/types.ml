@@ -85,9 +85,9 @@ module TypeOps = struct
   let equal t1 t2 = t1 == t2
 end
 
+(*
 let _repr = ref (fun _ -> assert false : type_expr -> type_view)
 
-(*
 let view_refresh tv =
   if tv.desc != (Obj.magic tv.expr._desc) then
     let tv' = !_repr tv.expr in tv.desc <- tv'.desc; tv.expr <- tv'.expr
@@ -98,6 +98,8 @@ let view_level tv = view_refresh tv; tv.expr.level
 let view_scope tv = view_refresh tv; tv.expr.scope
 let view_id tv = view_refresh tv; tv.expr.id
 *)
+
+let type_id ty = ty.id
 
 let any_type_desc : unit type_desc -> 'a type_desc = function
   | Tfield _

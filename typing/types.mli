@@ -235,14 +235,13 @@ and commutable =
 
 type type_view 
 
-val _repr : (type_expr -> type_view) ref
-      
 val view_desc : type_view -> 'a type_desc
 val view_expr : type_view -> type_expr
 val view_level : type_view -> int
 val view_scope : type_view -> int
 val view_id : type_view -> int
 val any_type_desc : unit type_desc -> 'a type_desc (* identity *)
+val type_id : type_expr -> int
 
 module Internal : sig
   type type_expr_internal =
