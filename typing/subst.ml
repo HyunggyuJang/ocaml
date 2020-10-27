@@ -145,24 +145,24 @@ let ctype_apply_env_empty = ref (fun _ -> assert false)
 (* Similar to [Ctype.nondep_type_rec]. *)
 let rec typexp copy_scope s ty =
   let tv = repr ty in
-  let ty = tv.expr in
-  match tv.desc with
+  let ty = view_expr tv in
+  match view_desc tv with
     Tvar _ | Tunivar _ as desc ->
-      if s.for_saving || ty.id < 0 then
+      if s.for_saving || (Internal.unlock ty).id < 0 then
         let ty' =
           if s.for_saving then newpersty (norm desc)
-          else newty2 ty.level desc
+          else newty2 (Internal.unlock ty).level desc
         in
         For_copy.save_desc copy_scope ty desc;
-        (Internal.unlock ty)._desc <- Tsubst ty';
+        (Internal.unlock ty)._desc <- Tsubst (ty', None);
 	(* TODO: move this line to btype.ml
 	   there is a similar problem also in ctype.ml *)
         ty'
       else ty
-  | Tsubst ty ->
+  | Tsubst (ty, _) ->
       ty
   | Tfield (m, k, _t1, _t2) when not s.for_saving && m = dummy_method
-      && field_kind_repr k <> Fabsent && ty.level < generic_level ->
+      && field_kind_repr k <> Fabsent && (Internal.unlock ty).level < generic_level ->
       (* do not copy the type of self when it is not generalized *)
       ty
 (* cannot do it, since it would omit substitution
@@ -170,19 +170,19 @@ let rec typexp copy_scope s ty =
       ty
 *)
   | _ ->
-    let desc = ty._desc in
+    let desc = (Internal.unlock ty)._desc in
     For_copy.save_desc copy_scope ty desc;
     let tm = row_of_type ty in
     let has_fixed_row =
       not (is_Tconstr tv) && is_constr_row ~allow_ident:false tm in
     (* Make a stub *)
     let ty' = if s.for_saving then newpersty (Tvar None) else newgenvar () in
-    (Internal.unlock ty').scope <- ty.scope;
+    (Internal.unlock ty').scope <- (Internal.unlock ty).scope;
     (* TODO: figure out why not use set_scope *)
-    (Internal.unlock ty)._desc <- Tsubst ty';
+    (Internal.unlock ty)._desc <- Tsubst (ty', None);
     (Internal.unlock ty')._desc <-
       begin if has_fixed_row then
-        match tm.desc with (* PR#7348 *)
+        match view_desc tm with (* PR#7348 *)
           Tconstr (Pdot(m,i), tl, _abbrev) ->
             let i' = String.sub i 0 (String.length i - 4) in
             Tconstr(type_path s (Pdot(m,i')), tl, ref Mnil)
@@ -212,23 +212,24 @@ let rec typexp copy_scope s ty =
       | Tvariant row ->
           let row = row_repr row in
           let morev = repr row.row_more in
-	  let more = morev.expr in
+	  let more = view_expr morev in
+          let more_desc = view_desc morev in
           (* We must substitute in a subtle way *)
           (* Tsubst takes a tuple containing the row var and the variant *)
-          begin match morev.desc with
-            Tsubst {_desc = Ttuple [_;ty2]} ->
+          begin match more_desc with
+          | Tsubst (_, Some ty2) ->
               (* This variant type has been already copied *)
-              (Internal.unlock ty)._desc <- Tsubst ty2;
+              (Internal.unlock ty)._desc <- Tsubst (ty2, None);
 	      (* avoid Tlink in the new type *)
               Tlink ty2
           | _ ->
               let dup =
                 s.for_saving || more.level = generic_level || static_row row ||
-                match morev.desc with Tconstr _ -> true | _ -> false in
+                match more_desc with Tconstr _ -> true | _ -> false in
               (* Various cases for the row variable *)
               let more' =
-                match morev.desc with
-                  Tsubst ty -> ty
+                match more_desc with
+                  Tsubst (ty, None) -> ty
                 | Tconstr _ | Tnil -> typexp copy_scope s more
                 | Tunivar _ | Tvar _ ->
                     For_copy.save_desc copy_scope more more._desc;

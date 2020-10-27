@@ -40,7 +40,7 @@ and _ type_desc =
   | Tfield of string * field_kind * type_expr * type_expr
   | Tnil
   | Tlink : type_expr -> has_link type_desc
-  | Tsubst of type_expr     (* for copying *)
+  | Tsubst of type_expr * type_expr option    (* for copying *)
   | Tvariant of row_desc
   | Tunivar of string option
   | Tpoly of type_expr * type_expr list
