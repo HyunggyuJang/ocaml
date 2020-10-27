@@ -25,17 +25,17 @@ let free_vars ?(param=false) ty =
   let ret = ref TypeSet.empty in
   let rec loop ty =
     mark_type_node ty ~after:
-      begin fun ty -> match ty.desc with
+      begin fun ty -> match view_desc ty with
       | Tvar _ ->
-          ret := TypeSet.add ty.expr !ret
+          ret := TypeSet.add (view_expr ty) !ret
       | Tvariant row ->
           let row = row_repr row in
           iter_row loop row;
           if not (static_row row) then begin
-	    let more_view = repr row.row_more in
-            match more_view.desc with
-            | Tvar _ when param -> ret := TypeSet.add ty.expr !ret
-            | _ -> loop more_view.expr
+	    let more = repr row.row_more in
+            match view_desc more with
+            | Tvar _ when param -> ret := TypeSet.add (view_expr ty) !ret
+            | _ -> loop (view_expr more)
           end
       (* XXX: What about Tobject ? *)
       | _ ->
