@@ -353,18 +353,18 @@ let is_datatype decl=
 (**** Object field manipulation. ****)
 
 let object_fields ty =
-  match ty.desc with
+  match view_desc ty with
     Tobject (fields, _) -> fields
   | _                   -> assert false
 
 let flatten_fields ty =
   let rec flatten l ty =
-    let ty = repr ty in
-    match ty.desc with
+    let tv = repr ty in
+    match view_desc tv with
       Tfield(s, k, ty1, ty2) ->
         flatten ((s, k, ty1)::l) ty2
     | _ ->
-        (l, ty)
+        (l, tv)
   in
     let (l, r) = flatten [] ty in
     (List.sort (fun (n, _, _) (n', _, _) -> compare n n') l, r)
@@ -390,11 +390,11 @@ let associate_fields fields1 fields2 =
   associate [] [] [] (fields1, fields2)
 
 let rec has_dummy_method ty =
-  match repr ty with
-    {desc = Tfield (m, _, _, ty2)} ->
+  match repr_desc ty with
+    Tfield (m, _, _, ty2) ->
       m = dummy_method || has_dummy_method ty2
   | _ -> false
-
+        
 let is_self_type = function
   | Tobject (ty, _) -> has_dummy_method ty
   | _ -> false
@@ -403,19 +403,19 @@ let is_self_type = function
 
 (* +++ The abbreviation should eventually be expanded *)
 let rec object_row ty =
-  let ty = repr ty in
-  match ty.desc with
+  let tv = repr ty in
+  match view_desc tv with
     Tobject (t, _)     -> object_row t
   | Tfield(_, _, _, t) -> object_row t
-  | _ -> ty
+  | _ -> tv
 
 let opened_object ty =
-  match (object_row ty).desc with
+  match view_desc (object_row ty) with
   | Tvar _  | Tunivar _ | Tconstr _ -> true
   | _                               -> false
 
 let concrete_object ty =
-  match (object_row ty).desc with
+  match view_desc (object_row ty) with
   | Tvar _             -> false
   | _                  -> true
 
@@ -423,16 +423,16 @@ let concrete_object ty =
 
 let close_object ty =
   let rec close ty =
-    let ty = repr ty in
-    match ty.desc with
+    let tv = repr ty in
+    match view_desc tv with
       Tvar _ ->
-        link_type ty (newty2 ty.expr.level Tnil); true
+        link_type tv (newty2 (view_level tv) Tnil); true
     | Tfield(lab, _, _, _) when lab = dummy_method ->
         false
     | Tfield(_, _, _, ty') -> close ty'
     | _                    -> assert false
   in
-  match (repr ty).desc with
+  match repr_desc ty with
     Tobject (ty, _)   -> close ty
   | _                 -> assert false
 
@@ -440,13 +440,13 @@ let close_object ty =
 
 let row_variable ty =
   let rec find ty =
-    let ty = repr ty in
-    match ty.desc with
+    let tv = repr ty in
+    match view_desc tv with
       Tfield (_, _, _, ty) -> find ty
-    | Tvar _               -> ty
+    | Tvar _               -> tv
     | _                    -> assert false
   in
-  match (repr ty).desc with
+  match repr_desc ty with
     Tobject (fi, _) -> find fi
   | _               -> assert false
 
@@ -454,14 +454,14 @@ let row_variable ty =
 (* +++ Bientot obsolete *)
 
 let set_object_name id rv params ty =
-  match (repr ty).desc with
+  match repr_desc ty with
     Tobject (_fi, nm) ->
       set_name nm (Some (Path.Pident id, rv::params))
   | _ ->
       assert false
 
 let remove_object_name ty =
-  match (repr ty).desc with
+  match repr_desc ty with
     Tobject (_, nm)   -> set_name nm None
   | Tconstr (_, _, _) -> ()
   | _                 -> fatal_error "Ctype.remove_object_name"
@@ -469,7 +469,7 @@ let remove_object_name ty =
 (**** Hiding of private methods ****)
 
 let hide_private_methods ty =
-  match (repr ty).desc with
+  match repr_desc ty with
     Tobject (fi, nm) ->
       nm := None;
       let (fl, _) = flatten_fields fi in
@@ -567,14 +567,15 @@ let really_closed = ref None
  *)
 let rec free_vars_rec real ty =
   mark_type_node ty ~after:
-    begin fun ty -> match ty.desc, !really_closed with
+    begin fun tv -> let ty = view_expr tv in
+    match view_desc tv, !really_closed with
       Tvar _, _ ->
-        free_variables := (ty.expr, real) :: !free_variables
+        free_variables := (ty, real) :: !free_variables
     | Tconstr (path, tl, _), Some env ->
         begin try
           let (_, body, _) = Env.find_type_expansion path env in
-          if (repr body).expr.level <> generic_level then
-            free_variables := (ty.expr, real) :: !free_variables
+          if (Internal.unlock (repr_expr body)).level <> generic_level then
+            free_variables := (ty, real) :: !free_variables
         with Not_found -> ()
         end;
         List.iter (free_vars_rec true) tl
@@ -591,7 +592,7 @@ let rec free_vars_rec real ty =
         iter_row (free_vars_rec true) row;
         if not (static_row row) then free_vars_rec false row.row_more
     | _    ->
-        iter_type_view (free_vars_rec true) ty
+        iter_type_expr (free_vars_rec true) ty
     end
 
 let free_vars ?env ty =
@@ -675,7 +676,7 @@ let closed_class params sign =
   let ty = object_fields (repr sign.csig_self) in
   let (fields, rest) = flatten_fields ty in
   List.iter mark_type params;
-  mark_type rest.expr;
+  mark_type (view_expr rest);
   List.iter
     (fun (lab, _, ty) -> if lab = dummy_method then mark_type ty)
     fields;
@@ -725,12 +726,12 @@ let duplicate_class_type ty =
 *)
 let rec generalize ty =
   let tv = repr ty in
-  let ty = tv.expr in
+  let ty = view_expr tv in
   (* generalize the type iff ty.level <= !current_level *)
-  if (ty.level > !current_level) && (ty.level <> generic_level) then begin
-    set_level ty generic_level;
+  if let level = view_level tv in (level > !current_level) && (level <> generic_level) then begin
+    set_level tv generic_level;
     (* recur into abbrev for the speed *)
-    begin match tv.desc with
+    begin match view_desc tv with
       Tconstr (_, _, abbrev) ->
         iter_abbrev generalize !abbrev
     | _ -> ()
@@ -746,18 +747,19 @@ let generalize ty =
 
 let rec generalize_structure var_level ty =
   let tv = repr ty in
-  let ty = tv.expr in
-  if ty.level <> generic_level then begin
-    if is_Tvar tv && ty.level > var_level then
-      set_level ty var_level
+  let ty = view_expr tv in
+  let level = view_level tv in
+  if level <> generic_level then begin
+    if is_Tvar tv && level > var_level then
+      set_level tv var_level
     else if
-      ty.level > !current_level &&
-      match tv.desc with
+      level > !current_level &&
+      match view_desc tv with
         Tconstr (p, _, abbrev) ->
           not (is_object_type p) && (abbrev := Mnil; true)
       | _ -> true
     then begin
-      set_level ty generic_level;
+      set_level tv generic_level;
       iter_type_expr (generalize_structure var_level) ty
     end
   end
@@ -770,22 +772,22 @@ let generalize_structure ty =
 
 let rec generalize_spine ty =
   let tv = repr ty in
-  let ty = tv.expr in
-  if ty.level < !current_level || ty.level = generic_level then () else
-  match tv.desc with
+  let ty = view_expr tv in
+  if let level = view_level tv in level < !current_level || level = generic_level then () else
+  match view_desc tv with
     Tarrow (_, ty1, ty2, _) ->
-      set_level ty generic_level;
+      set_level tv generic_level;
       generalize_spine ty1;
       generalize_spine ty2;
   | Tpoly (ty', _) ->
-      set_level ty generic_level;
+      set_level tv generic_level;
       generalize_spine ty'
   | Ttuple tyl
   | Tpackage (_, _, tyl) ->
-      set_level ty generic_level;
+      set_level tv generic_level;
       List.iter generalize_spine tyl
   | Tconstr (p, tyl, memo) when not (is_object_type p) ->
-      set_level ty generic_level;
+      set_level tv generic_level;
       memo := Mnil;
       List.iter generalize_spine tyl
   | _ -> ()
@@ -818,10 +820,10 @@ let check_scope_escape env level ty =
   let rec loop ty =
     mark_type_node ty ~after:
       begin fun tv ->
-	let ty = tv.expr in
-	if level < ty.scope then
+	let ty = view_expr tv in
+	if level < view_scope tv then
           raise(Trace.scope_escape ty);
-	match tv.desc with
+	match view_desc tv with
         | Tconstr (p, _, _) when level < Path.scope p ->
             begin match !forward_try_expand_once env ty with
             | ty' -> aux ty'
@@ -847,10 +849,9 @@ let check_scope_escape env level ty =
 
 let update_scope scope ty =
   let tv = repr ty in
-  let ty = tv.expr in
-  let scope = max scope ty.scope in
-  if ty.level < scope then raise (Trace.scope_escape ty);
-  set_scope ty scope
+  let scope = max scope (view_scope tv) in
+  if view_level tv < scope then raise (Trace.scope_escape (view_expr tv));
+  set_scope tv scope
 
 (* Note: the level of a type constructor must be greater than its binding
     time. That way, a type constructor cannot escape the scope of its
@@ -862,9 +863,9 @@ let update_scope scope ty =
 
 let rec update_level env level expand ty =
   let tv = repr ty in
-  let ty = tv.expr in
-  if ty.level > level then begin
-    if level < ty.scope then raise (Trace.scope_escape ty);
+  let ty = view_expr tv in
+  if view_level tv > level then begin
+    if level < view_scope tv then raise (Trace.scope_escape ty);
     match tv.desc with
       Tconstr(p, _tl, _abbrev) when level < Path.scope p ->
         (* Try first to replace an abbreviation by its expansion. *)
