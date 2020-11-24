@@ -866,7 +866,7 @@ let rec update_level env level expand ty =
   let ty = view_expr tv in
   if view_level tv > level then begin
     if level < view_scope tv then raise (Trace.scope_escape ty);
-    match tv.desc with
+    match view_desc tv with
       Tconstr(p, _tl, _abbrev) when level < Path.scope p ->
         (* Try first to replace an abbreviation by its expansion. *)
         begin try
@@ -882,7 +882,7 @@ let rec update_level env level expand ty =
         let needs_expand =
           expand ||
           List.exists2
-            (fun var ty -> var = Variance.null && (repr ty).expr.level > level)
+            (fun var ty -> var = Variance.null && (Internal.unlock (repr_expr ty)).level > level)
             variance tl
         in
         begin try
@@ -890,7 +890,7 @@ let rec update_level env level expand ty =
           link_type tv (!forward_try_expand_once env ty);
           update_level env level expand ty
         with Cannot_expand ->
-          set_level ty level;
+          set_level tv level;
           iter_type_expr (update_level env level expand) ty
         end
     | Tpackage (p, nl, tl) when level < Path.scope p ->
@@ -909,13 +909,13 @@ let rec update_level env level expand ty =
             set_type_desc ty (Tvariant {row with row_name = None})
         | _ -> ()
         end;
-        set_level ty level;
+        set_level tv level;
         iter_type_expr (update_level env level expand) ty
     | Tfield(lab, _, ty1, _)
-      when lab = dummy_method && (repr ty1).expr.level > level ->
+      when lab = dummy_method && (Internal.unlock (repr_expr ty1)).level > level ->
         raise Trace.(Unify [escape Self])
     | _ ->
-        set_level ty level;
+        set_level tv level;
         (* XXX what about abbreviations in Tconstr ? *)
         iter_type_expr (update_level env level expand) ty
   end
@@ -924,8 +924,8 @@ let rec update_level env level expand ty =
    to avoid combinatorial blow-up *)
 let update_level env level ty =
   let tv = repr ty in
-  let ty = tv.expr in
-  if ty.level > level then begin
+  let ty = view_expr tv in
+  if view_level tv > level then begin
     let snap = snapshot () in
     try
       update_level env level false ty
@@ -938,18 +938,19 @@ let update_level env level ty =
 
 let rec lower_contravariant env var_level visited contra ty =
   let tv = repr ty in
-  let ty = tv.expr in
+  let ty = view_expr tv in
+  let id = view_id tv in
   let must_visit =
-    ty.level > var_level &&
-    match Hashtbl.find visited ty.id with
+    view_level tv > var_level &&
+    match Hashtbl.find visited id with
     | done_contra -> contra && not done_contra
     | exception Not_found -> true
   in
   if must_visit then begin
-    Hashtbl.add visited ty.id contra;
+    Hashtbl.add visited id contra;
     let lower_rec = lower_contravariant env var_level visited in
-    match tv.desc with
-      Tvar _ -> if contra then set_level ty var_level
+    match view_desc tv with
+      Tvar _ -> if contra then set_level tv var_level
     | Tconstr (_, [], _) -> ()
     | Tconstr (path, tyl, _abbrev) ->
        let variance, maybe_expand =
@@ -995,7 +996,8 @@ let correct_levels ty =
 
 (* Only generalize the type ty0 in ty *)
 let limited_generalize ty0 ty =
-  let ty0 = (repr ty0).expr in
+  let tv0 = repr ty0 in
+  let ty0 = view_expr tv0 in
 
   let graph = Hashtbl.create 17 in
   let idx = ref lowest_level in
@@ -1003,38 +1005,39 @@ let limited_generalize ty0 ty =
 
   let rec inverse pty ty =
     let tv = repr ty in
-    let ty = tv.expr in
-    if (ty.level > !current_level) || (ty.level = generic_level) then begin
+    let ty = view_expr tv in
+    let level = view_level tv in
+    if (level > !current_level) || (level = generic_level) then begin
       decr idx;
       Hashtbl.add graph !idx (tv, ref pty);
-      if (ty.level = generic_level) || (ty == ty0) then
+      if (level = generic_level) || (ty == ty0) then
         roots := tv :: !roots;
-      set_level ty !idx;
+      set_level tv !idx;
       iter_type_expr (inverse [tv]) ty
-    end else if ty.level < lowest_level then begin
-      let (_, parents) = Hashtbl.find graph ty.level in
+    end else if level < lowest_level then begin
+      let (_, parents) = Hashtbl.find graph level in
       parents := pty @ !parents
     end
 
   and generalize_parents tv =
-    let ty = tv.expr in
-    let idx = ty.level in
+    let ty = view_expr tv in
+    let idx = view_level tv in
     if idx <> generic_level then begin
-      set_level ty generic_level;
+      set_level tv generic_level;
       List.iter generalize_parents !(snd (Hashtbl.find graph idx));
       (* Special case for rows: must generalize the row variable *)
-      match tv.desc with
+      match view_desc tv with
         Tvariant row ->
           let more = row_more row in
-          let lv = more.expr.level in
+          let lv = view_level more in
           if (lv < lowest_level || lv > !current_level)
-          && lv <> generic_level then set_level more.expr generic_level
+          && lv <> generic_level then set_level more generic_level
       | _ -> ()
     end
   in
 
   inverse [] ty;
-  if ty0.level < lowest_level then
+  if view_level tv0 < lowest_level then
     iter_type_expr (inverse []) ty0;
   List.iter generalize_parents !roots;
   Hashtbl.iter
