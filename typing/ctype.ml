@@ -1135,6 +1135,7 @@ let rec copy ?partial ?keep_names scope ty =
   let ty = repr ty in
   match ty.desc with
     Tsubst ty -> ty
+  | Tfield (_, k, _, ty) when field_kind_repr k = Fabsent -> copy ty
   | _ ->
     if ty.level <> generic_level && partial = None then ty else
     (* We only forget types that are non generic and do not contain

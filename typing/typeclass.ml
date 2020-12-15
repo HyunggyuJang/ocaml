@@ -1430,12 +1430,20 @@ let class_infos define_class kind
   List.iter (Ctype.limited_generalize rv) params;
   limited_generalize rv typ;
 
+  Ctype.begin_def ();
+  let (params', typ') = Ctype.instance_class params typ in
+  let sty' = Ctype.self_type typ' in
+  Ctype.hide_private_methods sty';
+  Ctype.end_def ();
+  let rv' = Ctype.row_variable sty' in
+  List.iter (Ctype.limited_generalize rv') params';
+  limited_generalize rv' typ';
+
   (* Check the abbreviation for the object type *)
-  let (obj_params', obj_type) = Ctype.instance_class params typ in
+  let (obj_params', obj_type) = Ctype.instance_class params' typ' in
   let constr = Ctype.newconstr (Path.Pident obj_id) obj_params in
   begin
     let ty = Ctype.self_type obj_type in
-    Ctype.hide_private_methods ty;
     if not (Ctype.close_object ty) then
       raise(Error(cl.pci_loc, env, Closing_self_type ty));
     begin try
@@ -1456,9 +1464,8 @@ let class_infos define_class kind
 
   (* Check the other temporary abbreviation (#-type) *)
   begin
-    let (cl_params', cl_type) = Ctype.instance_class params typ in
+    let (cl_params', cl_type) = Ctype.instance_class params' typ' in
     let ty = Ctype.self_type cl_type in
-    Ctype.hide_private_methods ty;
     Ctype.set_object_name obj_id (Ctype.row_variable ty) cl_params ty;
     begin try
       List.iter2 (Ctype.unify env) cl_params cl_params'
