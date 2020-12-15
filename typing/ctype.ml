@@ -363,7 +363,9 @@ let flatten_fields ty =
   let rec flatten l ty =
     let ty = repr ty in
     match ty.desc with
-      Tfield(s, k, ty1, ty2) ->
+      Tfield(_, k, _, ty2) when field_kind_repr k = Fabsent ->
+        flatten l ty2
+    | Tfield(s, k, ty1, ty2) ->
         flatten ((s, k, ty1)::l) ty2
     | _ ->
         (l, ty)
