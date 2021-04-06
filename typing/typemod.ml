@@ -382,7 +382,7 @@ let check_usage_of_path_of_substituted_item paths ~loc ~lid env super =
    T was not used as a path for a packed module
 *)
 let check_usage_of_module_types ~error ~paths ~loc env super =
-  let it_do_type_expr it ty = match ty.desc with
+  let it_do_type_expr it ty = match get_desc ty with
     | Tpackage (p, _, _) ->
        begin match List.find_opt (Path.same p) paths with
        | Some p -> raise (Error(loc,Lazy.force !env,error p))
@@ -483,7 +483,7 @@ let params_are_constrained =
   let rec loop = function
     | [] -> false
     | hd :: tl ->
-       match (Btype.repr hd).desc with
+       match get_desc hd with
        | Tvar _ -> List.memq hd tl || loop tl
        | _ -> true
   in
@@ -2152,8 +2152,8 @@ and type_module_aux ~alias sttn funct_body anchor env smod =
         Ctype.generalize_structure exp.exp_type
       end;
       let mty =
-        match Ctype.expand_head env exp.exp_type with
-          {desc = Tpackage (p, nl, tl)} ->
+        match get_desc (Ctype.expand_head env exp.exp_type) with
+          Tpackage (p, nl, tl) ->
             if List.exists (fun t -> Ctype.free_variables t <> []) tl then
               raise (Error (smod.pmod_loc, env,
                             Incomplete_packed_module exp.exp_type));
@@ -2163,7 +2163,7 @@ and type_module_aux ~alias sttn funct_body anchor env smod =
               Location.prerr_warning smod.pmod_loc
                 (Warnings.Not_principal "this module unpacking");
             modtype_of_package env smod.pmod_loc p nl tl
-        | {desc = Tvar _} ->
+        | Tvar _ ->
             raise (Typecore.Error
                      (smod.pmod_loc, env, Typecore.Cannot_infer_signature))
         | _ ->

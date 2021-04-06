@@ -88,13 +88,15 @@ let simpl_class_type t =
            displaying the type *)
       let tself =
         let t = cs.Types.csig_self in
-        let t' = Types.Private_type_expr.create Types.Tnil
+        let t' = Types.Transient_expr.create Types.Tnil
             ~level:0 ~scope:Btype.lowest_level ~id:0 in
-        let desc = Types.Tobject (t', ref None) in
-        Types.Private_type_expr.create desc
-          ~level:t.Types.level ~scope:t.Types.scope ~id:t.Types.id
+        let desc = Types.Tobject (Types.type_expr t', ref None) in
+        Types.Transient_expr.create desc
+          ~level:(Types.get_level t)
+          ~scope:(Types.get_scope t)
+          ~id:(Types.get_id t)
       in
-        Types.Cty_signature { Types.csig_self = tself;
+        Types.Cty_signature { Types.csig_self = Types.type_expr tself;
                               csig_vars = Types.Vars.empty ;
                               csig_concr = Types.Concr.empty ;
                               csig_inher = []

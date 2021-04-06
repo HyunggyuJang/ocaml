@@ -171,7 +171,7 @@ let _ = add_directive "mod_use" (Directive_string (dir_mod_use std_out))
 
 let filter_arrow ty =
   let ty = Ctype.expand_head !toplevel_env ty in
-  match ty.desc with
+  match get_desc ty with
   | Tarrow (lbl, l, r, _) when not (Btype.is_optional lbl) -> Some (l, r)
   | _ -> None
 
@@ -185,9 +185,10 @@ let rec extract_last_arrow desc =
 let extract_target_type ty = fst (extract_last_arrow ty)
 let extract_target_parameters ty =
   let ty = extract_target_type ty |> Ctype.expand_head !toplevel_env in
-  match ty.desc with
+  match get_desc ty with
   | Tconstr (path, (_ :: _ as args), _)
-      when Ctype.all_distinct_vars !toplevel_env args -> Some (path, args)
+      when Ctype.all_distinct_vars !toplevel_env (List.map repr args) ->
+        Some (path, args)
   | _ -> None
 
 type 'a printer_type_new = Format.formatter -> 'a -> unit
@@ -232,7 +233,7 @@ let match_generic_printer_type desc path args printer_type =
     (Ctype.instance desc.val_type);
   Ctype.end_def();
   Ctype.generalize ty_expected;
-  if not (Ctype.all_distinct_vars !toplevel_env args) then
+  if not (Ctype.all_distinct_vars !toplevel_env (List.map repr args)) then
     raise (Ctype.Unify []);
   (ty_expected, Some (path, ty_args))
 
@@ -413,8 +414,8 @@ let () =
        if is_exception_constructor env desc.cstr_res then
          raise Not_found;
        let path =
-         match Ctype.repr desc.cstr_res with
-         | {desc=Tconstr(path, _, _)} -> path
+         match get_desc desc.cstr_res with
+         | Tconstr(path, _, _) -> path
          | _ -> raise Not_found
        in
        let type_decl = Env.find_type path env in

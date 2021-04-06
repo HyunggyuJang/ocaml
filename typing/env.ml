@@ -21,7 +21,6 @@ open Asttypes
 open Longident
 open Path
 open Types
-open Btype
 
 open Local_store
 
@@ -1295,10 +1294,10 @@ let make_copy_of_types env0 =
   let memo = Hashtbl.create 16 in
   let copy t =
     try
-      Hashtbl.find memo t.id
+      Hashtbl.find memo (get_id t)
     with Not_found ->
       let t2 = Subst.type_expr Subst.identity t in
-      Hashtbl.add memo t.id t2;
+      Hashtbl.add memo (get_id t) t2;
       t2
   in
   let f = function
