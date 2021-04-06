@@ -247,23 +247,26 @@ type transient_expr = private
         mutable scope: int;
         id: int }
 
-val repr: type_expr -> transient_expr
-val type_repr: type_expr -> type_expr
-        (* Return the canonical representative of a type. *)
-val type_expr: transient_expr -> type_expr
-
 module Transient_expr : sig
+  (* Operations on transient types *)
   val create: type_desc -> level: int -> scope: int -> id: int -> transient_expr
   val set_desc: transient_expr -> type_desc -> unit
   val set_level: transient_expr -> int -> unit
   val set_scope: transient_expr -> int -> unit
+  val repr: type_expr -> transient_expr
+  val type_expr: transient_expr -> type_expr
+  (* Operations on [type_expr] seen as [transient_expr] *)
   val coerce: type_expr -> transient_expr
-  val repr: transient_expr -> transient_expr
+  val set_stub_desc: type_expr -> type_desc -> unit
+      (* Instantiate a not yet instantiated stub *)
 end
+
+val create_expr: type_desc -> level: int -> scope: int -> id: int -> type_expr
 
 (* Functions and definitions moved from Btype *)
 
-val newty2: int -> type_desc -> transient_expr
+val newty3: level:int -> scope:int -> type_desc -> type_expr
+val newty2: int -> type_desc -> type_expr
         (* Create a type with a fresh id *)
 
 val field_kind_repr: field_kind -> field_kind
@@ -272,12 +275,17 @@ val field_kind_repr: field_kind -> field_kind
 
 (* Comparisons for functors *)
 
-module TypeOps : sig
+module TransientTypeOps : sig
   type t = transient_expr
   val compare : t -> t -> int
   val equal : t -> t -> bool
   val hash : t -> int
 end
+
+(* Comparison for [type_expr]; cannot be used for functors *)
+
+val eq_type: type_expr -> type_expr -> bool
+val compare_type: type_expr -> type_expr -> int
 
 (* *)
 
@@ -640,13 +648,13 @@ val undo_compress: snapshot -> unit
            Does not call [cleanup_abbrev] *)
 
 (* Functions to use when modifying a type (only Ctype?) *)
-val link_type: transient_expr -> type_expr -> unit
+val link_type: type_expr -> type_expr -> unit
         (* Set the desc field of [t1] to [Tlink t2], logging the old
            value if there is an active snapshot *)
-val set_type_desc: transient_expr -> type_desc -> unit
+val set_type_desc: type_expr -> type_desc -> unit
         (* Set directly the desc field, without sharing *)
-val set_level: transient_expr -> int -> unit
-val set_scope: transient_expr -> int -> unit
+val set_level: type_expr -> int -> unit
+val set_scope: type_expr -> int -> unit
 val set_name:
     (Path.t * type_expr list) option ref ->
     (Path.t * type_expr list) option -> unit

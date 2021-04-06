@@ -2313,8 +2313,8 @@ let mark_label_used usage ld =
 
 let mark_constructor_description_used usage env cstr =
   let ty_path =
-    match repr cstr.cstr_res with
-    | {desc=Tconstr(path, _, _)} -> path
+    match get_desc cstr.cstr_res with
+    | Tconstr(path, _, _) -> path
     | _ -> assert false
   in
   mark_type_path_used env ty_path;
@@ -2324,8 +2324,8 @@ let mark_constructor_description_used usage env cstr =
 
 let mark_label_description_used usage env lbl =
   let ty_path =
-    match repr lbl.lbl_res with
-    | {desc=Tconstr(path, _, _)} -> path
+    match get_desc lbl.lbl_res with
+    | Tconstr(path, _, _) -> path
     | _ -> assert false
   in
   mark_type_path_used env ty_path;

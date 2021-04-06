@@ -58,9 +58,9 @@ let private_flags decl1 decl2 =
 (* Inclusion between manifest types (particularly for private row types) *)
 
 let is_absrow env ty =
-  match ty.desc with
+  match get_desc ty with
     Tconstr(Pident _, _, _) ->
-      begin match get_desc (Ctype.expand_head env (type_expr ty)) with
+      begin match get_desc (Ctype.expand_head env ty) with
         Tobject _ | Tvariant _ -> true
       | _ -> false
       end
@@ -103,9 +103,9 @@ let type_manifest env ty1 params1 ty2 params2 priv2 =
   | Tobject (fi1, _), Tobject (fi2, _)
     when is_absrow env (snd(Ctype.flatten_fields fi2)) ->
       let (fields2,rest2) = Ctype.flatten_fields fi2 in
-      Ctype.equal env true (ty1::params1) (type_expr rest2::params2) &&
+      Ctype.equal env true (ty1::params1) (rest2::params2) &&
       let (fields1,rest1) = Ctype.flatten_fields fi1 in
-      (match rest1 with {desc=Tnil|Tvar _|Tconstr _} -> true | _ -> false) &&
+      (match get_desc rest1 with Tnil|Tvar _|Tconstr _ -> true | _ -> false) &&
       let pairs, _miss1, miss2 = Ctype.associate_fields fields1 fields2 in
       miss2 = [] &&
       let tl1, tl2 =
@@ -116,8 +116,7 @@ let type_manifest env ty1 params1 ty2 params2 priv2 =
         Ctype.equal env true (ty1 :: params1) (ty2 :: params2) ||
         priv2 = Private &&
         try check_super
-              (Ctype.try_expand_once_opt env
-                 (repr (Ctype.expand_head env ty1)))
+              (Ctype.try_expand_once_opt env (Ctype.expand_head env ty1))
         with Ctype.Cannot_expand -> false
       in check_super ty1
 
@@ -474,7 +473,7 @@ let type_declarations ?(equality = false) ~loc env ~mark name
   if not need_variance then None else
   let abstr = abstr || decl2.type_private = Private in
   let opn = decl2.type_kind = Type_open && decl2.type_manifest = None in
-  let constrained ty = not (Btype.(is_Tvar (repr ty))) in
+  let constrained ty = not (Btype.is_Tvar ty) in
   if List.for_all2
       (fun ty (v1,v2) ->
         let open Variance in

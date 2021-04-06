@@ -1235,10 +1235,10 @@ and class_expr_aux cl_num val_env met_env scl =
       Ctype.end_def ();
 
       limited_generalize
-        (Types.type_expr (Ctype.row_variable (Ctype.self_type cl.cl_type)))
+        (Ctype.row_variable (Ctype.self_type cl.cl_type))
         cl.cl_type;
       limited_generalize
-        (Types.type_expr (Ctype.row_variable (Ctype.self_type clty.cltyp_type)))
+        (Ctype.row_variable (Ctype.self_type clty.cltyp_type))
         clty.cltyp_type;
 
       begin match
@@ -1427,7 +1427,7 @@ let class_infos define_class kind
   List.iter (fun (met, _, ty) -> if met = dummy_method then Ctype.generalize ty)
     fields;
   (* Generalize the row variable *)
-  let rv = Types.type_expr (Ctype.row_variable sty) in
+  let rv = Ctype.row_variable sty in
   List.iter (Ctype.limited_generalize rv) params;
   limited_generalize rv typ;
 
@@ -1461,7 +1461,7 @@ let class_infos define_class kind
     let ty = Ctype.self_type cl_type in
     Ctype.hide_private_methods ty;
     Ctype.set_object_name
-      obj_id (Types.type_expr (Ctype.row_variable ty)) cl_params ty;
+      obj_id (Ctype.row_variable ty) cl_params ty;
     begin try
       List.iter2 (Ctype.unify env) cl_params cl_params'
     with Ctype.Unify _ ->
@@ -1590,7 +1590,7 @@ let class_infos define_class kind
   in
   Ctype.hide_private_methods cl_ty;
   Ctype.set_object_name
-    obj_id (Types.type_expr (Ctype.row_variable cl_ty)) cl_params cl_ty;
+    obj_id (Ctype.row_variable cl_ty) cl_params cl_ty;
   let cl_abbr =
     let arity = List.length cl_params in
     {

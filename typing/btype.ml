@@ -22,9 +22,49 @@ open Local_store
 
 (**** Sets, maps and hashtables of types ****)
 
-module TypeSet = Set.Make(TypeOps)
-module TypeMap = Map.Make (TypeOps)
-module TypeHash = Hashtbl.Make(TypeOps)
+let wrap_repr f ty = f (Transient_expr.repr ty)
+let wrap_type_expr f tty = f (Transient_expr.type_expr tty)
+
+module TTypeSet = Set.Make(TransientTypeOps)
+module TypeSet = struct
+  include TTypeSet
+  let add = wrap_repr add
+  let mem = wrap_repr mem
+  let singleton = wrap_repr singleton
+  let exists p = TTypeSet.exists (wrap_type_expr p)
+  let elements set = List.map Transient_expr.type_expr (TTypeSet.elements set)
+end
+module TTypeMap = Map.Make(TransientTypeOps)
+module TypeMap = struct
+  include TTypeMap
+  let add ty = wrap_repr add ty
+  let find ty = wrap_repr find ty
+  let singleton ty = wrap_repr singleton ty
+  let fold f = TTypeMap.fold (wrap_type_expr f)
+end
+module TTypeHash = Hashtbl.Make(TransientTypeOps)
+module TypeHash = struct
+  include TTypeHash
+  let add hash = wrap_repr (add hash)
+  let find hash = wrap_repr (find hash)
+  let iter f = TTypeHash.iter (wrap_type_expr f)
+end
+module TTypePairs =
+  Hashtbl.Make (struct
+    type t = transient_expr * transient_expr
+    let equal (t1, t1') (t2, t2') = (t1 == t2) && (t1' == t2')
+    let hash (t, t') = t.id + 93 * t'.id
+ end)
+module TypePairs = struct
+  include TTypePairs
+  open Transient_expr
+  let wrap_repr f (t1, t2) = f (repr t1, repr t2)
+  let wrap_type_expr f (tt1, tt2) = f (type_expr tt1, type_expr tt2)
+  let add hash = wrap_repr (add hash)
+  let find hash = wrap_repr (find hash)
+  let mem hash = wrap_repr (mem hash)
+  let iter f = TTypePairs.iter (wrap_type_expr f)
+end
 
 (**** Forward declarations ****)
 
@@ -42,9 +82,10 @@ let pivot_level = 2 * lowest_level - 1
 
 (**** Some type creators ****)
 
-let newgenty desc      = type_expr (newty2 generic_level desc)
+let newgenty desc      = newty2 generic_level desc
 let newgenvar ?name () = newgenty (Tvar name)
-let newstub ()         = newty2 generic_level (Tvar None)
+let newgenstub ~scope  = newty3 ~level:generic_level ~scope (Tvar None)
+
 (*
 let newmarkedvar level =
   incr new_id; { desc = Tvar; level = pivot_level - level; id = !new_id }
@@ -55,9 +96,9 @@ let newmarkedgenvar () =
 
 (**** Check some types ****)
 
-let is_Tvar = function {desc=Tvar _} -> true | _ -> false
-let is_Tunivar = function {desc=Tunivar _} -> true | _ -> false
-let is_Tconstr = function {desc=Tconstr _} -> true | _ -> false
+let is_Tvar ty = match get_desc ty with Tvar _ -> true | _ -> false
+let is_Tunivar ty = match get_desc ty with Tunivar _ -> true | _ -> false
+let is_Tconstr ty = match get_desc ty with Tconstr _ -> true | _ -> false
 
 let dummy_method = "*dummy method*"
 
@@ -84,7 +125,7 @@ let rec rev_concat l ll =
   | l'::ll -> rev_concat (l'@l) ll
 
 let rec row_repr_aux ll row =
-  match (repr row.row_more).desc with
+  match get_desc row.row_more with
   | Tvariant row' ->
       let f = row.row_fields in
       row_repr_aux (if f = [] then ll else f::ll) row'
@@ -99,15 +140,15 @@ let rec row_field tag row =
     | (tag',f) :: fields ->
         if tag = tag' then row_field_repr f else find fields
     | [] ->
-        match repr row.row_more with
-        | {desc=Tvariant row'} -> row_field tag row'
+        match get_desc row.row_more with
+        | Tvariant row' -> row_field tag row'
         | _ -> Rabsent
   in find row.row_fields
 
 let rec row_more row =
-  match repr row.row_more with
-  | {desc=Tvariant row'} -> row_more row'
-  | ty -> ty
+  match get_desc row.row_more with
+  | Tvariant row' -> row_more row'
+  | _ -> row.row_more
 
 let merge_fixed_explanation fixed1 fixed2 =
   match fixed1, fixed2 with
@@ -123,10 +164,9 @@ let fixed_explanation row =
   match row.row_fixed with
   | Some _ as x -> x
   | None ->
-      let more = repr row.row_more in
-      match more.desc with
+      match get_desc row.row_more with
       | Tvar _ | Tnil -> None
-      | Tunivar _ -> Some (Univar (type_expr more))
+      | Tunivar _ -> Some (Univar row.row_more)
       | Tconstr (p,_,_) -> Some (Reified p)
       | _ -> assert false
 
@@ -155,30 +195,26 @@ let hash_variant s =
   if !accu > 0x3FFFFFFF then !accu - (1 lsl 31) else !accu
 
 let proxy ty =
-  let ty0 = repr ty in
-  match ty0.desc with
+  match get_desc ty with
   | Tvariant row when not (static_row row) ->
       row_more row
   | Tobject (ty, _) ->
       let rec proxy_obj ty =
-        let ty = repr ty in
-        match ty.desc with
+        match get_desc ty with
           Tfield (_, _, _, ty) -> proxy_obj ty
         | Tvar _ | Tunivar _ | Tconstr _ -> ty
-        | Tnil -> ty0
+        | Tnil -> ty
         | _ -> assert false
       in proxy_obj ty
-  | _ -> ty0
+  | _ -> ty
 
 (**** Utilities for fixed row private types ****)
 
 let row_of_type t =
-  let t = repr t in
-  match t.desc with
+  match get_desc t with
     Tobject(t,_) ->
       let rec get_row t =
-        let t = repr t in
-        match t.desc with
+        match get_desc t with
           Tfield(_,_,_,t) -> get_row t
         | _ -> t
       in get_row t
@@ -188,14 +224,14 @@ let row_of_type t =
       t
 
 let has_constr_row t =
-  not (is_Tconstr (repr t)) && is_Tconstr (row_of_type t)
+  not (is_Tconstr t) && is_Tconstr (row_of_type t)
 
 let is_row_name s =
   let l = String.length s in
   if l < 4 then false else String.sub s (l-4) 4 = "#row"
 
 let is_constr_row ~allow_ident t =
-  match t.desc with
+  match get_desc t with
     Tconstr (Path.Pident id, _, _) when allow_ident ->
       is_row_name (Ident.name id)
   | Tconstr (Path.Pdot (_, s), _, _) -> is_row_name s
@@ -207,12 +243,11 @@ let set_row_name decl path =
   match decl.type_manifest with
     None -> ()
   | Some ty ->
-      let ty = repr ty in
-      match ty.desc with
+      match get_desc ty with
         Tvariant row when static_row row ->
           let row = {(row_repr row) with
                      row_name = Some (path, decl.type_params)} in
-          Transient_expr.set_desc ty (Tvariant row)
+          set_type_desc ty (Tvariant row)
       | _ -> ()
 
 
@@ -231,7 +266,7 @@ let rec fold_row f init row =
       init
       row.row_fields
   in
-  match (repr row.row_more).desc with
+  match get_desc row.row_more with
     Tvariant row -> fold_row f result row
   | Tvar _ | Tunivar _ | Tsubst _ | Tconstr _ | Tnil ->
     begin match
@@ -245,8 +280,8 @@ let rec fold_row f init row =
 let iter_row f row =
   fold_row (fun () v -> f v) () row
 
-let rec fold_transient_expr f init ty =
-  match ty.desc with
+let fold_type_expr f init ty =
+  match get_desc ty with
     Tvar _              -> init
   | Tarrow (_, ty1, ty2, _) ->
       let result = f init ty1 in
@@ -259,13 +294,12 @@ let rec fold_transient_expr f init ty =
   | Tobject (ty, _)     -> f init ty
   | Tvariant row        ->
       let result = fold_row f init row in
-      f result (type_expr (row_more row))
+      f result (row_more row)
   | Tfield (_, _, ty1, ty2) ->
       let result = f init ty1 in
       f result ty2
   | Tnil                -> init
-  | Tlink ty            ->
-      fold_transient_expr f init (Transient_expr.coerce ty)
+  | Tlink _
   | Tsubst _            -> assert false
   | Tunivar _           -> init
   | Tpoly (ty, tyl)     ->
@@ -273,14 +307,8 @@ let rec fold_transient_expr f init ty =
       List.fold_left f result tyl
   | Tpackage (_, _, l)  -> List.fold_left f init l
 
-let iter_transient_expr f ty =
-  fold_transient_expr (fun () v -> f v) () ty
-
-let fold_type_expr f init ty =
-  fold_transient_expr f init (Transient_expr.coerce ty)
-
 let iter_type_expr f ty =
-  fold_transient_expr (fun () v -> f v) () (Transient_expr.coerce ty)
+  fold_type_expr (fun () v -> f v) () ty
 
 let rec iter_abbrev f = function
     Mnil                   -> ()
@@ -392,8 +420,7 @@ let type_iterators =
     iter_type_expr_kind (it.it_type_expr it) kind
   and it_do_type_expr it ty =
     iter_type_expr (it.it_type_expr it) ty;
-    let ty = repr ty in
-    match ty.desc with
+    match get_desc ty with
       Tconstr (p, _, _)
     | Tobject (_, {contents=Some (p, _)})
     | Tpackage (p, _, _) ->
@@ -464,7 +491,7 @@ let rec copy_type_desc ?(keep_names=false) f = function
 module For_copy : sig
   type copy_scope
 
-  val redirect_desc: copy_scope -> transient_expr -> type_desc -> unit
+  val redirect_desc: copy_scope -> type_expr -> type_desc -> unit
 
   val dup_kind: copy_scope -> field_kind option ref -> unit
 
@@ -482,6 +509,7 @@ end = struct
   }
 
   let redirect_desc copy_scope ty desc =
+    let ty = Transient_expr.repr ty in
     copy_scope.saved_desc <- (ty, ty.desc) :: copy_scope.saved_desc;
     Transient_expr.set_desc ty desc
 
@@ -613,20 +641,22 @@ let extract_label l ls = extract_label_aux [] l ls
                   (*  Utilities for level-marking   *)
                   (**********************************)
 
-let not_marked_node ty = ty.level >= lowest_level
+let not_marked_node ty = get_level ty >= lowest_level
     (* type nodes with negative levels are "marked" *)
 
-let flip_mark_node ty = Transient_expr.set_level ty (pivot_level - ty.level)
-let logged_mark_node ty = set_level ty (pivot_level - ty.level)
+let flip_mark_node ty =
+  let ty = Transient_expr.repr ty in
+  Transient_expr.set_level ty (pivot_level - ty.level)
+let logged_mark_node ty =
+  set_level ty (pivot_level - get_level ty)
 
 let try_mark_node ty = not_marked_node ty && (flip_mark_node ty; true)
 let try_logged_mark_node ty = not_marked_node ty && (logged_mark_node ty; true)
 
 let rec mark_type ty =
-  let ty = repr ty in
   if not_marked_node ty then begin
     flip_mark_node ty;
-    iter_transient_expr mark_type ty
+    iter_type_expr mark_type ty
   end
 
 let mark_type_params ty =
@@ -634,19 +664,17 @@ let mark_type_params ty =
 
 let type_iterators =
   let it_type_expr it ty =
-    let ty = repr ty in
-    if try_mark_node ty then it.it_do_type_expr it (type_expr ty)
+    if try_mark_node ty then it.it_do_type_expr it ty
   in
   {type_iterators with it_type_expr}
 
 
 (* Remove marks from a type. *)
 let rec unmark_type ty =
-  let ty = repr ty in
-  if ty.level < lowest_level then begin
+  if get_level ty < lowest_level then begin
     (* flip back the marked level *)
     flip_mark_node ty;
-    iter_transient_expr unmark_type ty
+    iter_type_expr unmark_type ty
   end
 
 let unmark_iterators =

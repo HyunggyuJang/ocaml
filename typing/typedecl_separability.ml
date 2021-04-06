@@ -64,8 +64,7 @@ let structure : type_definition -> type_structure = fun def ->
        match def.type_kind with
        | Type_variant [{cd_res = Some ret_type}] ->
           begin match get_desc ret_type with
-          | Tconstr (_, tyl, _) ->
-             List.map type_repr tyl
+          | Tconstr (_, tyl, _) -> tyl
           | _ -> assert false
           end
        | _ -> def.type_params
@@ -171,9 +170,9 @@ and immediate_subtypes_variant_row acc desc =
     List.fold_left add_subtype acc desc.row_fields in
   let add_row acc =
     let row = Btype.row_more desc in
-    match row.desc with
+    match get_desc row with
     | Tvariant more -> immediate_subtypes_variant_row acc more
-    | _ -> type_expr row :: acc
+    | _ -> row :: acc
   in
   add_row (add_subtypes acc)
 
@@ -190,9 +189,9 @@ and immediate_subtypes_variant_row_field acc = function
 
 let free_variables ty =
   Ctype.free_variables ty
-  |> List.map (fun {desc; id; _} ->
-      match desc with
-      | Tvar text -> {text; id}
+  |> List.map (fun ty ->
+      match get_desc ty with
+        Tvar text -> {text; id = get_id ty}
       | _ ->
           (* Ctype.free_variables only returns Tvar nodes *)
           assert false)
@@ -327,11 +326,11 @@ type coinductive_hyps = {
 module Hyps : sig
   type t = coinductive_hyps
   val empty : t
-  val add : transient_expr -> mode -> t -> t
+  val add : type_expr -> mode -> t -> t
   val guard : t -> t
   val poison : t -> t
-  val safe : transient_expr -> mode -> t -> bool
-  val unsafe : transient_expr -> mode -> t -> bool
+  val safe : type_expr -> mode -> t -> bool
+  val unsafe : type_expr -> mode -> t -> bool
 end = struct
   type t = coinductive_hyps
 
@@ -394,12 +393,11 @@ let check_type
   : Env.t -> type_expr -> mode -> context
   = fun env ty m ->
   let rec check_type hyps ty m =
-    let ty = repr ty in
     if Hyps.safe ty m hyps then empty
-    else if Hyps.unsafe ty m hyps then worst_case (type_expr ty)
+    else if Hyps.unsafe ty m hyps then worst_case ty
     else
     let hyps = Hyps.add ty m hyps in
-    match (ty.desc, m) with
+    match (get_desc ty, m) with
     (* Impossible case due to the call to [Ctype.repr]. *)
     | (Tlink _            , _      ) -> assert false
     (* Impossible case (according to comment in [typing/types.mli]. *)
@@ -408,7 +406,7 @@ let check_type
     | (_                  , Ind    ) -> empty
     (* Variable case, add constraint. *)
     | (Tvar(alpha)        , m      ) ->
-        TVarMap.singleton {text = alpha; id = ty.Types.id} m
+        TVarMap.singleton {text = alpha; id = get_id ty} m
     (* "Separable" case for constructors with known memory representation. *)
     | (Tarrow _           , Sep    )
     | (Ttuple _           , Sep    )
@@ -423,7 +421,7 @@ let check_type
     | (Tobject(_,_)       , Deepsep)
     | ((Tnil | Tfield _)  , Deepsep)
     | (Tpackage(_,_,_)    , Deepsep) ->
-        let tys = immediate_subtypes (type_expr ty) in
+        let tys = immediate_subtypes ty in
         let on_subtype context ty =
           context ++ check_type (Hyps.guard hyps) ty Deepsep in
         List.fold_left on_subtype empty tys
@@ -536,7 +534,6 @@ let msig_of_context : decl_loc:Location.t -> parameters:type_expr list
          we build a list of modes by repeated consing into
          an accumulator variable [acc], setting existential variables
          to Ind as we go. *)
-      let param_instance = repr param_instance in
       let get context var =
         try TVarMap.find var context with Not_found -> Ind in
       let set_ind context var =
@@ -544,12 +541,12 @@ let msig_of_context : decl_loc:Location.t -> parameters:type_expr list
       let is_ind context var = match get context var with
         | Ind -> true
         | Sep | Deepsep -> false in
-      match param_instance.desc with
+      match get_desc param_instance with
       | Tvar text ->
-          let var = {text; id = param_instance.Types.id} in
+          let var = {text; id = get_id param_instance} in
           (get context var) :: acc, (set_ind context var)
       | _ ->
-          let instance_exis = free_variables (type_expr param_instance) in
+          let instance_exis = free_variables param_instance in
           if List.for_all (is_ind context) instance_exis then
             Ind :: acc, context
           else

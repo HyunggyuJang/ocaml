@@ -24,9 +24,8 @@ open Btype
 let free_vars ?(param=false) ty =
   let ret = ref TypeSet.empty in
   let rec loop ty =
-    let ty = repr ty in
     if try_mark_node ty then
-      match ty.desc with
+      match get_desc ty with
       | Tvar _ ->
           ret := TypeSet.add ty !ret
       | Tvariant row ->
@@ -39,7 +38,7 @@ let free_vars ?(param=false) ty =
           end
       (* XXX: What about Tobject ? *)
       | _ ->
-          iter_transient_expr loop ty
+          iter_type_expr loop ty
   in
   loop ty;
   unmark_type ty;
@@ -61,7 +60,7 @@ let constructor_existentials cd_args cd_res =
         let res_vars = free_vars type_ret in
         TypeSet.elements (TypeSet.diff arg_vars_set res_vars)
   in
-  (tyl, List.map type_expr existentials)
+  (tyl, existentials)
 
 let constructor_args ~current_unit priv cd_args cd_res path rep =
   let tyl, existentials = constructor_existentials cd_args cd_res in
@@ -69,8 +68,7 @@ let constructor_args ~current_unit priv cd_args cd_res path rep =
   | Cstr_tuple l -> existentials, l, None
   | Cstr_record lbls ->
       let arg_vars_set = free_vars ~param:true (newgenty (Ttuple tyl)) in
-      let type_params =
-        List.map type_expr (TypeSet.elements arg_vars_set) in
+      let type_params = TypeSet.elements arg_vars_set in
       let type_unboxed =
         match rep with
         | Record_unboxed _ -> unboxed_true_default_false
@@ -182,9 +180,9 @@ let extension_descr ~current_unit path_ext ext =
     }
 
 let none =
-  type_expr (Transient_expr.create (Ttuple [])
-               ~level:(-1) ~scope:Btype.generic_level ~id:(-1))
-                                        (* Clearly ill-formed type *)
+  create_expr (Ttuple []) ~level:(-1) ~scope:Btype.generic_level ~id:(-1)
+    (* Clearly ill-formed type *)
+
 let dummy_label =
   { lbl_name = ""; lbl_res = none; lbl_arg = none; lbl_mut = Immutable;
     lbl_pos = (-1); lbl_all = [||]; lbl_repres = Record_regular;

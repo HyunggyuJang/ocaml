@@ -18,8 +18,6 @@
 open Asttypes
 open Types
 
-module TypePairs : Hashtbl.S with type key = transient_expr * transient_expr
-
 module Unification_trace: sig
   (** Unification traces are used to explain unification errors
       when printing error messages *)
@@ -117,7 +115,6 @@ val set_levels: levels -> unit
 val create_scope : unit -> int
 
 val newty: type_desc -> type_expr
-val newty2: int -> type_desc -> type_expr
 val newvar: ?name:string -> unit -> type_expr
 val newvar2: ?name:string -> int -> type_expr
         (* Return a fresh variable *)
@@ -131,7 +128,7 @@ val none: type_expr
 
 val object_fields: type_expr -> type_expr
 val flatten_fields:
-        type_expr -> (string * field_kind * type_expr) list * transient_expr
+        type_expr -> (string * field_kind * type_expr) list * type_expr
 (** Transform a field type into a list of pairs label-type.
     The fields are sorted.
 
@@ -158,7 +155,7 @@ val associate_fields:
         (string * field_kind * type_expr) list
 val opened_object: type_expr -> bool
 val close_object: type_expr -> bool
-val row_variable: type_expr -> transient_expr
+val row_variable: type_expr -> type_expr
         (* Return the row variable of an open object type *)
 val set_object_name:
         Ident.t -> type_expr -> type_expr list -> type_expr -> unit
@@ -241,7 +238,7 @@ val apply:
 
 val expand_head_once: Env.t -> type_expr -> type_expr
 val expand_head: Env.t -> type_expr -> type_expr
-val try_expand_once_opt: Env.t -> transient_expr -> type_expr
+val try_expand_once_opt: Env.t -> type_expr -> type_expr
 val expand_head_opt: Env.t -> type_expr -> type_expr
 (** The compiler's own version of [expand_head] necessary for type-based
     optimisations. *)
@@ -259,7 +256,7 @@ val unify: Env.t -> type_expr -> type_expr -> unit
         (* Unify the two types given. Raise [Unify] if not possible. *)
 val unify_gadt:
         equations_level:int -> allow_recursive:bool ->
-        Env.t ref -> type_expr -> type_expr -> unit TypePairs.t
+        Env.t ref -> type_expr -> type_expr -> unit Btype.TypePairs.t
         (* Unify the two types given and update the environment with the
            local constraints. Raise [Unify] if not possible.
            Returns the pairs of types that have been equated.  *)
@@ -272,17 +269,17 @@ val filter_method: Env.t -> string -> private_flag -> type_expr -> type_expr
         (* A special case of unification (with {m : 'a; 'b}). *)
 val check_filter_method: Env.t -> string -> private_flag -> type_expr -> unit
         (* A special case of unification (with {m : 'a; 'b}), returning unit. *)
-val occur_in: Env.t -> transient_expr -> type_expr -> bool
-val deep_occur: transient_expr -> type_expr -> bool
+val occur_in: Env.t -> type_expr -> type_expr -> bool
+val deep_occur: type_expr -> type_expr -> bool
 val filter_self_method:
         Env.t -> string -> private_flag -> (Ident.t * type_expr) Meths.t ref ->
         type_expr -> Ident.t * type_expr
 val moregeneral: Env.t -> bool -> type_expr -> type_expr -> bool
         (* Check if the first type scheme is more general than the second. *)
 
-val rigidify: type_expr -> transient_expr list
+val rigidify: type_expr -> type_expr list
         (* "Rigidify" a type and return its type variable *)
-val all_distinct_vars: Env.t -> transient_expr list -> bool
+val all_distinct_vars: Env.t -> type_expr list -> bool
         (* Check those types are all distinct type variables *)
 val matches: Env.t -> type_expr -> type_expr -> bool
         (* Same as [moregeneral false], implemented using the two above
@@ -357,7 +354,7 @@ val closed_schema: Env.t -> type_expr -> bool
         (* Check whether the given type scheme contains no non-generic
            type variables *)
 
-val free_variables: ?env:Env.t -> type_expr -> transient_expr list
+val free_variables: ?env:Env.t -> type_expr -> type_expr list
         (* If env present, then check for incomplete definitions too *)
 val closed_type_decl: type_declaration -> type_expr option
 val closed_extension_constructor: extension_constructor -> type_expr option

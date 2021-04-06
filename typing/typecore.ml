@@ -353,12 +353,11 @@ let unify_pat ?refine env pat expected_ty =
 (* unification of a type with a Tconstr with freshly created arguments *)
 let unify_head_only ~refine loc env ty constr =
   let ty_res = instance constr.cstr_res in
-  let ty_res = repr ty_res in
-  match ty_res.desc with
+  match get_desc ty_res with
   | Tconstr(p,args,m) ->
       set_type_desc ty_res (Tconstr(p,List.map (fun _ -> newvar ()) args,m));
-      enforce_constraints !env (type_expr ty_res);
-      unify_pat_types ~refine loc env (type_expr ty_res) ty
+      enforce_constraints !env ty_res;
+      unify_pat_types ~refine loc env ty_res ty
   | _ -> assert false
 
 (* Creating new conjunctive types is not allowed when typing patterns *)
@@ -548,7 +547,7 @@ and build_as_type_aux env p =
         unify_pat env {p with pat_type = ty} ty_res;
         let refinable =
           lbl.lbl_mut = Immutable && List.mem_assoc lbl.lbl_pos ppl &&
-          match (repr lbl.lbl_arg).desc with Tpoly _ -> false | _ -> true in
+          match get_desc lbl.lbl_arg with Tpoly _ -> false | _ -> true in
         if refinable then begin
           let arg = List.assoc lbl.lbl_pos ppl in
           unify_pat env {arg with pat_type = build_as_type env arg} ty_arg
@@ -627,8 +626,8 @@ let solve_constructor_annotation env name_list sty ty_args ty_ex =
         [ty2]
     | _ ->
         unify_pat_types cty.ctyp_loc env ty1 (newty (Ttuple ty_args));
-        match repr (expand_head !env ty2) with
-          {desc = Ttuple tyl} -> tyl
+        match get_desc (expand_head !env ty2) with
+          Ttuple tyl -> tyl
         | _ -> assert false
   in
   if ids <> [] then ignore begin
@@ -636,9 +635,8 @@ let solve_constructor_annotation env name_list sty ty_args ty_ex =
     let rem =
       List.fold_left
         (fun rem tv ->
-          match repr tv with
-            {desc = Tconstr(Path.Pident id, [], _)}
-            when List.mem id rem ->
+          match get_desc tv with
+            Tconstr(Path.Pident id, [], _) when List.mem id rem ->
               list_remove id rem
           | _ ->
               raise (Error (cty.ctyp_loc, !env,
@@ -694,7 +692,6 @@ let solve_Ppat_construct ~refine env loc constr no_existentials
     try
       TypePairs.iter
         (fun (t1, t2) () ->
-          let t1 = type_expr t1 and t2 = type_expr t2 in
           generalize_structure t1;
           generalize_structure t2;
           if not (fully_generic t1 && fully_generic t2) then
@@ -839,8 +836,8 @@ let rec expand_path env p =
   in
   match decl with
     Some {type_manifest = Some ty} ->
-      begin match repr ty with
-        {desc=Tconstr(p,_,_)} -> expand_path env p
+      begin match get_desc ty with
+        Tconstr(p,_,_) -> expand_path env p
       | _ -> assert false
       end
   | _ ->
@@ -854,7 +851,7 @@ let compare_type_path env tpath1 tpath2 =
 exception Wrong_name_disambiguation of Env.t * wrong_name
 
 let get_constr_type_path ty =
-  match (repr ty).desc with
+  match get_desc ty with
   | Tconstr(p, _, _) -> p
   | _ -> assert false
 
@@ -1721,7 +1718,7 @@ and type_pat_aux
         try
           let (p0, p, _) = extract_concrete_variant !env expected_ty in
           let principal =
-            (repr expected_ty).level = generic_level || not !Clflags.principal
+            get_level expected_ty = generic_level || not !Clflags.principal
           in
             Some (p0, p, principal)
         with Not_found -> None
@@ -1844,7 +1841,7 @@ and type_pat_aux
           let (p0, p,_) = extract_concrete_record !env expected_ty in
           let ty = generic_instance expected_ty in
           let principal =
-            (repr expected_ty).level = generic_level || not !Clflags.principal
+            get_level expected_ty = generic_level || not !Clflags.principal
           in
           Some (p0, p, principal), ty
         with Not_found -> None, newvar ()
@@ -2453,17 +2450,17 @@ let rec type_approx env sexp =
 
 (* List labels in a function type, and whether return type is a variable *)
 let rec list_labels_aux env visited ls ty_fun =
-  let ty = repr (expand_head env ty_fun) in
-  if List.memq ty visited then
+  let ty = expand_head env ty_fun in
+  if TypeSet.mem ty visited then
     List.rev ls, false
-  else match ty.desc with
+  else match get_desc ty with
     Tarrow (l, _, ty_res, _) ->
-      list_labels_aux env (ty::visited) (l::ls) ty_res
+      list_labels_aux env (TypeSet.add ty visited) (l::ls) ty_res
   | _ ->
       List.rev ls, is_Tvar ty
 
 let list_labels env ty =
-  wrap_trace_gadt_instances env (list_labels_aux env [] []) ty
+  wrap_trace_gadt_instances env (list_labels_aux env TypeSet.empty []) ty
 
 (* Check that all univars are safe in a type. Both exp.exp_type and
    ty_expected should already be generalized. *)
@@ -2568,10 +2565,9 @@ let check_partial_application statement exp =
 (* Check that a type is generalizable at some level *)
 let generalizable level ty =
   let rec check ty =
-    let ty = repr ty in
     if not_marked_node ty then
-      if ty.level <= level then raise Exit else
-      (flip_mark_node ty; iter_transient_expr check ty)
+      if get_level ty <= level then raise Exit else
+      (flip_mark_node ty; iter_type_expr check ty)
   in
   try check ty; unmark_type ty; true
   with Exit -> unmark_type ty; false
@@ -2594,9 +2590,8 @@ let create_package_type loc env (p, l) =
 
 let contains_variant_either ty =
   let rec loop ty =
-    let ty = repr ty in
     if try_mark_node ty then
-      begin match ty.desc with
+      begin match get_desc ty with
         Tvariant row ->
           let row = row_repr row in
           if not (is_fixed row) then
@@ -2606,7 +2601,7 @@ let contains_variant_either ty =
               row.row_fields;
           iter_row loop row
       | _ ->
-          iter_transient_expr loop ty
+          iter_type_expr loop ty
       end
   in
   try loop ty; unmark_type ty; false
@@ -2915,13 +2910,13 @@ and type_expect_
   | Pexp_apply(sfunct, sargs) ->
       assert (sargs <> []);
       let rec lower_args seen ty_fun =
-        let ty = repr (expand_head env ty_fun) in
-        if List.memq ty seen then () else
-          match ty.desc with
+        let ty = expand_head env ty_fun in
+        if TypeSet.mem ty seen then () else
+          match get_desc ty with
             Tarrow (_l, ty_arg, ty_fun, _com) ->
               (try unify_var env (newvar()) ty_arg
                with Unify _ -> assert false);
-              lower_args (ty::seen) ty_fun
+              lower_args (TypeSet.add ty seen) ty_fun
           | _ -> ()
       in
       let type_sfunct sfunct =
@@ -2934,7 +2929,7 @@ and type_expect_
         end;
         let ty = instance funct.exp_type in
         end_def ();
-        wrap_trace_gadt_instances env (lower_args []) ty;
+        wrap_trace_gadt_instances env (lower_args TypeSet.empty) ty;
         funct
       in
       let funct, sargs =
@@ -3015,10 +3010,10 @@ and type_expect_
       (* Keep sharing *)
       let ty_expected0 = instance ty_expected in
       begin try match
-        sarg, repr (expand_head env ty_expected),
-        repr (expand_head env ty_expected0)
+        sarg, get_desc (expand_head env ty_expected),
+        get_desc (expand_head env ty_expected0)
       with
-      | Some sarg, {desc = Tvariant row}, {desc = Tvariant row0} ->
+      | Some sarg, Tvariant row, Tvariant row0 ->
           let row = row_repr row in
           begin match row_field_repr (List.assoc l row.row_fields),
           row_field_repr (List.assoc l row0.row_fields) with
@@ -3066,7 +3061,7 @@ and type_expect_
           try
             let (p0, p,_) = extract_concrete_record env ty in
             let principal =
-              (repr ty).level = generic_level || not !Clflags.principal
+              get_level ty = generic_level || not !Clflags.principal
             in
             Some (p0, p, principal)
           with Not_found -> None
@@ -3334,7 +3329,7 @@ and type_expect_
             let tv = newvar () in
             let gen = generalizable (get_level tv) arg.exp_type in
             unify_var env tv arg.exp_type;
-            begin match arg.exp_desc, !self_coercion, (repr ty').desc with
+            begin match arg.exp_desc, !self_coercion, get_desc ty' with
               Texp_ident(_, _, {val_kind=Val_self _}), (path,r) :: _,
               Tconstr(path',_,_) when Path.same path path' ->
                 (* prerr_endline "self coercion"; *)
@@ -3409,7 +3404,7 @@ and type_expect_
               let (id, typ) =
                 filter_self_method env met Private meths privty
               in
-              if is_Tvar (repr typ) then
+              if is_Tvar typ then
                 Location.prerr_warning loc
                   (Warnings.Undeclared_virtual_method met);
               (Tmeth_val id, None, typ)
@@ -3479,15 +3474,15 @@ and type_expect_
           generalize_structure typ;
         end;
         let typ =
-          match repr typ with
-            {desc = Tpoly (ty, [])} ->
+          match get_desc typ with
+            Tpoly (ty, []) ->
               instance ty
-          | {desc = Tpoly (ty, tl); level = l} ->
-              if !Clflags.principal && l <> generic_level then
+          | Tpoly (ty, tl) ->
+              if !Clflags.principal && get_level typ <> generic_level then
                 Location.prerr_warning loc
                   (Warnings.Not_principal "this use of a polymorphic method");
               snd (instance_poly false tl ty)
-          | {desc = Tvar _} ->
+          | Tvar _ ->
               let ty' = newvar () in
               unify env (instance typ) (newty(Tpoly(ty',[])));
               (* if not !Clflags.nolabels then
@@ -3744,13 +3739,12 @@ and type_expect_
          type. *)
       let seen = Hashtbl.create 8 in
       let rec replace t =
-        let t = repr t in
-        if Hashtbl.mem seen t.id then ()
+        if Hashtbl.mem seen (get_id t) then ()
         else begin
-          Hashtbl.add seen t.id ();
-          match t.desc with
+          Hashtbl.add seen (get_id t) ();
+          match get_desc t with
           | Tconstr (Path.Pident id', _, _) when id == id' -> link_type t ty
-          | _ -> Btype.iter_transient_expr replace t
+          | _ -> Btype.iter_type_expr replace t
         end
       in
       let ety = Subst.type_expr Subst.identity body.exp_type in
@@ -3906,11 +3900,11 @@ and type_expect_
 and type_ident env ?(recarg=Rejected) lid =
   let (path, desc) = Env.lookup_value ~loc:lid.loc lid.txt env in
   let is_recarg =
-    match (repr desc.val_type).desc with
+    match get_desc desc.val_type with
     | Tconstr(p, _, _) -> Path.is_constructor_typath p
     | _ -> false
   in
-  begin match is_recarg, recarg, (repr desc.val_type).desc with
+  begin match is_recarg, recarg, get_desc desc.val_type with
   | _, Allowed, _
   | true, Required, _
   | false, Rejected, _ -> ()
@@ -4006,7 +4000,7 @@ and type_label_access env srecord usage lid =
   let expected_type =
     try
       let (p0, p,_) = extract_concrete_record env ty_exp in
-      Some(p0, p, (repr ty_exp).level = generic_level || not !Clflags.principal)
+      Some(p0, p, get_level ty_exp = generic_level || not !Clflags.principal)
     with Not_found -> None
   in
   let labels = Env.lookup_all_labels ~loc:lid.loc usage lid.txt env in
@@ -4327,9 +4321,10 @@ and type_argument ?explanation ?recarg env sarg ty_expected' ty_expected =
     let ls, tvar = list_labels env ty in
     not tvar && List.for_all ((=) Nolabel) ls
   in
-  match repr (expand_head env ty_expected') with
-    {desc = Tarrow(Nolabel,ty_arg,ty_res,_); level = lv}
-    when is_inferred sarg ->
+  let te = expand_head env ty_expected' in
+  match get_desc te with
+    Tarrow(Nolabel,ty_arg,ty_res,_) when is_inferred sarg ->
+      let lv = get_level te in
       (* apply optional arguments when expected type is "" *)
       (* we must be very careful about not breaking the semantics *)
       if !Clflags.principal then begin_def ();
@@ -4350,7 +4345,7 @@ and type_argument ?explanation ?recarg env sarg ty_expected' ty_expected =
       in
       let args, ty_fun', simple_res = make_args [] texp.exp_type in
       let warn = !Clflags.principal &&
-        (lv <> generic_level || (repr ty_fun').level <> generic_level)
+        (lv <> generic_level || get_level ty_fun' <> generic_level)
       and texp = {texp with exp_type = instance texp.exp_type}
       and ty_fun = instance ty_fun' in
       if not (simple_res || no_labels ty_res) then begin
@@ -4485,10 +4480,11 @@ and type_application env funct sargs =
   in
   let warned = ref false in
   let rec type_args args ty_fun ty_fun0 sargs =
-    match repr (expand_head env ty_fun), repr (expand_head env ty_fun0) with
-    | {desc=Tarrow (l, ty, ty_fun, com); level=lv} as ty_fun',
-      {desc=Tarrow (_, ty0, ty_fun0, _)}
+    let ty_fun' = expand_head env ty_fun in
+    match get_desc ty_fun', get_desc (expand_head env ty_fun0) with
+    | Tarrow (l, ty, ty_fun, com), Tarrow (_, ty0, ty_fun0, _)
       when sargs <> [] && commu_repr com = Cok ->
+        let lv = get_level ty_fun' in
         let may_warn loc w =
           if not !warned && !Clflags.principal && lv <> generic_level
           then begin
@@ -4536,8 +4532,7 @@ and type_application env funct sargs =
                   (sargs, eliminate_optional_arg ())
                 else
                   raise(Error(sarg.pexp_loc, env,
-                              Apply_wrong_label(l', type_expr ty_fun',
-                                                optional)))
+                              Apply_wrong_label(l', ty_fun', optional)))
           end else
             (* Arguments can be commuted, try to fetch the argument
                corresponding to the first parameter. *)
@@ -4606,7 +4601,7 @@ and type_construct env loc lid sarg ty_expected_explained attrs =
     try
       let (p0, p,_) = extract_concrete_variant env ty_expected in
       let principal =
-        (repr ty_expected).level = generic_level || not !Clflags.principal
+        get_level ty_expected = generic_level || not !Clflags.principal
       in
       Some(p0, p, principal)
     with Not_found -> None
@@ -4689,8 +4684,8 @@ and type_statement ?explanation env sexp =
   begin_def();
   let exp = type_exp env sexp in
   end_def();
-  let ty = repr (expand_head env exp.exp_type) and tv = newvar() in
-  if is_Tvar ty && ty.level > get_level tv then
+  let ty = expand_head env exp.exp_type and tv = newvar() in
+  if is_Tvar ty && get_level ty > get_level tv then
     Location.prerr_warning
       (final_subexpression exp).exp_loc
       Warnings.Nonreturning_statement;
@@ -4701,7 +4696,7 @@ and type_statement ?explanation env sexp =
     exp
   else begin
     check_partial_application true exp;
-    unify_var env tv (type_expr ty);
+    unify_var env tv ty;
     exp
   end
 
@@ -5498,7 +5493,7 @@ let report_error ~loc env = function
              fprintf ppf "but an expression was expected of type");
       ) ()
   | Apply_non_function typ ->
-      begin match (repr typ).desc with
+      begin match get_desc typ with
         Tarrow _ ->
           Location.errorf ~loc
             "@[<v>@[<2>This function has type@ %a@]\

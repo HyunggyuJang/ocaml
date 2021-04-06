@@ -29,7 +29,7 @@ let scrape_ty env ty =
       | {type_unboxed = {unboxed = true; _}; _} ->
         begin match Typedecl.get_unboxed_type_representation env ty with
         | None -> ty
-        | Some ty2 -> type_expr ty2
+        | Some ty2 -> ty2
         end
       | _ -> ty
       | exception Not_found -> ty

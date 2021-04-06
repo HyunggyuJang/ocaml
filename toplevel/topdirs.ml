@@ -187,7 +187,7 @@ let extract_target_parameters ty =
   let ty = extract_target_type ty |> Ctype.expand_head !toplevel_env in
   match get_desc ty with
   | Tconstr (path, (_ :: _ as args), _)
-      when Ctype.all_distinct_vars !toplevel_env (List.map repr args) ->
+      when Ctype.all_distinct_vars !toplevel_env args ->
         Some (path, args)
   | _ -> None
 
@@ -233,7 +233,7 @@ let match_generic_printer_type desc path args printer_type =
     (Ctype.instance desc.val_type);
   Ctype.end_def();
   Ctype.generalize ty_expected;
-  if not (Ctype.all_distinct_vars !toplevel_env (List.map repr args)) then
+  if not (Ctype.all_distinct_vars !toplevel_env args) then
     raise (Ctype.Unify []);
   (ty_expected, Some (path, ty_args))
 

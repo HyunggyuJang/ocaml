@@ -139,13 +139,17 @@ let update_type temp_env env id loc =
 
 let get_unboxed_type_representation env ty =
   match Typedecl_unboxed.get_unboxed_type_representation env ty with
-  | Typedecl_unboxed.This x -> Some (repr x)
+  | Typedecl_unboxed.This x -> Some x
   | _ -> None
 
 (* Determine if a type's values are represented by floats at run-time. *)
 let is_float env ty =
   match get_unboxed_type_representation env ty with
-    Some {desc = Tconstr(p, _, _); _} -> Path.same p Predef.path_float
+    Some ty' ->
+      begin match get_desc ty' with
+        Tconstr(p, _, _) -> Path.same p Predef.path_float
+      | _ -> false
+      end
   | _ -> false
 
 (* Determine if a type definition defines a fixed type. (PW) *)
@@ -174,10 +178,10 @@ let set_private_row env loc p decl =
   let tm =
     match decl.type_manifest with
       None -> assert false
-    | Some t -> repr (Ctype.expand_head env t)
+    | Some t -> Ctype.expand_head env t
   in
   let rv =
-    match tm.desc with
+    match get_desc tm with
       Tvariant row ->
         let row = Btype.row_repr row in
         set_type_desc tm
@@ -476,10 +480,9 @@ module TypeSet = Btype.TypeSet
 module TypeMap = Btype.TypeMap
 
 let rec check_constraints_rec env loc visited ty =
-  let tty = repr ty in
-  if TypeSet.mem tty !visited then () else begin
-  visited := TypeSet.add tty !visited;
-  match tty.desc with
+  if TypeSet.mem ty !visited then () else begin
+  visited := TypeSet.add ty !visited;
+  match get_desc ty with
   | Tconstr (path, args, _) ->
       let args' = List.map (fun _ -> Ctype.newvar ()) args in
       let ty' = Ctype.newconstr path args' in
@@ -611,14 +614,13 @@ let check_abbrev env sdecl (id, decl) =
 let check_well_founded env loc path to_check ty =
   let visited = ref TypeMap.empty in
   let rec check ty0 parents ty =
-    let ty = repr ty in
     if TypeSet.mem ty parents then begin
       (*Format.eprintf "@[%a@]@." Printtyp.raw_type_expr ty;*)
-      if match ty0.desc with
+      if match get_desc ty0 with
       | Tconstr (p, _, _) -> Path.same p path
       | _ -> false
       then raise (Error (loc, Recursive_abbrev (Path.name path)))
-      else raise (Error (loc, Cycle_in_def (Path.name path, type_expr ty0)))
+      else raise (Error (loc, Cycle_in_def (Path.name path, ty0)))
     end;
     let (fini, parents) =
       try
@@ -630,7 +632,7 @@ let check_well_founded env loc path to_check ty =
     in
     if fini then () else
     let rec_ok =
-      match ty.desc with
+      match get_desc ty with
         Tconstr(p,_,_) ->
           !Clflags.recursive_types && Ctype.is_contractive env p
       | Tobject _ | Tvariant _ -> true
@@ -642,15 +644,15 @@ let check_well_founded env loc path to_check ty =
         visited := visited';
         let parents =
           if rec_ok then TypeSet.empty else TypeSet.add ty parents in
-        Btype.iter_transient_expr (check ty0 parents) ty;
+        Btype.iter_type_expr (check ty0 parents) ty;
         None
       with e ->
         visited := visited'; Some e
     in
-    match ty.desc with
+    match get_desc ty with
     | Tconstr(p, _, _) when arg_exn <> None || to_check p ->
         if to_check p then Option.iter raise arg_exn
-        else Btype.iter_transient_expr (check ty0 TypeSet.empty) ty;
+        else Btype.iter_type_expr (check ty0 TypeSet.empty) ty;
         begin try
           let ty' = Ctype.try_expand_once_opt env ty in
           let ty0 = if TypeSet.is_empty parents then ty else ty0 in
@@ -661,7 +663,7 @@ let check_well_founded env loc path to_check ty =
     | _ -> Option.iter raise arg_exn
   in
   let snap = Btype.snapshot () in
-  try Ctype.wrap_trace_gadt_instances env (check (repr ty) TypeSet.empty) ty
+  try Ctype.wrap_trace_gadt_instances env (check ty TypeSet.empty) ty
   with Ctype.Unify _ ->
     (* Will be detected by check_recursion *)
     Btype.backtrack snap
@@ -686,13 +688,12 @@ let check_recursion ~orig_env env loc path decl to_check =
 
   if decl.type_params = [] then () else
 
-  let visited = ref [] in
+  let visited = ref TypeSet.empty in
 
   let rec check_regular cpath args prev_exp prev_expansions ty =
-    let tty = repr ty in
-    if not (List.memq tty !visited) then begin
-      visited := tty :: !visited;
-      match tty.desc with
+    if not (TypeSet.mem ty !visited) then begin
+      visited := TypeSet.add ty !visited;
+      match get_desc ty with
       | Tconstr(path', args', _) ->
           if Path.same path path' then begin
             if not (Ctype.equal orig_env false args args') then
@@ -787,11 +788,10 @@ let name_recursion sdecl id decl =
   | { type_kind = Type_abstract;
       type_manifest = Some ty;
       type_private = Private; } when is_fixed_type sdecl ->
-    let ty = repr ty in
-    let ty' = Ctype.newty2 ty.level ty.desc in
+    let ty' = newty2 (get_level ty) (get_desc ty) in
     if Ctype.deep_occur ty ty' then
       let td = Tconstr(Path.Pident id, decl.type_params, ref Mnil) in
-      link_type ty (Ctype.newty2 ty.level td);
+      link_type ty (newty2 (get_level ty) td);
       {decl with type_manifest = Some ty'}
     else decl
   | _ -> decl
@@ -997,12 +997,12 @@ let transl_extension_constructor ~scope env type_path type_params
           let vars =
             Ctype.free_variables (Btype.newgenty (Ttuple args))
           in
-            List.iter
-              (function {desc = Tvar (Some "_")} as ty
-                  when List.memq ty vars ->
-                    set_type_desc ty (Tvar None)
-                | _ -> ())
-              (List.map repr typext_params)
+          List.iter
+            (fun ty ->
+              if get_desc ty = Tvar (Some "_")
+              && List.exists (eq_type ty) vars
+              then set_type_desc ty (Tvar None))
+            typext_params
         end;
         (* Ensure that constructor's type matches the type being extended *)
         let cstr_type_path, cstr_type_params =
@@ -1605,8 +1605,7 @@ open Format
 
 let explain_unbound_gen ppf tv tl typ kwd pr =
   try
-    let ttv = repr tv in
-    let ti = List.find (fun ti -> Ctype.deep_occur ttv (typ ti)) tl in
+    let ti = List.find (fun ti -> Ctype.deep_occur tv (typ ti)) tl in
     let ty0 = (* Hack to force aliasing when needed *)
       Btype.newgenty (Tobject(tv, ref None)) in
     Printtyp.reset_and_mark_loops_list [typ ti; ty0];
@@ -1627,12 +1626,12 @@ let explain_unbound_single ppf tv ty =
   match get_desc ty with
     Tobject(fi,_) ->
       let (tl, rv) = Ctype.flatten_fields fi in
-      if rv == repr tv then trivial ty else
+      if eq_type rv tv then trivial ty else
       explain_unbound ppf tv tl (fun (_,_,t) -> t)
         "method" (fun (lab,_,_) -> lab ^ ": ")
   | Tvariant row ->
       let row = Btype.row_repr row in
-      if row.row_more == tv then trivial ty else
+      if eq_type row.row_more tv then trivial ty else
       explain_unbound ppf tv row.row_fields
         (fun (_l,f) -> match Btype.row_field_repr f with
           Rpresent (Some t) -> t

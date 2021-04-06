@@ -74,7 +74,7 @@ and commutable =
   | Cunknown
   | Clink of commutable ref
 
-module TypeOps = struct
+module TransientTypeOps = struct
   type t = type_expr
   let compare t1 t2 = t1.id - t2.id
   let hash t = t.id
@@ -540,28 +540,37 @@ let get_desc t = (repr t).desc
 let get_level t = (repr t).level
 let get_scope t = (repr t).scope
 let get_id t = (repr t).id
-       
+
 (* transient type_expr *)
-        
+
 module Transient_expr = struct
   let create desc ~level ~scope ~id = {desc; level; scope; id}
   let set_desc ty d = ty.desc <- d
+  let set_stub_desc ty d = assert (ty.desc = Tvar None); ty.desc <- d
   let set_level ty lv = ty.level <- lv
   let set_scope ty sc = ty.scope <- sc
   let coerce ty = ty
   let repr = repr
+  let type_expr ty = ty
 end
 
-let type_expr ty = ty
-let type_repr = repr
+(* Comparison for [type_expr]; cannot be used for functors *)
+
+let eq_type t1 t2 = repr t1 == repr t2
+let compare_type t1 t2 = compare (get_id t1) (get_id t2)
 
 (**** Some type creators ****)
 
 let new_id = Local_store.s_ref (-1)
 
-let newty2 level desc  =
+let create_expr = Transient_expr.create
+
+let newty3 ~level ~scope desc  =
   incr new_id;
-  Transient_expr.create desc ~level ~scope:Ident.lowest_scope ~id:!new_id
+  create_expr desc ~level ~scope ~id:!new_id
+
+let newty2 level desc =
+  newty3 ~level ~scope:Ident.lowest_scope desc
 
                   (**********************************)
                   (*  Utilities for backtracking    *)
@@ -584,6 +593,8 @@ let last_snapshot = Local_store.s_ref 0
 let log_type ty =
   if ty.id <= !last_snapshot then log_change (Ctype (ty, ty.desc))
 let link_type ty ty' =
+  let ty = repr ty in
+  let ty' = repr ty' in
   log_type ty;
   let desc = ty.desc in
   Transient_expr.set_desc ty (Tlink ty');
@@ -604,6 +615,7 @@ let link_type ty ty' =
   (*  ; check_expans [] ty' *)
 (* TODO: consider eliminating set_type_desc, replacing it with link types *)
 let set_type_desc ty td =
+  let ty = repr ty in
   if td != ty.desc then begin
     log_type ty;
     Transient_expr.set_desc ty td
@@ -611,12 +623,14 @@ let set_type_desc ty td =
 (* TODO: separate set_level into two specific functions: *)
 (*  set_lower_level and set_generic_level *)
 let set_level ty level =
+  let ty = repr ty in
   if level <> ty.level then begin
     if ty.id <= !last_snapshot then log_change (Clevel (ty, ty.level));
     Transient_expr.set_level ty level
   end
 (* TODO: introduce a guard and rename it to set_higher_scope? *)
 let set_scope ty scope =
+  let ty = repr ty in
   if scope <> ty.scope then begin
     if ty.id <= !last_snapshot then log_change (Cscope (ty, ty.scope));
     Transient_expr.set_scope ty scope
@@ -678,4 +692,3 @@ let undo_compress (changes, _old) =
             Transient_expr.set_desc ty desc; r := !next
         | _ -> ())
         log
-       

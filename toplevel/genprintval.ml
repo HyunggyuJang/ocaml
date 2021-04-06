@@ -203,7 +203,7 @@ module Make(O : OBJ)(EVP : EVALPATH with type valu = O.t) = struct
           Oide_ident name
       | Pdot(p, _s) ->
           if
-            match (find (Lident (Out_name.print name)) env).desc with
+            match get_desc (find (Lident (Out_name.print name)) env) with
             | Tconstr(ty_path', _, _) -> Path.same ty_path ty_path'
             | _ -> false
             | exception Not_found -> false
@@ -215,12 +215,12 @@ module Make(O : OBJ)(EVP : EVALPATH with type valu = O.t) = struct
     let tree_of_constr =
       tree_of_qualified
         (fun lid env ->
-           (repr (Env.find_constructor_by_name lid env).cstr_res))
+          (Env.find_constructor_by_name lid env).cstr_res)
 
     and tree_of_label =
       tree_of_qualified
         (fun lid env ->
-           (repr (Env.find_label_by_name lid env).lbl_res))
+          (Env.find_label_by_name lid env).lbl_res)
 
     (* An abstract type *)
 

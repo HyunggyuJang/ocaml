@@ -20,9 +20,41 @@ open Types
 
 (**** Sets, maps and hashtables of types ****)
 
-module TypeSet  : Set.S with type elt = transient_expr
-module TypeMap  : Map.S with type key = transient_expr
-module TypeHash : Hashtbl.S with type key = transient_expr
+module TTypeSet  : Set.S with type elt = transient_expr
+module TypeSet   : sig
+  include Set.S with type elt = transient_expr and type t = TTypeSet.t
+  val add: type_expr -> t -> t
+  val mem: type_expr -> t -> bool
+  val singleton: type_expr -> t
+  val exists: (type_expr -> bool) -> t -> bool
+  val elements: t -> type_expr list
+end
+module TTypeMap   : Map.S with type key = transient_expr
+module TypeMap    : sig
+  include Map.S with type key = transient_expr
+                     and type 'a t = 'a TTypeMap.t
+  val add: type_expr -> 'a -> 'a t -> 'a t
+  val find: type_expr -> 'a t -> 'a
+  val singleton: type_expr -> 'a -> 'a t
+  val fold: (type_expr -> 'a -> 'b -> 'b) -> 'a t -> 'b -> 'b
+end
+module TTypeHash : Hashtbl.S with type key = transient_expr
+module TypeHash  : sig
+  include Hashtbl.S with type key = transient_expr
+                     and type 'a t = 'a TTypeHash.t
+  val add: 'a t -> type_expr -> 'a -> unit
+  val find: 'a t -> type_expr -> 'a
+  val iter: (type_expr -> 'a -> unit) -> 'a t -> unit
+end
+module TTypePairs : Hashtbl.S with type key = transient_expr * transient_expr
+module TypePairs : sig
+  include Hashtbl.S with type key = transient_expr * transient_expr
+                     and type 'a t = 'a TTypePairs.t
+  val add: 'a t -> type_expr * type_expr -> 'a -> unit
+  val find: 'a t -> type_expr * type_expr -> 'a
+  val mem: 'a t -> type_expr * type_expr -> bool
+  val iter: (type_expr * type_expr -> 'a -> unit) -> 'a t -> unit
+end
 
 (**** Levels ****)
 
@@ -32,8 +64,9 @@ val newgenty: type_desc -> type_expr
         (* Create a generic type *)
 val newgenvar: ?name:string -> unit -> type_expr
         (* Return a fresh generic variable *)
-val newstub: unit -> transient_expr
-        (* Return a fresh node, to be instantiated later *)
+val newgenstub: scope:int -> type_expr
+        (* Return a fresh generic node, to be instantiated
+           by [Transient_expr.set_stub_desc] *)
 
 (* Use Tsubst instead
 val newmarkedvar: int -> type_expr
@@ -44,9 +77,9 @@ val newmarkedgenvar: unit -> type_expr
 
 (**** Types ****)
 
-val is_Tvar: transient_expr -> bool
-val is_Tunivar: transient_expr -> bool
-val is_Tconstr: transient_expr -> bool
+val is_Tvar: type_expr -> bool
+val is_Tunivar: type_expr -> bool
+val is_Tconstr: type_expr -> bool
 val dummy_method: label
 
 val commu_repr: commutable -> commutable
@@ -59,7 +92,7 @@ val row_repr: row_desc -> row_desc
 val row_field_repr: row_field -> row_field
 val row_field: label -> row_desc -> row_field
         (* Return the canonical representative of a row field *)
-val row_more: row_desc -> transient_expr
+val row_more: row_desc -> type_expr
         (* Return the extension variable of the row *)
 
 val is_fixed: row_desc -> bool
@@ -83,15 +116,15 @@ val static_row: row_desc -> bool
 val hash_variant: label -> int
         (* Hash function for variant tags *)
 
-val proxy: type_expr -> transient_expr
+val proxy: type_expr -> type_expr
         (* Return the proxy representative of the type: either itself
            or a row variable *)
 
 (**** Utilities for private abbreviations with fixed rows ****)
-val row_of_type: type_expr -> transient_expr
+val row_of_type: type_expr -> type_expr
 val has_constr_row: type_expr -> bool
 val is_row_name: string -> bool
-val is_constr_row: allow_ident:bool -> transient_expr -> bool
+val is_constr_row: allow_ident:bool -> type_expr -> bool
 
 (* Set the polymorphic variant row_name field *)
 val set_row_name : type_declaration -> Path.t -> unit
@@ -99,7 +132,6 @@ val set_row_name : type_declaration -> Path.t -> unit
 (**** Utilities for type traversal ****)
 
 val iter_type_expr: (type_expr -> unit) -> type_expr -> unit
-val iter_transient_expr: (type_expr -> unit) -> transient_expr -> unit
         (* Iteration on types *)
 val fold_type_expr: ('a -> type_expr -> 'a) -> 'a -> type_expr -> 'a
 val iter_row: (type_expr -> unit) -> row_desc -> unit
@@ -155,7 +187,7 @@ module For_copy : sig
            While it is possible to circumvent that discipline in various
            ways, you should NOT do that. *)
 
-  val redirect_desc: copy_scope -> transient_expr -> type_desc -> unit
+  val redirect_desc: copy_scope -> type_expr -> type_desc -> unit
         (* Temporarily change a type description *)
 
   val dup_kind: copy_scope -> field_kind option ref -> unit
@@ -169,22 +201,22 @@ end
 val lowest_level: int
         (* Marked type: ty.level < lowest_level *)
 
-val not_marked_node: transient_expr -> bool
+val not_marked_node: type_expr -> bool
         (* Return true if a type node is not yet marked *)
 
-val logged_mark_node: transient_expr -> unit
+val logged_mark_node: type_expr -> unit
         (* Mark a type node, logging the marking so it can be backtracked.
            No [repr]'ing *)
-val try_logged_mark_node: transient_expr -> bool
+val try_logged_mark_node: type_expr -> bool
         (* Mark a type node if it is not yet marked, logging the marking so it
            can be backtracked.
            Return false if it was already marked *)
 
-val flip_mark_node: transient_expr -> unit
+val flip_mark_node: type_expr -> unit
         (* Mark a type node. No [repr]'ing.
            The marking is not logged and will have to be manually undone using
            one of the various [unmark]'ing functions below. *)
-val try_mark_node: transient_expr -> bool
+val try_mark_node: type_expr -> bool
         (* Mark a type node if it is not yet marked.
            The marking is not logged and will have to be manually undone using
            one of the various [unmark]'ing functions below.
