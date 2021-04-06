@@ -60,20 +60,20 @@ let private_flags decl1 decl2 =
 let is_absrow env ty =
   match ty.desc with
     Tconstr(Pident _, _, _) ->
-      begin match Ctype.expand_head env ty with
-        {desc=Tobject _|Tvariant _} -> true
+      begin match get_desc (Ctype.expand_head env (type_expr ty)) with
+        Tobject _ | Tvariant _ -> true
       | _ -> false
       end
   | _ -> false
 
 let type_manifest env ty1 params1 ty2 params2 priv2 =
   let ty1' = Ctype.expand_head env ty1 and ty2' = Ctype.expand_head env ty2 in
-  match ty1'.desc, ty2'.desc with
+  match get_desc ty1', get_desc ty2' with
     Tvariant row1, Tvariant row2 when is_absrow env (Btype.row_more row2) ->
       let row1 = Btype.row_repr row1 and row2 = Btype.row_repr row2 in
       Ctype.equal env true (ty1::params1) (row2.row_more::params2) &&
-      begin match row1.row_more with
-        {desc=Tvar _|Tconstr _|Tnil} -> true
+      begin match get_desc row1.row_more with
+        Tvar _ | Tconstr _ | Tnil -> true
       | _ -> false
       end &&
       let r1, r2, pairs =
@@ -103,7 +103,7 @@ let type_manifest env ty1 params1 ty2 params2 priv2 =
   | Tobject (fi1, _), Tobject (fi2, _)
     when is_absrow env (snd(Ctype.flatten_fields fi2)) ->
       let (fields2,rest2) = Ctype.flatten_fields fi2 in
-      Ctype.equal env true (ty1::params1) (rest2::params2) &&
+      Ctype.equal env true (ty1::params1) (type_expr rest2::params2) &&
       let (fields1,rest1) = Ctype.flatten_fields fi1 in
       (match rest1 with {desc=Tnil|Tvar _|Tconstr _} -> true | _ -> false) &&
       let pairs, _miss1, miss2 = Ctype.associate_fields fields1 fields2 in
@@ -116,7 +116,8 @@ let type_manifest env ty1 params1 ty2 params2 priv2 =
         Ctype.equal env true (ty1 :: params1) (ty2 :: params2) ||
         priv2 = Private &&
         try check_super
-              (Ctype.try_expand_once_opt env (Ctype.expand_head env ty1))
+              (Ctype.try_expand_once_opt env
+                 (repr (Ctype.expand_head env ty1)))
         with Ctype.Cannot_expand -> false
       in check_super ty1
 

@@ -169,17 +169,17 @@ let subst_type env t =
     if List.memq t !deja_vu then () else begin
       deja_vu := t :: !deja_vu;
       Btype.iter_type_expr iter t;
-      match t.Types.desc with
+      match Types.get_desc t with
       | Types.Tconstr (p, [_], _) when Path.same p Predef.path_option ->
           ()
       | Types.Tconstr (p, l, a) ->
           let new_p =
             Odoc_name.to_path (full_type_name env (Odoc_name.from_path p)) in
-          Btype.set_type_desc t (Types.Tconstr (new_p, l, a))
+          Types.set_type_desc (Types.repr t) (Types.Tconstr (new_p, l, a))
       | Types.Tpackage (p, n, l) ->
           let new_p =
             Odoc_name.to_path (full_module_type_name env (Odoc_name.from_path p)) in
-          Btype.set_type_desc t (Types.Tpackage (new_p, n, l))
+          Types.set_type_desc (Types.repr t) (Types.Tpackage (new_p, n, l))
       | Types.Tobject (_, ({contents=Some(p,tyl)} as r)) ->
           let new_p =
             Odoc_name.to_path (full_type_name env (Odoc_name.from_path p)) in
@@ -187,7 +187,7 @@ let subst_type env t =
       | Types.Tvariant ({Types.row_name=Some(p, tyl)} as row) ->
           let new_p =
             Odoc_name.to_path (full_type_name env (Odoc_name.from_path p)) in
-          Btype.set_type_desc t
+          Types.set_type_desc (Types.repr t)
             (Types.Tvariant {row with Types.row_name=Some(new_p, tyl)})
       | _ ->
           ()

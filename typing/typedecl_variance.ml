@@ -43,7 +43,7 @@ let get_variance ty visited =
 let compute_variance env visited vari ty =
   let rec compute_variance_rec vari ty =
     (* Format.eprintf "%a: %x@." Printtyp.type_expr ty (Obj.magic vari); *)
-    let ty = Ctype.repr ty in
+    let ty = repr ty in
     let vari' = get_variance ty visited in
     if Variance.subset vari vari' then () else
     let vari = Variance.union vari vari' in
@@ -144,7 +144,7 @@ let compute_variance_type env ~check (required, loc) decl tyl =
       required
   in
   (* Prepare *)
-  let params = List.map Btype.repr decl.type_params in
+  let params = decl.type_params in
   let tvl = ref TypeMap.empty in
   (* Compute occurrences in the body *)
   let open Variance in
@@ -156,10 +156,11 @@ let compute_variance_type env ~check (required, loc) decl tyl =
   if check_injectivity then
     List.iter
       (fun ty ->
-        if Btype.is_Tvar ty || mem Inj (get_variance ty tvl) then () else
+        let tty = repr ty in
+        if Btype.is_Tvar tty || mem Inj (get_variance tty tvl) then () else
         let visited = ref TypeSet.empty in
         let rec check ty =
-          let ty = Ctype.repr ty in
+          let ty = repr ty in
           if TypeSet.mem ty !visited then () else begin
             visited := TypeSet.add ty !visited;
             if mem Inj (get_variance ty tvl) then () else
@@ -168,13 +169,13 @@ let compute_variance_type env ~check (required, loc) decl tyl =
             | Tconstr _ ->
                 let old = !visited in
                 begin try
-                  Btype.iter_type_expr check ty
+                  Btype.iter_transient_expr check ty
                 with Exit ->
                   visited := old;
-                  let ty' = Ctype.expand_head_opt env ty in
-                  if ty == ty' then raise Exit else check ty'
+                  let ty' = Ctype.expand_head_opt env (type_expr ty) in
+                  if ty == repr ty' then raise Exit else check ty'
                 end
-            | _ -> Btype.iter_type_expr check ty
+            | _ -> Btype.iter_transient_expr check ty
           end
         in
         try check ty; compute_variance env tvl injective ty
@@ -186,6 +187,7 @@ let compute_variance_type env ~check (required, loc) decl tyl =
     List.iter2
       (fun ty (c, n, i) ->
         incr pos;
+        let ty = repr ty in
         let var = get_variance ty tvl in
         let (co,cn) = get_upper var and ij = mem Inj var in
         if Btype.is_Tvar ty && (co && not c || cn && not n) || not ij && i
@@ -197,20 +199,22 @@ let compute_variance_type env ~check (required, loc) decl tyl =
     (* Check propagation from constrained parameters *)
     let args = Btype.newgenty (Ttuple params) in
     let fvl = Ctype.free_variables args in
-    let fvl = List.filter (fun v -> not (List.memq v params)) fvl in
+    let fvl =
+      let params = List.map repr params in
+      List.filter (fun v -> not (List.memq v params)) fvl in
     (* If there are no extra variables there is nothing to do *)
     if fvl = [] then () else
     let tvl2 = ref TypeMap.empty in
     List.iter2
       (fun ty (p,n,_) ->
-        if Btype.is_Tvar ty then () else
+        if Btype.is_Tvar (repr ty) then () else
         let v =
           if p then if n then full else covariant else conjugate covariant in
         compute_variance env tvl2 v ty)
       params required;
     let visited = ref TypeSet.empty in
     let rec check ty =
-      let ty = Ctype.repr ty in
+      let ty = repr ty in
       if TypeSet.mem ty !visited then () else
       let visited' = TypeSet.add ty !visited in
       visited := visited';
@@ -219,7 +223,8 @@ let compute_variance_type env ~check (required, loc) decl tyl =
       let v2 =
         TypeMap.fold
           (fun t vt v ->
-            if Ctype.equal env false [ty] [t] then union vt v else v)
+            if Ctype.equal env false [type_expr ty] [type_expr t]
+            then union vt v else v)
           !tvl2 null in
       Btype.backtrack snap;
       let (c1,n1) = get_upper v1 and (c2,n2,_,i2) = get_lower v2 in
@@ -230,12 +235,13 @@ let compute_variance_type env ~check (required, loc) decl tyl =
                      else Variance_not_deducible in
           raise (Error (loc, Bad_variance (code, (c1,n1,false), (c2,n2,false))))
         else
-          Btype.iter_type_expr check ty
+          Btype.iter_transient_expr check ty
     in
     List.iter (fun (_,ty) -> check ty) tyl;
   end;
   List.map2
     (fun ty (p, n, i) ->
+      let ty = repr ty in
       let v = get_variance ty tvl in
       let tr = decl.type_private in
       (* Use required variance where relevant *)
@@ -261,6 +267,7 @@ let add_false = List.map (fun ty -> false, ty)
 (* A parameter is constrained if it is either instantiated,
    or it is a variable appearing in another parameter *)
 let constrained vars ty =
+  let ty = repr ty in
   match ty.desc with
   | Tvar _ -> List.exists (fun tl -> List.memq ty tl) vars
   | _ -> true
@@ -279,10 +286,9 @@ let compute_variance_gadt env ~check (required, loc as rloc) decl
       compute_variance_type env ~check rloc {decl with type_private = Private}
         (for_constr tl)
   | Some ret_type ->
-      match Ctype.repr ret_type with
-      | {desc=Tconstr (_, tyl, _)} ->
+      match get_desc ret_type with
+      | Tconstr (_, tyl, _) ->
           (* let tyl = List.map (Ctype.expand_head env) tyl in *)
-          let tyl = List.map Ctype.repr tyl in
           let fvl = List.map (Ctype.free_variables ?env:None) tyl in
           let _ =
             List.fold_left2

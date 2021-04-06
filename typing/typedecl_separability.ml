@@ -63,9 +63,9 @@ let structure : type_definition -> type_structure = fun def ->
      let params =
        match def.type_kind with
        | Type_variant [{cd_res = Some ret_type}] ->
-          begin match Ctype.repr ret_type with
-          | {desc=Tconstr (_, tyl, _)} ->
-             List.map Ctype.repr tyl
+          begin match get_desc ret_type with
+          | Tconstr (_, tyl, _) ->
+             List.map type_repr tyl
           | _ -> assert false
           end
        | _ -> def.type_params
@@ -128,7 +128,7 @@ let rec immediate_subtypes : type_expr -> type_expr list = fun ty ->
        parameters as well as the subtype
      - it performs a shallow traversal of object types,
        while our implementation collects all method types *)
-  match (Ctype.repr ty).desc with
+  match get_desc ty with
   (* these are the important cases,
      on which immediate_subtypes is called from [check_type] *)
   | Tarrow(_,ty1,ty2,_) ->
@@ -157,7 +157,7 @@ let rec immediate_subtypes : type_expr -> type_expr list = fun ty ->
   | Tpoly (pty, _) -> [pty]
   | Tconstr (_path, tys, _) -> tys
 
-and immediate_subtypes_object_row acc ty = match (Ctype.repr ty).desc with
+and immediate_subtypes_object_row acc ty = match get_desc ty with
   | Tnil -> acc
   | Tfield (_label, _kind, ty, rest) ->
       let acc = ty :: acc in
@@ -170,10 +170,10 @@ and immediate_subtypes_variant_row acc desc =
       immediate_subtypes_variant_row_field acc rf in
     List.fold_left add_subtype acc desc.row_fields in
   let add_row acc =
-    let row = Ctype.repr desc.row_more in
+    let row = Btype.row_more desc in
     match row.desc with
     | Tvariant more -> immediate_subtypes_variant_row acc more
-    | _ -> row :: acc
+    | _ -> type_expr row :: acc
   in
   add_row (add_subtypes acc)
 
@@ -189,7 +189,7 @@ and immediate_subtypes_variant_row_field acc = function
       end
 
 let free_variables ty =
-  Ctype.free_variables (Ctype.repr ty)
+  Ctype.free_variables ty
   |> List.map (fun {desc; id; _} ->
       match desc with
       | Tvar text -> {text; id}
@@ -327,11 +327,11 @@ type coinductive_hyps = {
 module Hyps : sig
   type t = coinductive_hyps
   val empty : t
-  val add : type_expr -> mode -> t -> t
+  val add : transient_expr -> mode -> t -> t
   val guard : t -> t
   val poison : t -> t
-  val safe : type_expr -> mode -> t -> bool
-  val unsafe : type_expr -> mode -> t -> bool
+  val safe : transient_expr -> mode -> t -> bool
+  val unsafe : transient_expr -> mode -> t -> bool
 end = struct
   type t = coinductive_hyps
 
@@ -394,9 +394,9 @@ let check_type
   : Env.t -> type_expr -> mode -> context
   = fun env ty m ->
   let rec check_type hyps ty m =
-    let ty = Ctype.repr ty in
+    let ty = repr ty in
     if Hyps.safe ty m hyps then empty
-    else if Hyps.unsafe ty m hyps then worst_case ty
+    else if Hyps.unsafe ty m hyps then worst_case (type_expr ty)
     else
     let hyps = Hyps.add ty m hyps in
     match (ty.desc, m) with
@@ -423,7 +423,7 @@ let check_type
     | (Tobject(_,_)       , Deepsep)
     | ((Tnil | Tfield _)  , Deepsep)
     | (Tpackage(_,_,_)    , Deepsep) ->
-        let tys = immediate_subtypes ty in
+        let tys = immediate_subtypes (type_expr ty) in
         let on_subtype context ty =
           context ++ check_type (Hyps.guard hyps) ty Deepsep in
         List.fold_left on_subtype empty tys
@@ -536,7 +536,7 @@ let msig_of_context : decl_loc:Location.t -> parameters:type_expr list
          we build a list of modes by repeated consing into
          an accumulator variable [acc], setting existential variables
          to Ind as we go. *)
-      let param_instance = Ctype.repr param_instance in
+      let param_instance = repr param_instance in
       let get context var =
         try TVarMap.find var context with Not_found -> Ind in
       let set_ind context var =
@@ -549,7 +549,7 @@ let msig_of_context : decl_loc:Location.t -> parameters:type_expr list
           let var = {text; id = param_instance.Types.id} in
           (get context var) :: acc, (set_ind context var)
       | _ ->
-          let instance_exis = free_variables param_instance in
+          let instance_exis = free_variables (type_expr param_instance) in
           if List.for_all (is_ind context) instance_exis then
             Ind :: acc, context
           else

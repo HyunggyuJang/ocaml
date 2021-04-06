@@ -339,12 +339,12 @@ exception Empty (* Empty pattern *)
 
 (* May need a clean copy, cf. PR#4745 *)
 let clean_copy ty =
-  if ty.level = Btype.generic_level then ty
+  if get_level ty = Btype.generic_level then ty
   else Subst.type_expr Subst.identity ty
 
 let get_constructor_type_path ty tenv =
-  let ty = Ctype.repr (Ctype.expand_head tenv (clean_copy ty)) in
-  match ty.desc with
+  let ty = Ctype.expand_head tenv (clean_copy ty) in
+  match get_desc ty with
   | Tconstr (path,_,_) -> path
   | _ -> assert false
 
@@ -724,7 +724,7 @@ let close_variant env row =
         match Btype.row_field_repr f with
         | Reither(_, _, false, e) ->
             (* m=false means that this tag is not explicitly matched *)
-            Btype.set_row_field e Rabsent;
+            set_row_field e Rabsent;
             None
         | Rabsent | Reither (_, _, true, _) | Rpresent _ -> nm)
       row.row_name row.row_fields in
@@ -732,7 +732,8 @@ let close_variant env row =
     (* this unification cannot fail *)
     Ctype.unify env row.row_more
       (Btype.newgenty
-         (Tvariant {row with row_fields = []; row_more = Btype.newgenvar();
+         (Tvariant {row with row_fields = [];
+                    row_more = Btype.newgenvar();
                     row_closed = true; row_name = nm}))
   end
 
@@ -851,7 +852,7 @@ let pat_of_constrs ex_pat cstrs =
 
 let pats_of_type ?(always=false) env ty =
   let ty' = Ctype.expand_head env ty in
-  match ty'.desc with
+  match get_desc ty' with
   | Tconstr (path, _, _) ->
       begin try match (Env.find_type path env).type_kind with
       | Type_variant cl when always || List.length cl <= 1 ||
@@ -875,7 +876,7 @@ let pats_of_type ?(always=false) env ty =
   | _ -> [omega]
 
 let rec get_variant_constructors env ty =
-  match (Ctype.repr ty).desc with
+  match get_desc ty with
   | Tconstr (path,_,_) -> begin
       try match Env.find_type path env with
       | {type_kind=Type_variant _} ->

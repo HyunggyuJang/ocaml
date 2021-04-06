@@ -522,7 +522,7 @@ let lower_nongen nglev mty =
       {desc=Tvar _; level} ->
         if level < generic_level && level > nglev then set_level ty nglev
     | _ ->
-        type_iterators.it_type_expr it ty
+        type_iterators.it_type_expr it (type_expr ty)
   in
   let it = {type_iterators with it_type_expr} in
   it.it_module_type it mty;

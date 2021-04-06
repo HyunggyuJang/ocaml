@@ -20,20 +20,20 @@ open Types
 
 (**** Sets, maps and hashtables of types ****)
 
-module TypeSet  : Set.S with type elt = type_expr
-module TypeMap  : Map.S with type key = type_expr
-module TypeHash : Hashtbl.S with type key = type_expr
+module TypeSet  : Set.S with type elt = transient_expr
+module TypeMap  : Map.S with type key = transient_expr
+module TypeHash : Hashtbl.S with type key = transient_expr
 
 (**** Levels ****)
 
 val generic_level: int
 
-val newty2: int -> type_desc -> type_expr
-        (* Create a type *)
 val newgenty: type_desc -> type_expr
         (* Create a generic type *)
 val newgenvar: ?name:string -> unit -> type_expr
         (* Return a fresh generic variable *)
+val newstub: unit -> transient_expr
+        (* Return a fresh node, to be instantiated later *)
 
 (* Use Tsubst instead
 val newmarkedvar: int -> type_expr
@@ -44,17 +44,10 @@ val newmarkedgenvar: unit -> type_expr
 
 (**** Types ****)
 
-val is_Tvar: type_expr -> bool
-val is_Tunivar: type_expr -> bool
-val is_Tconstr: type_expr -> bool
+val is_Tvar: transient_expr -> bool
+val is_Tunivar: transient_expr -> bool
+val is_Tconstr: transient_expr -> bool
 val dummy_method: label
-
-val repr: type_expr -> type_expr
-        (* Return the canonical representative of a type. *)
-
-val field_kind_repr: field_kind -> field_kind
-        (* Return the canonical representative of an object field
-           kind. *)
 
 val commu_repr: commutable -> commutable
         (* Return the canonical representative of a commutation lock *)
@@ -66,7 +59,7 @@ val row_repr: row_desc -> row_desc
 val row_field_repr: row_field -> row_field
 val row_field: label -> row_desc -> row_field
         (* Return the canonical representative of a row field *)
-val row_more: row_desc -> type_expr
+val row_more: row_desc -> transient_expr
         (* Return the extension variable of the row *)
 
 val is_fixed: row_desc -> bool
@@ -90,15 +83,15 @@ val static_row: row_desc -> bool
 val hash_variant: label -> int
         (* Hash function for variant tags *)
 
-val proxy: type_expr -> type_expr
+val proxy: type_expr -> transient_expr
         (* Return the proxy representative of the type: either itself
            or a row variable *)
 
 (**** Utilities for private abbreviations with fixed rows ****)
-val row_of_type: type_expr -> type_expr
+val row_of_type: type_expr -> transient_expr
 val has_constr_row: type_expr -> bool
 val is_row_name: string -> bool
-val is_constr_row: allow_ident:bool -> type_expr -> bool
+val is_constr_row: allow_ident:bool -> transient_expr -> bool
 
 (* Set the polymorphic variant row_name field *)
 val set_row_name : type_declaration -> Path.t -> unit
@@ -106,6 +99,7 @@ val set_row_name : type_declaration -> Path.t -> unit
 (**** Utilities for type traversal ****)
 
 val iter_type_expr: (type_expr -> unit) -> type_expr -> unit
+val iter_transient_expr: (type_expr -> unit) -> transient_expr -> unit
         (* Iteration on types *)
 val fold_type_expr: ('a -> type_expr -> 'a) -> 'a -> type_expr -> 'a
 val iter_row: (type_expr -> unit) -> row_desc -> unit
@@ -113,6 +107,13 @@ val iter_row: (type_expr -> unit) -> row_desc -> unit
 val fold_row: ('a -> type_expr -> 'a) -> 'a -> row_desc -> 'a
 val iter_abbrev: (type_expr -> unit) -> abbrev_memo -> unit
         (* Iteration on types in an abbreviation list *)
+val iter_type_expr_kind: (type_expr -> unit) -> (type_kind -> unit)
+
+val iter_type_expr_cstr_args: (type_expr -> unit) ->
+  (constructor_arguments -> unit)
+val map_type_expr_cstr_args: (type_expr -> type_expr) ->
+  (constructor_arguments -> constructor_arguments)
+
 
 type type_iterators =
   { it_signature: type_iterators -> signature -> unit;
@@ -154,8 +155,8 @@ module For_copy : sig
            While it is possible to circumvent that discipline in various
            ways, you should NOT do that. *)
 
-  val save_desc: copy_scope -> type_expr -> type_desc -> unit
-        (* Save a type description *)
+  val redirect_desc: copy_scope -> transient_expr -> type_desc -> unit
+        (* Temporarily change a type description *)
 
   val dup_kind: copy_scope -> field_kind option ref -> unit
         (* Save a None field_kind, and make it point to a fresh Fvar *)
@@ -168,22 +169,22 @@ end
 val lowest_level: int
         (* Marked type: ty.level < lowest_level *)
 
-val not_marked_node: type_expr -> bool
+val not_marked_node: transient_expr -> bool
         (* Return true if a type node is not yet marked *)
 
-val logged_mark_node: type_expr -> unit
+val logged_mark_node: transient_expr -> unit
         (* Mark a type node, logging the marking so it can be backtracked.
            No [repr]'ing *)
-val try_logged_mark_node: type_expr -> bool
+val try_logged_mark_node: transient_expr -> bool
         (* Mark a type node if it is not yet marked, logging the marking so it
            can be backtracked.
            Return false if it was already marked *)
 
-val flip_mark_node: type_expr -> unit
+val flip_mark_node: transient_expr -> unit
         (* Mark a type node. No [repr]'ing.
            The marking is not logged and will have to be manually undone using
            one of the various [unmark]'ing functions below. *)
-val try_mark_node: type_expr -> bool
+val try_mark_node: transient_expr -> bool
         (* Mark a type node if it is not yet marked.
            The marking is not logged and will have to be manually undone using
            one of the various [unmark]'ing functions below.
@@ -217,6 +218,14 @@ val forget_abbrev:
         abbrev_memo ref -> Path.t -> unit
         (* Remove an abbreviation from the cache *)
 
+(**** Backtracking ****)
+
+val snapshot: unit -> snapshot
+val backtrack: snapshot -> unit
+        (* Backtrack to a given snapshot. Only possible if you have
+           not already backtracked to a previous snapshot.
+           Calls [cleanup_abbrev] internally *)
+
 (**** Utilities for labels ****)
 
 val is_optional : arg_label -> bool
@@ -233,44 +242,5 @@ val extract_label :
    whether (label, value) was at the head of the list,
    list without the extracted (label, value) *)
 
-(**** Utilities for backtracking ****)
-
-type snapshot
-        (* A snapshot for backtracking *)
-val snapshot: unit -> snapshot
-        (* Make a snapshot for later backtracking. Costs nothing *)
-val backtrack: snapshot -> unit
-        (* Backtrack to a given snapshot. Only possible if you have
-           not already backtracked to a previous snapshot.
-           Calls [cleanup_abbrev] internally *)
-val undo_compress: snapshot -> unit
-        (* Backtrack only path compression. Only meaningful if you have
-           not already backtracked to a previous snapshot.
-           Does not call [cleanup_abbrev] *)
-
-(* Functions to use when modifying a type (only Ctype?) *)
-val link_type: type_expr -> type_expr -> unit
-        (* Set the desc field of [t1] to [Tlink t2], logging the old
-           value if there is an active snapshot *)
-val set_type_desc: type_expr -> type_desc -> unit
-        (* Set directly the desc field, without sharing *)
-val set_level: type_expr -> int -> unit
-val set_scope: type_expr -> int -> unit
-val set_name:
-    (Path.t * type_expr list) option ref ->
-    (Path.t * type_expr list) option -> unit
-val set_row_field: row_field option ref -> row_field -> unit
-val set_univar: type_expr option ref -> type_expr -> unit
-val set_kind: field_kind option ref -> field_kind -> unit
-val set_commu: commutable ref -> commutable -> unit
-        (* Set references, logging the old value *)
-
 (**** Forward declarations ****)
 val print_raw: (Format.formatter -> type_expr -> unit) ref
-
-val iter_type_expr_kind: (type_expr -> unit) -> (type_kind -> unit)
-
-val iter_type_expr_cstr_args: (type_expr -> unit) ->
-  (constructor_arguments -> unit)
-val map_type_expr_cstr_args: (type_expr -> type_expr) ->
-  (constructor_arguments -> constructor_arguments)
