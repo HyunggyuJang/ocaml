@@ -25,8 +25,6 @@ Error: This type entity = < destroy_subject : id subject; entity_id : id >
                            as 'd) ->
                           'f;
              notify : 'd -> id -> unit > 
-       Type 'a = < destroy_subject : id subject; entity_id : id >
-       is not compatible with type < destroy_subject : 'e; .. > as 'd 
        Type
          id subject =
            < add_observer : (id subject, id) observer -> unit;
