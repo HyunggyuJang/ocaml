@@ -98,6 +98,9 @@ let rec field_kind_repr =
     Fvar {contents = Some kind} -> field_kind_repr kind
   | kind                        -> kind
 
+(* no link = 0; link = 1; compression = 2 *)
+let is_compressed = ref 0
+
 let rec repr_link compress (t : type_expr) d : type_expr -> type_expr =
  function
    {desc = Tlink t' as d'} ->
@@ -105,18 +108,44 @@ let rec repr_link compress (t : type_expr) d : type_expr -> type_expr =
  | {desc = Tfield (_, k, _, t') as d'} when field_kind_repr k = Fabsent ->
      repr_link true t d' t'
  | t' ->
+     is_compressed := 1;
      if compress then begin
+       is_compressed := 2;
        log_change (Ccompress (t, t.desc, d)); Private_type_expr.set_desc t d
      end;
      t'
 
+let report_repr_depth =
+  try int_of_string (Sys.getenv "REPORT_REPR") with _ -> 0
+
+let report_repr () =
+  if report_repr_depth <= 0 then () else
+  let open Printexc in
+  let s =
+    match backtrace_slots (get_callstack (report_repr_depth + 2)) with
+      None -> []
+    | Some s -> Array.to_list s
+  in
+  let s = match s with _ :: _ :: s -> s | _ -> [] in
+  let s =
+    List.map
+      (fun x -> match Slot.name x with None -> "" | Some name -> name)
+      s
+  in
+  let s = "\nREPR" :: (string_of_int !is_compressed) :: s in
+  print_endline (String.concat "," s)
+
 let repr (t : type_expr) =
-  match t.desc with
+  is_compressed := 0;
+  let ty = match t.desc with
    Tlink t' as d ->
      repr_link false t d t'
  | Tfield (_, k, _, t') as d when field_kind_repr k = Fabsent ->
      repr_link false t d t'
  | _ -> t
+  in
+  report_repr ();
+  ty
 
 let rec commu_repr = function
     Clink r when !r <> Cunknown -> commu_repr !r
