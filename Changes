@@ -281,6 +281,12 @@ Working version
   specific solver functions.
   (Jacques Garrigue and Takafumi Saikawa, review by Gabriel Scherer)
 
+* #10337: Normalize type_expr nodes on access
+  One should now use accessors such as get_desc and get_level to access fields
+  of type_expr, rather than calling manually Btype.repr (which is now hidden
+  in Types.Transient_expr).
+  (Jacques Garrigue and Takafumi Saikawa)
+
 ### Build system:
 
 - #9191, #10091, #10182: take the LDFLAGS variable into account, except on
