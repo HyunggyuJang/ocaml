@@ -141,6 +141,51 @@ let transl_type_decl path td =
 let transl_implementation modname st =
   ignore (modname, st)
 
+open Format
+
+let priority_level = function
+  | CTid _ -> 10
+  | CTapp (CTid "->", [_;_]) -> 2
+  | CTapp (CTid "*", [_;_]) -> 3
+  | CTapp _ -> 4
+  | CTabs _ -> 0
+  | CTkind _ -> 10
+  | CTtuple _ -> 10
+  | CTprod _ -> 10
+
+let string_of_kind = function
+  | Type -> "Type"
+  | Set -> "Set"
+  | Prop -> "Prop"
+
+let rec print_type_rec lv ppf ty =
+  if lv > priority_level ty then fprintf ppf "(%a)" (print_type_rec 0) ty else
+  match ty with
+  | CTid s -> pp_print_string ppf s
+  | CTapp (CTid "->", [t1; t2]) ->
+      fprintf ppf "@[%a ->@ %a@]" (print_type_rec 3) t1 (print_type_rec 2) t2
+  | CTapp (CTid "*", [t1; t2]) ->
+      fprintf ppf "@[%a ->@ %a@]" (print_type_rec 3) t1 (print_type_rec 4) t2
+  | CTapp (f, args) ->
+      fprintf ppf "@[<2>%a@ %a]" (print_type_rec 4) f
+        (pp_print_list ~pp_sep:pp_print_space (print_type_rec 5)) args
+  | CTabs (x, ot, t1) ->
+      fprintf ppf "@[<hov2>@[<hov2}fun@ %s%a@ =>@]@ %a@]"
+        x print_type_ann ot (print_type_rec 0) t1
+  | CTkind k -> pp_print_string ppf (string_of_kind k)
+  | CTtuple tl ->
+      fprintf ppf "(@[%a)@]"
+        (pp_print_list (print_type_rec 1)
+           ~pp_sep:(fun ppf () -> fprintf ppf ",@ "))
+        tl
+  | CTprod (x, ot, t1) ->
+      fprintf ppf "@[<hov2>@[<hov2>forall@ %s%a,]@ %a@]"
+        x print_type_ann ot (print_type_rec 0) t1
+
+and print_type_ann ppf = function
+  | None -> ()
+  | Some t -> fprintf ppf "@ : %a" (print_type_rec 0) t
+
 let report_error ppf = function
   | Not_allowed s ->
       Format.fprintf ppf "%s not allowed for Coq translation." s
