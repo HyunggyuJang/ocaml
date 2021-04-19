@@ -54,10 +54,17 @@ let emit_bytecode i (bytecode, required_globals) =
          (Emitcode.to_file oc i.module_name cmofile ~required_globals);
     )
 
+let to_gallina i Typedtree.{structure; _} =
+    Coqcore.transl_implementation i.module_name structure
+
 let implementation ~start_from ~source_file ~output_prefix =
   let backend info typed =
-    let bytecode = to_bytecode info typed in
-    emit_bytecode info bytecode
+    if !Clflags.compile_to_coq then 
+      let gallina = to_gallina info typed in
+      ignore gallina
+    else
+      let bytecode = to_bytecode info typed in
+      emit_bytecode info bytecode
   in
   with_info ~source_file ~output_prefix ~dump_ext:"cmo" @@ fun info ->
   match (start_from : Clflags.Compiler_pass.t) with

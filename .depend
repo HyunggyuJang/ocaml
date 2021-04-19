@@ -5826,6 +5826,7 @@ driver/compile.cmo : \
     utils/misc.cmi \
     lambda/lambda.cmi \
     bytecomp/emitcode.cmi \
+    coqgen/coqcore.cmo \
     driver/compile_common.cmi \
     utils/clflags.cmi \
     bytecomp/bytegen.cmi \
@@ -5840,6 +5841,7 @@ driver/compile.cmx : \
     utils/misc.cmx \
     lambda/lambda.cmx \
     bytecomp/emitcode.cmx \
+    coqgen/coqcore.cmx \
     driver/compile_common.cmx \
     utils/clflags.cmx \
     bytecomp/bytegen.cmx \
