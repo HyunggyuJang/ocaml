@@ -68,12 +68,12 @@ and field_kind =
   | Fabsent
 
 and _ commutable_state =
-    Cok : [`nonvar of 'a] commutable_state
-  | Cunknown : [`nonvar of [`unknown]] commutable_state
-  | Cvar : {mutable commu:[`nonvar of [`unknown]] commutable_state} ->
+    Cok : [>`ok] commutable_state
+  | Cunknown : [>`unknown] commutable_state
+  | Cvar : {mutable commu:[`ok | `unknown] commutable_state} ->
       'a commutable_state
 
-and commutable = [`nonvar of [`any]] commutable_state
+and commutable = [`ok] commutable_state
 
 module TypeOps = struct
   type t = type_expr
