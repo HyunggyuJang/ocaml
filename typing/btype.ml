@@ -76,7 +76,7 @@ type change =
       (Path.t * type_expr list) option ref * (Path.t * type_expr list) option
   | Crow of row_field option ref * row_field option
   | Ckind of field_kind option ref * field_kind option
-  | Ccommu of commutable ref * commutable
+  | Ccommu of [`var] commutable_state ref * [`var] commutable_state
   | Cuniv of type_expr option ref * type_expr option
 
 type changes =
@@ -119,7 +119,7 @@ let repr (t : type_expr) =
  | _ -> t
 
 let rec commu_repr = function
-    Clink r when !r <> Cunknown -> commu_repr !r
+    Cvar {contents=Cok | Cvar _ as x} -> commu_repr x
   | c -> c
 
 let rec row_field_repr_aux tl = function
@@ -483,7 +483,7 @@ let rec copy_kind = function
   | Fabsent  -> assert false
 
 let copy_commu c =
-  if commu_repr c = Cok then Cok else Clink (ref Cunknown)
+  if commu_repr c = Cok then Cok else Cvar (ref Cunknown)
 
 let rec copy_type_desc ?(keep_names=false) f = function
     Tvar _ as ty        -> if keep_names then ty else Tvar None
@@ -717,7 +717,8 @@ let set_row_field e v =
   log_change (Crow (e, !e)); e := Some v
 let set_kind rk k =
   log_change (Ckind (rk, !rk)); rk := Some k
-let set_commu rc c =
+let set_commu rc (c : commutable) =
+  let Cok | Cvar _ as c = c in
   log_change (Ccommu (rc, !rc)); rc := c
 
 let snapshot () =

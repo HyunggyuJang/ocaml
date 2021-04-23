@@ -471,12 +471,13 @@ let rec safe_kind_repr v = function
   | Fpresent -> "Fpresent"
   | Fabsent -> "Fabsent"
 
-let rec safe_commu_repr v = function
-    Cok -> "Cok"
-  | Cunknown -> "Cunknown"
-  | Clink r ->
-      if List.memq r v then "Clink loop" else
-      safe_commu_repr (r::v) !r
+let rec safe_commu_repr : type a. _ -> a commutable_state -> string =
+  fun v -> function
+      Cok -> "Cok"
+    | Cunknown -> "Cunknown"
+    | Cvar r ->
+        if List.memq r v then "Cvar loop" else
+        safe_commu_repr (r::v) !r
 
 let rec safe_repr v = function
     {desc = Tlink t} when not (List.memq t v) ->

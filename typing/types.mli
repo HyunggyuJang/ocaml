@@ -231,10 +231,12 @@ and field_kind =
     in an order different from other calls.
     This is only allowed when the real type is known.
 *)
-and commutable =
-    Cok
-  | Cunknown
-  | Clink of commutable ref
+and _ commutable_state =
+    Cok : 'a commutable_state
+  | Cunknown : [`var] commutable_state
+  | Cvar : [`var] commutable_state ref -> 'a commutable_state
+
+and commutable = unit commutable_state
 
 module Private_type_expr : sig
   val create : type_desc -> level: int -> scope: int -> id: int -> type_expr

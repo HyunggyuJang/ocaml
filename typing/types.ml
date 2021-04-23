@@ -67,10 +67,12 @@ and field_kind =
   | Fpresent
   | Fabsent
 
-and commutable =
-    Cok
-  | Cunknown
-  | Clink of commutable ref
+and _ commutable_state =
+    Cok : 'a commutable_state
+  | Cunknown : [`var] commutable_state
+  | Cvar : [`var] commutable_state ref -> 'a commutable_state
+
+and commutable = unit commutable_state
 
 module TypeOps = struct
   type t = type_expr
