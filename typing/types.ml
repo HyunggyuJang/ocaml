@@ -70,10 +70,10 @@ and field_kind =
 and _ commutable_state =
     Cok : [>`ok] commutable_state
   | Cunknown : [>`unknown] commutable_state
-  | Cvar : {mutable commu:[`ok | `unknown] commutable_state} ->
-      'a commutable_state
+  | Cvar : {mutable commu:[`ok|`unknown|`var] commutable_state} ->
+      [>`var] commutable_state
 
-and commutable = [`ok] commutable_state
+and commutable = [`ok|`var] commutable_state
 
 module TypeOps = struct
   type t = type_expr

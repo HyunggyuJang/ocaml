@@ -214,7 +214,7 @@ and field_kind =
 
     When typing an application, if the type of the functional is
     known, its type is instantiated with [Cok] arrows, otherwise as
-    [Clink (ref Cunknown)].
+    [Clink {commu = Cunknown}].
 
     When the type is not known, the application will be used to infer
     the actual type.  This is fragile in presence of labels where
@@ -234,10 +234,10 @@ and field_kind =
 and _ commutable_state =
     Cok : [>`ok] commutable_state
   | Cunknown : [>`unknown] commutable_state
-  | Cvar : {mutable commu:[`ok | `unknown] commutable_state} ->
-      'a commutable_state
+  | Cvar : {mutable commu:[`ok|`unknown|`var] commutable_state} ->
+      [>`var] commutable_state
 
-and commutable = [`ok] commutable_state
+and commutable = [`ok|`var] commutable_state
 
 module Private_type_expr : sig
   val create : type_desc -> level: int -> scope: int -> id: int -> type_expr

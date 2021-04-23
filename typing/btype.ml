@@ -76,7 +76,7 @@ type change =
       (Path.t * type_expr list) option ref * (Path.t * type_expr list) option
   | Crow of row_field option ref * row_field option
   | Ckind of field_kind option ref * field_kind option
-  | Ccommu of [`var] commutable_state * [`ok|`unknown] commutable_state
+  | Ccommu of [`var] commutable_state * [`ok|`unknown|`var] commutable_state
   | Cuniv of type_expr option ref * type_expr option
 
 type changes =
