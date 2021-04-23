@@ -475,9 +475,9 @@ let rec safe_commu_repr : type a. _ -> a commutable_state -> string =
   fun v -> function
       Cok -> "Cok"
     | Cunknown -> "Cunknown"
-    | Cvar r ->
+    | Cvar {commu} as r ->
         if List.memq r v then "Cvar loop" else
-        safe_commu_repr (r::v) !r
+        safe_commu_repr (r::v) commu
 
 let rec safe_repr v = function
     {desc = Tlink t} when not (List.memq t v) ->

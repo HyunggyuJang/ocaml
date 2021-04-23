@@ -76,7 +76,7 @@ type change =
       (Path.t * type_expr list) option ref * (Path.t * type_expr list) option
   | Crow of row_field option ref * row_field option
   | Ckind of field_kind option ref * field_kind option
-  | Ccommu of [`var] commutable_state ref * [`var] commutable_state
+  | Ccommu of [`var] commutable_state * [`nonvar of [`unknown]] commutable_state
   | Cuniv of type_expr option ref * type_expr option
 
 type changes =
@@ -119,7 +119,7 @@ let repr (t : type_expr) =
  | _ -> t
 
 let rec commu_repr = function
-    Cvar {contents=Cok | Cvar _ as x} -> commu_repr x
+    Cvar {commu=Cok | Cvar _ as x} -> commu_repr x
   | c -> c
 
 let rec row_field_repr_aux tl = function
@@ -483,7 +483,7 @@ let rec copy_kind = function
   | Fabsent  -> assert false
 
 let copy_commu c =
-  if commu_repr c = Cok then Cok else Cvar (ref Cunknown)
+  if commu_repr c = Cok then Cok else Cvar {commu=Cunknown}
 
 let rec copy_type_desc ?(keep_names=false) f = function
     Tvar _ as ty        -> if keep_names then ty else Tvar None
@@ -663,7 +663,7 @@ let undo_change = function
   | Cname  (r, v) -> r := v
   | Crow   (r, v) -> r := v
   | Ckind  (r, v) -> r := v
-  | Ccommu (r, v) -> r := v
+  | Ccommu (r, v) -> let Cvar r = r in r.commu <- v
   | Cuniv  (r, v) -> r := v
 
 type snapshot = changes ref * int
@@ -717,9 +717,10 @@ let set_row_field e v =
   log_change (Crow (e, !e)); e := Some v
 let set_kind rk k =
   log_change (Ckind (rk, !rk)); rk := Some k
-let set_commu rc (c : commutable) =
+let set_commu (rc : [`var] commutable_state) (c : commutable) =
   let Cok | Cvar _ as c = c in
-  log_change (Ccommu (rc, !rc)); rc := c
+  let Cvar r as rc = rc in
+  log_change (Ccommu (rc, r.commu)); r.commu <- c
 
 let snapshot () =
   let old = !last_snapshot in

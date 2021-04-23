@@ -232,11 +232,12 @@ and field_kind =
     This is only allowed when the real type is known.
 *)
 and _ commutable_state =
-    Cok : 'a commutable_state
-  | Cunknown : [`var] commutable_state
-  | Cvar : [`var] commutable_state ref -> 'a commutable_state
+    Cok : [`nonvar of 'a] commutable_state
+  | Cunknown : [`nonvar of [`unknown]] commutable_state
+  | Cvar : {mutable commu:[`nonvar of [`unknown]] commutable_state} ->
+      'a commutable_state
 
-and commutable = unit commutable_state
+and commutable = [`nonvar of [`any]] commutable_state
 
 module Private_type_expr : sig
   val create : type_desc -> level: int -> scope: int -> id: int -> type_expr

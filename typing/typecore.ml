@@ -4430,7 +4430,7 @@ and type_application env funct sargs =
           then
             Location.prerr_warning sarg.pexp_loc
               Warnings.Ignored_extra_argument;
-          unify env ty_fun (newty (Tarrow(lbl,t1,t2,Cvar(ref Cunknown))));
+          unify env ty_fun (newty (Tarrow(lbl,t1,t2,Cvar {commu=Cunknown})));
           (t1, t2)
       | Tarrow (l,t1,t2,_) when l = lbl
         || !Clflags.classic && lbl = Nolabel && not (is_optional l) ->
