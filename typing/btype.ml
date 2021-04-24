@@ -75,7 +75,8 @@ type change =
   | Cname of
       (Path.t * type_expr list) option ref * (Path.t * type_expr list) option
   | Crow of row_field option ref * row_field option
-  | Ckind of field_kind option ref * field_kind option
+  | Ckind of [`var] field_kind_state *
+             [`var|`present|`absent|`unknown] field_kind_state
   | Ccommu of [`var] commutable_state * [`ok|`unknown|`var] commutable_state
   | Cuniv of type_expr option ref * type_expr option
 
@@ -95,8 +96,9 @@ let log_change ch =
 
 let rec field_kind_repr =
   function
-    Fvar {contents = Some kind} -> field_kind_repr kind
-  | kind                        -> kind
+    Fvar {field_kind=Fpresent|Fabsent|Fvar _ as k} ->
+      field_kind_repr k
+  | kind -> kind
 
 let rec repr_link compress (t : type_expr) d : type_expr -> type_expr =
  function
@@ -476,9 +478,9 @@ let copy_row f fixed row keep more =
     row_bound = (); row_fixed;
     row_closed = row.row_closed; row_name = name; }
 
-let rec copy_kind = function
-    Fvar{contents = Some k} -> copy_kind k
-  | Fvar _   -> Fvar (ref None)
+let rec copy_kind : field_kind -> field_kind = function
+    Fvar {field_kind=Fvar _ | Fpresent | Fabsent as k} -> copy_kind k
+  | Fvar {field_kind=Funknown} -> Fvar {field_kind=Funknown}
   | Fpresent -> Fpresent
   | Fabsent  -> assert false
 
@@ -512,7 +514,7 @@ module For_copy : sig
 
   val save_desc: copy_scope -> type_expr -> type_desc -> unit
 
-  val dup_kind: copy_scope -> field_kind option ref -> unit
+  val dup_kind: copy_scope -> [`var] field_kind_state -> unit
 
   val with_scope: (copy_scope -> 'a) -> 'a
 end = struct
@@ -520,29 +522,32 @@ end = struct
     mutable saved_desc : (type_expr * type_desc) list;
     (* Save association of generic nodes with their description. *)
 
-    mutable saved_kinds: field_kind option ref list;
+    mutable saved_kinds: [`var] field_kind_state list;
     (* duplicated kind variables *)
 
-    mutable new_kinds  : field_kind option ref list;
+    mutable new_kinds  : [`var] field_kind_state list;
     (* new kind variables *)
   }
 
   let save_desc copy_scope ty desc =
     copy_scope.saved_desc <- (ty, desc) :: copy_scope.saved_desc
 
-  let dup_kind copy_scope r =
-    assert (Option.is_none !r);
-    if not (List.memq r copy_scope.new_kinds) then begin
-      copy_scope.saved_kinds <- r :: copy_scope.saved_kinds;
-      let r' = ref None in
-      copy_scope.new_kinds <- r' :: copy_scope.new_kinds;
-      r := Some (Fvar r')
+  let dup_kind copy_scope (Fvar r as f : [`var] field_kind_state) =
+    assert (r.field_kind = Funknown);
+    if not (List.memq f copy_scope.new_kinds) then begin
+      copy_scope.saved_kinds <- f :: copy_scope.saved_kinds;
+      let f' = Fvar {field_kind = Funknown} in
+      copy_scope.new_kinds <- f' :: copy_scope.new_kinds;
+      let (Fvar _ as f') = f' in
+      r.field_kind <- f'
     end
 
   (* Restore type descriptions. *)
   let cleanup { saved_desc; saved_kinds; _ } =
     List.iter (fun (ty, desc) -> Private_type_expr.set_desc ty desc) saved_desc;
-    List.iter (fun r -> r := None) saved_kinds
+    List.iter
+      (fun (Fvar r : [`var] field_kind_state) -> r.field_kind <- Funknown)
+      saved_kinds
 
   let with_scope f =
     let scope = { saved_desc = []; saved_kinds = []; new_kinds = [] } in
@@ -662,8 +667,8 @@ let undo_change = function
   | Cscope (ty, scope) -> Private_type_expr.set_scope ty scope
   | Cname  (r, v) -> r := v
   | Crow   (r, v) -> r := v
-  | Ckind  (r, v) -> r := v
-  | Ccommu (r, v) -> let Cvar r = r in r.commu <- v
+  | Ckind  (Fvar r, v) -> r.field_kind <- v
+  | Ccommu (Cvar r, v) -> r.commu <- v
   | Cuniv  (r, v) -> r := v
 
 type snapshot = changes ref * int
@@ -715,8 +720,10 @@ let set_name nm v =
   log_change (Cname (nm, !nm)); nm := v
 let set_row_field e v =
   log_change (Crow (e, !e)); e := Some v
-let set_kind rk k =
-  log_change (Ckind (rk, !rk)); rk := Some k
+let set_kind (rk : [`var] field_kind_state) (k : field_kind) =
+  let Fvar r as rk = rk in
+  let Fvar _ | Fpresent | Fabsent as k = k in
+  log_change (Ckind (rk, r.field_kind)); r.field_kind <- k
 let set_commu (rc : [`var] commutable_state) (c : commutable) =
   let Cok | Cvar _ as c = c in
   let Cvar r as rc = rc in

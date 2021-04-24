@@ -478,7 +478,7 @@ let hide_private_methods ty =
       List.iter
         (function (_, k, _) ->
           match field_kind_repr k with
-            Fvar r -> set_kind r Fabsent
+            Fvar _ as r -> set_kind r Fabsent
           | _      -> ())
         fl
   | _ ->
@@ -1233,7 +1233,7 @@ let rec copy ?partial ?keep_names scope ty =
           begin match field_kind_repr k with
             Fabsent  -> Tlink (copy ty2)
           | Fpresent -> copy_type_desc copy desc
-          | Fvar r ->
+          | Fvar _ as r ->
               For_copy.dup_kind scope r;
               copy_type_desc copy desc
           end
@@ -2826,7 +2826,7 @@ and unify3 env t1 t1' t2 t2' =
           end
       | (Tfield(f,kind,_,rem), Tnil) | (Tnil, Tfield(f,kind,_,rem)) ->
           begin match field_kind_repr kind with
-            Fvar r when f <> dummy_method ->
+            Fvar _ as r when f <> dummy_method ->
               set_kind r Fabsent;
               if d2 = Tnil then unify env rem t2'
               else unify env (newty2 rem.level Tnil) rem
@@ -2931,8 +2931,8 @@ and unify_kind k1 k2 =
   let k2 = field_kind_repr k2 in
   if k1 == k2 then () else
   match k1, k2 with
-    (Fvar r, (Fvar _ | Fpresent)) -> set_kind r k2
-  | (Fpresent, Fvar r)            -> set_kind r k1
+    (Fvar _ as r, (Fvar _ | Fpresent)) -> set_kind r k2
+  | (Fpresent, (Fvar _ as r))          -> set_kind r k1
   | (Fpresent, Fpresent)          -> ()
   | _                             -> assert false
 
@@ -3231,7 +3231,7 @@ let rec filter_method_field env name priv ty =
       let ty1 = newvar2 level and ty2 = newvar2 level in
       let ty' = newty2 level (Tfield (name,
                                       begin match priv with
-                                        Private -> Fvar (ref None)
+                                        Private -> Fvar {field_kind = Funknown}
                                       | Public  -> Fpresent
                                       end,
                                       ty1, ty2))
@@ -3399,7 +3399,7 @@ and moregen_kind k1 k2 =
   let k2 = field_kind_repr k2 in
   if k1 == k2 then () else
   match k1, k2 with
-    (Fvar r, (Fvar _ | Fpresent))  -> set_kind r k2
+    (Fvar _ as r, (Fvar _ | Fpresent)) -> set_kind r k2
   | (Fpresent, Fpresent)           -> ()
   | _                              -> raise (Unify [])
 
@@ -3829,8 +3829,8 @@ let match_class_types ?(trace=true) env pat_sch subj_sch =
            let err =
              let k = field_kind_repr k in
              begin match k with
-               Fvar r -> set_kind r Fabsent; err
-             | _      -> CM_Hide_public lab::err
+               Fvar _ as r -> set_kind r Fabsent; err
+             | _           -> CM_Hide_public lab::err
              end
            in
            if lab = dummy_method || Concr.mem lab sign1.csig_concr then err

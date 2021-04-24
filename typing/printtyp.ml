@@ -455,11 +455,12 @@ let raw_list pr ppf = function
 let kind_vars = ref []
 let kind_count = ref 0
 
-let rec safe_kind_repr v = function
-    Fvar {contents=Some k}  ->
-      if List.memq k v then "Fvar loop" else
-      safe_kind_repr (k::v) k
-  | Fvar r ->
+let rec safe_kind_repr : type a. _ -> a field_kind_state -> string =
+  fun v -> function
+    Fvar {field_kind=Fpresent|Fabsent|Fvar _ as k} as r ->
+      if List.memq r v then "Fvar loop" else
+      safe_kind_repr (r::v) k
+  | Fvar {field_kind=Funknown} as r ->
       let vid =
         try List.assq r !kind_vars
         with Not_found ->
@@ -467,9 +468,10 @@ let rec safe_kind_repr v = function
           kind_vars := (r,c) :: !kind_vars;
           c
       in
-      Printf.sprintf "Fvar {None}@%d" vid
+      Printf.sprintf "Fvar {field_kind=Funknown}@%d" vid
   | Fpresent -> "Fpresent"
   | Fabsent -> "Fabsent"
+  | Funknown -> "Funknown"
 
 let rec safe_commu_repr : type a. _ -> a commutable_state -> string =
   fun v -> function

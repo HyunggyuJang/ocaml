@@ -157,7 +157,7 @@ module For_copy : sig
   val save_desc: copy_scope -> type_expr -> type_desc -> unit
         (* Save a type description *)
 
-  val dup_kind: copy_scope -> field_kind option ref -> unit
+  val dup_kind: copy_scope -> [`var] field_kind_state -> unit
         (* Save a None field_kind, and make it point to a fresh Fvar *)
 
   val with_scope: (copy_scope -> 'a) -> 'a
@@ -261,7 +261,7 @@ val set_name:
     (Path.t * type_expr list) option -> unit
 val set_row_field: row_field option ref -> row_field -> unit
 val set_univar: type_expr option ref -> type_expr -> unit
-val set_kind: field_kind option ref -> field_kind -> unit
+val set_kind: [`var] field_kind_state -> field_kind -> unit
 val set_commu: [`var] commutable_state -> commutable -> unit
         (* Set references, logging the old value *)
 

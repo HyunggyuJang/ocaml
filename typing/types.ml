@@ -62,10 +62,15 @@ and abbrev_memo =
   | Mcons of private_flag * Path.t * type_expr * type_expr * abbrev_memo
   | Mlink of abbrev_memo ref
 
-and field_kind =
-    Fvar of field_kind option ref
-  | Fpresent
-  | Fabsent
+and _ field_kind_state =
+    Fvar : {mutable field_kind:
+              [`var|`present|`absent|`unknown] field_kind_state} ->
+           [>`var] field_kind_state
+  | Fpresent : [>`present] field_kind_state
+  | Fabsent : [>`absent] field_kind_state
+  | Funknown : [>`unknown] field_kind_state
+
+and field_kind = [`var|`present|`absent] field_kind_state
 
 and _ commutable_state =
     Cok : [>`ok] commutable_state

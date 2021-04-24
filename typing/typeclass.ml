@@ -1629,7 +1629,7 @@ let final_decl env define_class
     List.iter (fun (lab,kind,_) ->
       if lab = dummy_method then
         match Btype.field_kind_repr kind with
-          Fvar r -> Btype.set_kind r Fabsent
+          Fvar _ as r -> Btype.set_kind r Fabsent
         | _ -> ()
     ) methods
   end;

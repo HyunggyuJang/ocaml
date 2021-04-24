@@ -205,10 +205,15 @@ and abbrev_memo =
   | Mlink of abbrev_memo ref
   (** Abbreviations can be found after this indirection *)
 
-and field_kind =
-    Fvar of field_kind option ref
-  | Fpresent
-  | Fabsent
+and _ field_kind_state =
+    Fvar : {mutable field_kind:
+              [`var|`present|`absent|`unknown] field_kind_state} ->
+           [>`var] field_kind_state
+  | Fpresent : [>`present] field_kind_state
+  | Fabsent : [>`absent] field_kind_state
+  | Funknown : [>`unknown] field_kind_state
+
+and field_kind = [`var|`present|`absent] field_kind_state
 
 (** [commutable] is a flag appended to every arrow type.
 
