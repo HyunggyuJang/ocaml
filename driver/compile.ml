@@ -55,13 +55,25 @@ let emit_bytecode i (bytecode, required_globals) =
     )
 
 let to_gallina i Typedtree.{structure; _} =
-    Coqcore.transl_implementation i.module_name structure
+  Coqcore.transl_implementation i.module_name structure
+
+let emit_gallina i ct =
+  let v_name = i.output_prefix ^ ".v" in
+  let vfile = open_out v_name in
+  let defs =
+    match !Clflags.for_package with None -> "COCTI_types" | Some d -> d in
+  let open Format in
+  let ppf = formatter_of_out_channel vfile in
+  fprintf ppf "@[<v>open %s" defs;
+  Coqcore.emit_gallina i.module_name ppf ct;
+  fprintf ppf "@]@.";
+  close_out vfile
 
 let implementation ~start_from ~source_file ~output_prefix =
   let backend info typed =
     if !Clflags.compile_to_coq then 
       let gallina = to_gallina info typed in
-      ignore gallina
+      emit_gallina info gallina
     else
       let bytecode = to_bytecode info typed in
       emit_bytecode info bytecode
