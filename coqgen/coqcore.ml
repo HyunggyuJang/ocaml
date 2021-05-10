@@ -30,6 +30,7 @@ type coq_term =
 type coq_def_kind =
   | CT_def of coq_term
   | CT_ind of (string * coq_term) list
+  | CT_abs
 
 type coq_type_desc =
     { ct_name: string;
@@ -48,6 +49,25 @@ let stdlib = Path.Pident (Ident.create_persistent "Stdlib!")
 let stdlib_ref = Path.Pdot (stdlib, "ref")
 let newgenconstr p tl = newgenty (Tconstr (p, tl, ref Mnil))
 let newgenarrow t1 t2 = newgenty (Tarrow (Nolabel, t1, t2, Cok))
+
+let init_type_map =
+  List.fold_left
+    (fun map (rt, lid, desc) ->
+      let path = List.fold_left (fun m s -> Path.Pdot (m, s)) rt lid in
+      Path.Map.add path desc map)
+    Path.Map.empty
+    [
+     (stdlib, ["ref"],
+      {ct_name = "ml_ref"; ct_args = ["a"];
+       ct_def = CT_def (CTapp (CTid "loc", [CTid "a"]))});
+     (Predef.path_int, [],
+      {ct_name = "ml_int"; ct_args = []; ct_def = CT_def(CTid "Int63.int63")});
+     (Predef.path_unit, [],
+      {ct_name = "ml_unit"; ct_args = []; ct_def = CT_def(CTid "unit")});
+     (Predef.path_list, [],
+      {ct_name = "ml_list"; ct_args = ["a"];
+       ct_def = CT_def (CTapp (CTid "list", [CTid "a"]))});
+    ]
 
 let init_term_map =
   let int_to_int = newgenarrow Predef.type_int Predef.type_int in
@@ -109,8 +129,8 @@ let init_term_map =
        ce_def = None});
    ]
 
-let type_map = ref (Path.Map.empty : coq_type_desc Path.Map.t)
-let term_map = ref (Path.Map.empty : coq_term_desc Path.Map.t)
+let type_map = ref (init_type_map : coq_type_desc Path.Map.t)
+let term_map = ref (init_term_map : coq_term_desc Path.Map.t)
 
 let get_used_top_names =
   let used_top_names = ref Names.empty in
@@ -152,8 +172,7 @@ let rec transl_type ~loc (vars : string TypeMap.t) visited ty =
   | Tvar _ | Tunivar _ ->
       CTid (TypeMap.find ty vars)
   | Tarrow (Nolabel, t1, t2, _) ->
-      CTapp (CTid "->", [transl_rec t1;
-                         CTapp (CTid "M", [transl_rec t2])])
+      CTapp (CTid "ml_arrow", [transl_rec t1; transl_rec t2])
   | Tarrow _ ->
       not_allowed ~loc "labels"
   | Ttuple tl ->
