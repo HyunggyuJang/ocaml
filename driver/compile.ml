@@ -64,7 +64,7 @@ let emit_gallina i ct =
     match !Clflags.for_package with None -> "COCTI_types" | Some d -> d in
   let open Format in
   let ppf = formatter_of_out_channel vfile in
-  fprintf ppf "@[<v>open %s" defs;
+  fprintf ppf "@[<v>Require Import %s" defs;
   Coqcore.emit_gallina i.module_name ppf ct;
   fprintf ppf "@]@.";
   close_out vfile
