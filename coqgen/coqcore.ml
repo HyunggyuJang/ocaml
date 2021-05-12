@@ -267,6 +267,19 @@ let fresh_term_name ?name vars =
 
 open Typedtree
   
+let vars_names tbl =
+  Ident.fold_name (fun _ {ce_name} l -> ce_name :: l) tbl []
+
+let make_tuple ctl =
+  List.fold_left
+    (fun ct ct' ->
+      if ct = CTid "tt" then ct' else CTapp (CTid"pair", [ct; ct']))
+    (CTid "tt") ctl
+
+let name_tuple names =
+  let ctl = List.map (fun name -> CTid name) names in
+  make_tuple ctl
+
 let rec transl_exp ~(tvars : string TypeMap.t) ~(vars : coq_term_desc Ident.tbl)
     e =
   let loc = e.exp_loc in
@@ -288,11 +301,38 @@ let rec transl_exp ~(tvars : string TypeMap.t) ~(vars : coq_term_desc Ident.tbl)
         if ivars = [] then f else
         CTapp (f, List.map (transl_type ~loc tvars TypeSet.empty) ivars) in
       ctRet f
+  | Texp_let (Nonrecursive, vbl, body) ->
+      let ctl = List.map (transl_binding ~tvars ~vars) vbl in
+      let (id_descs, ctl) = List.split ctl in
+      let names = List.map (fun (_,desc) -> desc.ce_name) id_descs in
+      let vars =
+        List.fold_right
+          (fun (id, desc) vars ->
+            match id with
+            | Some id -> Ident.add id desc vars
+            | None -> vars)
+          id_descs
+          vars
+      in
+      let ctbody = transl_exp ~tvars ~vars body in      
+      let pat = name_tuple names in
+      let ct = make_tuple ctl in
+      begin match pat with
+      | CTid v -> ctBind ct (CTabs (v, None, ctbody))
+      | _ ->
+          let v = fresh_term_name vars in
+          ctBind ct (CTabs (v, None, CTmatch (CTid v, [pat, ctbody])))
+      end
+  | Texp_sequence (e1, e2) ->
+      let ct1 = transl_exp ~tvars ~vars e1 in
+      let ct2 = transl_exp ~tvars ~vars e2 in
+      ctBind ct1 (CTabs ("_", None, ct2))
   | _ ->
       ignore transl_exp;
       not_allowed ~loc "This kind of term"
 
-let transl_binding ~(vars : coq_term_desc Ident.tbl) vb =
+and transl_binding ~(tvars : string TypeMap.t) ~(vars : coq_term_desc Ident.tbl)
+    vb =
   let name, id =
     match vb.vb_pat.pat_desc with
       Tpat_any -> "_", None
@@ -300,26 +340,14 @@ let transl_binding ~(vars : coq_term_desc Ident.tbl) vb =
     | Tpat_construct (_, {cstr_name="()"}, [], _) -> "_", None
     | _ -> not_allowed ~loc:vb.vb_pat.pat_loc "This pattern"
   in
-  let ct = transl_exp ~tvars:TypeMap.empty ~vars vb.vb_expr in
+  let ct = transl_exp ~tvars ~vars vb.vb_expr in
   let vars = Ctype.free_variables vb.vb_expr.exp_type in
+  let vars = List.filter (fun ty -> TypeMap.mem ty tvars) vars in
   let desc =
     {ce_name = name; ce_type = vb.vb_expr.exp_type; ce_vars = vars;
      ce_def = None}
   in
   ((id, desc), ct)
-
-let vars_names tbl =
-  Ident.fold_name (fun _ {ce_name} l -> ce_name :: l) tbl []
-
-let make_tuple ctl =
-  List.fold_left
-    (fun ct ct' ->
-      if ct = CTid "tt" then ct' else CTapp (CTid"pair", [ct; ct']))
-    (CTid "tt") ctl
-
-let name_tuple names =
-  let ctl = List.map (fun name -> CTid name) names in
-  make_tuple ctl
 
 let rec transl_structure ~(vars : coq_term_desc Ident.tbl) = function
   | [] ->
@@ -331,7 +359,7 @@ let rec transl_structure ~(vars : coq_term_desc Ident.tbl) = function
       let (vars, ctrem) = transl_structure ~vars rem in
       (vars, ctBind ct (CTabs ("_", None, ctrem)))
   | {str_desc = Tstr_value (Nonrecursive, vbl)} :: rem ->
-      let ctl = List.map (transl_binding ~vars) vbl in
+      let ctl = List.map (transl_binding ~tvars:TypeMap.empty ~vars) vbl in
       let (id_descs, ctl) = List.split ctl in
       let names = List.map (fun (_,desc) -> desc.ce_name) id_descs in
       let vars =
@@ -368,7 +396,7 @@ let priority_level = function
   | CTapp _ -> 4
   | CTabs _ -> 0
   | CTsort _ -> 10
-  | CTprod _ -> 10
+  | CTprod _ -> 0
   | CTmatch _ -> 10
 
 let string_of_sort = function
