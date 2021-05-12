@@ -24,8 +24,8 @@ type coq_term =
   | CTapp of coq_term * coq_term list
   | CTabs of string * coq_term option * coq_term
   | CTsort of coq_sort
-  | CTtuple of coq_term list
   | CTprod of string * coq_term option * coq_term
+  | CTmatch of coq_term * (coq_term * coq_term) list
 
 type coq_def_kind =
   | CT_def of coq_term
@@ -58,8 +58,7 @@ let init_type_map =
     Path.Map.empty
     [
      (stdlib, ["ref"],
-      {ct_name = "ml_ref"; ct_args = ["a"];
-       ct_def = CT_def (CTapp (CTid "loc", [CTid "a"]))});
+      {ct_name = "ml_ref"; ct_args = ["a"]; ct_def = CT_abs});
      (Predef.path_int, [],
       {ct_name = "ml_int"; ct_args = []; ct_def = CT_def(CTid "Int63.int63")});
      (Predef.path_unit, [],
@@ -163,6 +162,12 @@ let used_var_name vars s =
 let fresh_var_name vars name =
   fresh_name ?name (used_var_name vars)
 
+let make_tuple_type ctl =
+  List.fold_left
+    (fun ct ct' ->
+      if ct = CTid "unit" then ct' else CTapp (CTid "ml_pair", [ct; ct']))
+    (CTid "unit") ctl
+
 let rec transl_type ~loc (vars : string TypeMap.t) visited ty =
   let ty = repr ty in
   if TypeSet.mem ty visited then not_allowed ~loc "recursive types" else
@@ -176,11 +181,16 @@ let rec transl_type ~loc (vars : string TypeMap.t) visited ty =
   | Tarrow _ ->
       not_allowed ~loc "labels"
   | Ttuple tl ->
-      CTtuple (List.map transl_rec tl)
+      make_tuple_type (List.map transl_rec tl)
+  | Tconstr (p, [], _) ->
+      let desc = Path.Map.find p !type_map in
+      CTid desc.ct_name
   | Tconstr (p, tl, _) ->
       let desc = Path.Map.find p !type_map in
       CTapp (CTid desc.ct_name, List.map transl_rec tl)
-  | Tobject _ | Tfield _ | Tnil ->
+  | Tnil ->
+      CTid "ml_unit"
+  | Tobject _ | Tfield _ ->
       not_allowed ~loc "object types"
   | Tvariant _ ->
       not_allowed ~loc "polymorphic variants"
@@ -236,11 +246,31 @@ let find_instantiation ~loc env edesc ty =
   (try unify env ty ty0
    with Unify _ -> not_allowed ~loc ("Type for " ^ edesc.ce_name));
   vars
+
+let ctRet ct = CTapp (CTid "Ret", [ct])
+let ctBind m f = CTapp (CTid "Bind", [m; f])
+
+let close_type ty =
+  let vars = Ctype.free_variables ty in
+  List.iter
+    (fun ty ->
+      if ty.level <> Btype.generic_level then
+        Btype.link_type ty (Btype.newty2 ty.level Tnil))
+    vars
+
+let used_term_name vars s =
+  Names.mem s (get_used_top_names ()) ||
+  Ident.fold_name (fun _ desc b -> b || desc.ce_name = s) vars false
+
+let fresh_term_name ?name vars =
+  fresh_name ?name (used_term_name vars)
+
+open Typedtree
   
 let rec transl_exp ~(tvars : string TypeMap.t) ~(vars : coq_term_desc Ident.tbl)
     e =
-  let open Typedtree in
   let loc = e.exp_loc in
+  close_type e.exp_type;
   match e.exp_desc with
   | Texp_ident (path, _, _) ->
       let desc =
@@ -254,14 +284,80 @@ let rec transl_exp ~(tvars : string TypeMap.t) ~(vars : coq_term_desc Ident.tbl)
       in
       let ivars = find_instantiation ~loc e.exp_env desc e.exp_type in
       let f = CTid desc.ce_name in
-      if ivars = [] then f else
-      CTapp (f, List.map (transl_type ~loc tvars TypeSet.empty) ivars)
+      let f =
+        if ivars = [] then f else
+        CTapp (f, List.map (transl_type ~loc tvars TypeSet.empty) ivars) in
+      ctRet f
   | _ ->
       ignore transl_exp;
       not_allowed ~loc "This kind of term"
-          
+
+let transl_binding ~(vars : coq_term_desc Ident.tbl) vb =
+  let name, id =
+    match vb.vb_pat.pat_desc with
+      Tpat_any -> "_", None
+    | Tpat_var (id, _) -> Ident.name id, Some id
+    | Tpat_construct (_, {cstr_name="()"}, [], _) -> "_", None
+    | _ -> not_allowed ~loc:vb.vb_pat.pat_loc "This pattern"
+  in
+  let ct = transl_exp ~tvars:TypeMap.empty ~vars vb.vb_expr in
+  let vars = Ctype.free_variables vb.vb_expr.exp_type in
+  let desc =
+    {ce_name = name; ce_type = vb.vb_expr.exp_type; ce_vars = vars;
+     ce_def = None}
+  in
+  ((id, desc), ct)
+
+let vars_names tbl =
+  Ident.fold_name (fun _ {ce_name} l -> ce_name :: l) tbl []
+
+let make_tuple ctl =
+  List.fold_left
+    (fun ct ct' ->
+      if ct = CTid "tt" then ct' else CTapp (CTid"pair", [ct; ct']))
+    (CTid "tt") ctl
+
+let name_tuple names =
+  let ctl = List.map (fun name -> CTid name) names in
+  make_tuple ctl
+
+let rec transl_structure ~(vars : coq_term_desc Ident.tbl) = function
+  | [] ->
+      let names = vars_names vars in
+      let values = name_tuple names in
+      (vars, ctRet values)
+  | {str_desc = Tstr_eval (e, _)} :: rem ->
+      let ct = transl_exp ~tvars:TypeMap.empty ~vars e in
+      let (vars, ctrem) = transl_structure ~vars rem in
+      (vars, ctBind ct (CTabs ("_", None, ctrem)))
+  | {str_desc = Tstr_value (Nonrecursive, vbl)} :: rem ->
+      let ctl = List.map (transl_binding ~vars) vbl in
+      let (id_descs, ctl) = List.split ctl in
+      let names = List.map (fun (_,desc) -> desc.ce_name) id_descs in
+      let vars =
+        List.fold_right
+          (fun (id, desc) vars ->
+            match id with
+            | Some id -> Ident.add id desc vars
+            | None -> vars)
+          id_descs
+          vars
+      in
+      let vars', ctrem = transl_structure ~vars rem in      
+      let pat = name_tuple names in
+      let ct = make_tuple ctl in
+      begin vars', match pat with
+      | CTid v -> ctBind ct (CTabs (v, None, ctrem))
+      | _ ->
+          let v = fresh_term_name vars in
+          ctBind ct (CTabs (v, None, CTmatch (CTid v, [pat, ctrem])))
+      end
+  | {str_loc = loc} :: _ ->
+      not_allowed ~loc "This structure item"
+
 let transl_implementation modname st =
-  ignore (modname, st)
+  ignore modname;
+  transl_structure st.str_items
 
 open Format
 
@@ -272,41 +368,51 @@ let priority_level = function
   | CTapp _ -> 4
   | CTabs _ -> 0
   | CTsort _ -> 10
-  | CTtuple _ -> 10
   | CTprod _ -> 10
+  | CTmatch _ -> 10
 
 let string_of_sort = function
   | Type -> "Type"
   | Set -> "Set"
   | Prop -> "Prop"
 
-let rec print_type_rec lv ppf ty =
-  if lv > priority_level ty then fprintf ppf "(%a)" (print_type_rec 0) ty else
+let rec print_term_rec lv ppf ty =
+  if lv > priority_level ty then fprintf ppf "(%a)" (print_term_rec 0) ty else
   match ty with
   | CTid s -> pp_print_string ppf s
   | CTapp (CTid "->", [t1; t2]) ->
-      fprintf ppf "@[%a ->@ %a@]" (print_type_rec 3) t1 (print_type_rec 2) t2
+      fprintf ppf "@[%a ->@ %a@]" (print_term_rec 3) t1 (print_term_rec 2) t2
   | CTapp (CTid "*", [t1; t2]) ->
-      fprintf ppf "@[%a ->@ %a@]" (print_type_rec 3) t1 (print_type_rec 4) t2
+      fprintf ppf "@[%a ->@ %a@]" (print_term_rec 3) t1 (print_term_rec 4) t2
   | CTapp (f, args) ->
-      fprintf ppf "@[<2>%a@ %a]" (print_type_rec 4) f
-        (pp_print_list ~pp_sep:pp_print_space (print_type_rec 5)) args
+      fprintf ppf "@[<2>%a@ %a]" (print_term_rec 4) f
+        (pp_print_list ~pp_sep:pp_print_space (print_term_rec 5)) args
   | CTabs (x, ot, t1) ->
       fprintf ppf "@[<hov2>@[<hov2}fun@ %s%a@ =>@]@ %a@]"
-        x print_type_ann ot (print_type_rec 0) t1
+        x print_type_ann ot (print_term_rec 0) t1
   | CTsort k -> pp_print_string ppf (string_of_sort k)
-  | CTtuple tl ->
+(*  | CTtuple tl ->
       fprintf ppf "(@[%a)@]"
-        (pp_print_list (print_type_rec 1)
+        (pp_print_list (print_term_rec 1)
            ~pp_sep:(fun ppf () -> fprintf ppf ",@ "))
-        tl
+        tl *)
   | CTprod (x, ot, t1) ->
       fprintf ppf "@[<hov2>@[<hov2>forall@ %s%a,]@ %a@]"
-        x print_type_ann ot (print_type_rec 0) t1
+        x print_type_ann ot (print_term_rec 0) t1
+  | CTmatch (ct, cases) ->
+      fprintf ppf "@[<hov>@[<2>match@ %a@ with@]"
+        (print_term_rec 0) ct;
+      List.iter
+        (fun (pat, ct) ->
+          fprintf ppf "@ @[@[%a =>]@ @[%a@]@]"
+            (print_term_rec 0) pat
+            (print_term_rec 0) ct)
+        cases;
+      fprintf ppf "@ end@]"
 
 and print_type_ann ppf = function
   | None -> ()
-  | Some t -> fprintf ppf "@ : %a" (print_type_rec 0) t
+  | Some t -> fprintf ppf "@ : %a" (print_term_rec 0) t
 
 let emit_gallina modname ppf ct = ignore (modname, ppf, ct)
 
