@@ -37,6 +37,7 @@ Notation "'do' x : T <- m ; e" := (Bind m (fun x : T => e))
 Notation "m >> f" := (Bind m (fun _ => f)).
 Notation "'Delay' f" := (Ret tt >> f) (at level 200).
 
+Definition App {A B} (f : M (A -> M B)) (x : M A) := do x <- x; do f <- f; f x.
 Definition AppM {A B} (f : M (A -> M B)) (x : A) := do f <- f; f x.
 Definition AppM2 {A B C} (f : M (A -> M (B -> M C))) (x : A) (y : B) :=
   do f <- f; do f <- f x; f y.
@@ -90,7 +91,7 @@ Fixpoint lookup key env :=
     else lookup key rest
   end.
 
-Definition getref {T} (l : loc T) : M (coq_type T) := fun env =>
+Definition getref T (l : loc T) : M (coq_type T) := fun env =>
   let: mkloc key := l in
   let: mkEnv _ refs := env in
   match lookup key refs with
@@ -111,7 +112,7 @@ Fixpoint update b (env : seq binding) :=
       Option.map (cons (mkbind k v)) (update b rest)
   end.
 
-Definition setref {T} (l : loc T) (val : coq_type T) : M unit := fun env =>
+Definition setref T (l : loc T) (val : coq_type T) : M unit := fun env =>
   let: mkEnv c refs := env in
   let b :=
       match l in loc T return coq_type T -> binding with
