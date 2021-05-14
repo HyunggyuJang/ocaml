@@ -9,6 +9,8 @@ let incr r =
 
 let r = ref 1 in incr r;;
 
+let rec loop x = loop x;;
+
 let omega n =
   let r = ref (fun x -> x) in
   let delta i = !r i in

@@ -311,16 +311,17 @@ let enter_free_variables tvars ty =
   (*close_type ty;*)
   let fvars = Ctype.free_variables ty in
   let fvars = List.filter (fun ty -> not (TypeMap.mem ty tvars)) fvars in
-  let fvar_names =
-    List.map
-      (fun tv -> match tv.desc with
-      | Tvar name -> fresh_var_name tvars name
+  let (fvar_names, tvars) =
+    List.fold_left
+      (fun (names, tvars) tv -> match tv.desc with
+      | Tvar name ->
+          let v = fresh_var_name tvars name in
+          v :: names, TypeMap.add tv v tvars
       | _ -> assert false)
-      fvars
+      ([],tvars) fvars
   in
   (*List.iter (Format.eprintf "fvar=%a@." Printtyp.raw_type_expr) fvars;*)
-  let tvars = List.fold_right2 TypeMap.add fvars fvar_names tvars in
-  fvars, fvar_names, tvars
+  fvars, List.rev fvar_names, tvars
 
 let refresh_tvars tvars =
   TypeMap.fold (fun ty -> TypeMap.add (repr ty)) tvars TypeMap.empty
@@ -494,20 +495,29 @@ and transl_binding ~(tvars : string TypeMap.t) ~(vars : coq_term_desc Ident.tbl)
   let fvars, fvar_names, tvars = enter_free_variables tvars ty in
   let desc =
     {ce_name = name; ce_type = ty; ce_vars = fvars;
-     ce_rec = rec_flag; ce_purary = fun_arity vb.vb_expr}
+     ce_rec = rec_flag; ce_purary = 1}
   in
   let vars =
     match rec_flag, id with
-    | Recursive, Some id -> Ident.add id desc vars
+    | Recursive, Some id -> Ident.add id {desc with ce_vars = []} vars
     | _ -> vars
   in
   let ct, purary = transl_exp ~tvars ~vars vb.vb_expr in
   let ct, desc =
     match rec_flag with
     | Recursive ->
-        if purary = desc.ce_purary then ct, desc else
-        let names = Names.of_list (vars_names vars) in
-        shrink_purary ~names purary desc.ce_purary ct, desc
+        let ct =
+          if purary = desc.ce_purary then ct else
+          let names = Names.of_list (vars_names vars) in
+          shrink_purary ~names purary 1 ct
+        in
+        let pat = vb.vb_pat in
+        let cty =
+          transl_type ~loc:pat.pat_loc tvars TypeSet.empty pat.pat_type in
+        let cty = CTapp (CTid "coq_type", [cty]) in
+        CTapp (CTid "Fix",
+               [CTid"_"; CTid"_";
+                CTabs (desc.ce_name, Some cty, ctRet ct)]), desc
     | Nonrecursive ->
         ct, {desc with ce_purary = purary}
   in
@@ -677,7 +687,14 @@ Module REFmonadML := REFmonad (MLtypes).\n\
 Export REFmonadML.\n\
 \n\
 Definition coq_type := MLtypes.coq_type M.\n\
-Definition empty_env := mkEnv 0%int63 nil."
+Definition empty_env := mkEnv 0%int63 nil.\n\
+\n\
+Definition Fix T1 T2\
+\n  (F : coq_type (ml_arrow (ml_arrow T1 T2) (ml_arrow T1 T2)))\
+\n  : M (coq_type (ml_arrow T1 T2)) :=\
+\n  do r <- newref (ml_arrow T1 T2) (fun x => Fail);\
+\n  let f x :=  do f <- getref _ r; f x in\
+\n  do _ <- setref _ r f; Ret f.\n"
   :: cmds
 
 open Format
