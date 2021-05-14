@@ -148,21 +148,22 @@ let ctype_apply_env_empty = ref (fun _ -> assert false)
 
 (* Similar to [Ctype.nondep_type_rec]. *)
 let rec typexp copy_scope s ty =
-  let desc = get_desc ty in
+  let tty = Transient_expr.repr ty in
+  let desc = tty.desc in
   match desc with
     Tvar _ | Tunivar _ ->
-      if s.for_saving || get_id ty < 0 then
+      if s.for_saving || tty.id < 0 then
         let ty' =
           if s.for_saving then newpersty (norm desc)
-          else newty2 ~level:(get_level ty) desc
+          else newty2 ~level:tty.level desc
         in
-        For_copy.redirect_desc copy_scope ty (Tsubst (ty', None));
+        For_copy.redirect_transient copy_scope tty (Tsubst (ty', None));
         ty'
       else ty
   | Tsubst (ty, _) ->
       ty
   | Tfield (m, k, _t1, _t2) when not s.for_saving && m = dummy_method
-      && field_kind_repr k <> Fabsent && get_level ty < generic_level ->
+      && field_kind_repr k <> Fabsent && tty.level < generic_level ->
       (* do not copy the type of self when it is not generalized *)
       ty
 (* cannot do it, since it would omit substitution
@@ -172,13 +173,15 @@ let rec typexp copy_scope s ty =
   | _ ->
     let tm = row_of_type ty in
     let has_fixed_row =
-      not (is_Tconstr ty) && is_constr_row ~allow_ident:false tm in
+      match desc with
+        Tconstr _ -> false
+      | _ -> is_constr_row ~allow_ident:false tm in
     (* Make a stub *)
     let ty' =
       if s.for_saving then newpersty (Tvar None)
-      else newgenstub ~scope:(get_scope ty)
+      else newgenstub ~scope:tty.scope
     in
-    For_copy.redirect_desc copy_scope ty (Tsubst (ty', None));
+    For_copy.redirect_transient copy_scope tty (Tsubst (ty', None));
     let desc =
       if has_fixed_row then
         match get_desc tm with (* PR#7348 *)
@@ -219,7 +222,7 @@ let rec typexp copy_scope s ty =
             Tsubst (_, Some ty2) ->
               (* This variant type has been already copied *)
               (* Change the stub to avoid Tlink in the new type *)
-              For_copy.redirect_desc copy_scope ty (Tsubst (ty2, None));
+              For_copy.redirect_transient copy_scope tty (Tsubst (ty2, None));
               Tlink ty2
           | _ ->
               let dup =

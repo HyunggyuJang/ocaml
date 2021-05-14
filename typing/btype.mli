@@ -183,6 +183,7 @@ module For_copy : sig
            ways, you should NOT do that. *)
 
   val redirect_desc: copy_scope -> type_expr -> type_desc -> unit
+  val redirect_transient: copy_scope -> transient_expr -> type_desc -> unit
         (* Temporarily change a type description *)
 
   val dup_kind: copy_scope -> field_kind option ref -> unit

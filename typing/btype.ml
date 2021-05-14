@@ -494,6 +494,7 @@ module For_copy : sig
   type copy_scope
 
   val redirect_desc: copy_scope -> type_expr -> type_desc -> unit
+  val redirect_transient: copy_scope -> transient_expr -> type_desc -> unit
 
   val dup_kind: copy_scope -> field_kind option ref -> unit
 
@@ -510,10 +511,13 @@ end = struct
     (* new kind variables *)
   }
 
-  let redirect_desc copy_scope ty desc =
-    let ty = Transient_expr.repr ty in
+  let redirect_transient copy_scope ty desc =
     copy_scope.saved_desc <- (ty, ty.desc) :: copy_scope.saved_desc;
     Transient_expr.set_desc ty desc
+
+  let redirect_desc copy_scope ty desc =
+    let ty = Transient_expr.repr ty in
+    redirect_transient copy_scope ty desc
 
   let dup_kind copy_scope r =
     assert (Option.is_none !r);
