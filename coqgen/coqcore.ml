@@ -29,6 +29,7 @@ type coq_term =
   | CTmatch of coq_term * (coq_term * coq_term) list
   | CTann of coq_term * coq_term
   | CTlet of string * coq_term option * coq_term * coq_term
+  | CTif of coq_term * coq_term * coq_term
 
 let ctid s = CTid s
 let ctapp ct args = if args = [] then ct else CTapp (ct, args)
@@ -71,6 +72,8 @@ let init_type_map =
       {ct_name = "ml_int"; ct_args = []; ct_def = CT_def(CTid "Int63.int")});
      (Predef.path_unit, [],
       {ct_name = "ml_unit"; ct_args = []; ct_def = CT_def(CTid "unit")});
+     (Predef.path_bool, [],
+      {ct_name = "ml_bool"; ct_args = []; ct_def = CT_def(CTid "bool")});
      (Predef.path_list, [],
       {ct_name = "ml_list"; ct_args = ["a"];
        ct_def = CT_def (CTapp (CTid "list", [CTid "a"]))});
@@ -147,6 +150,14 @@ let init_term_map =
        ce_vars = [];
        ce_rec = Nonrecursive;
        ce_purary = 2});
+     (["="],
+      {ce_name = "Int63.eqb";
+       ce_type =
+       newgenarrow Predef.type_unit
+         (newgenarrow Predef.type_int Predef.type_bool);
+       ce_vars = [];
+       ce_rec = Nonrecursive;
+       ce_purary = 3});
    ]
 
 let type_map = ref (init_type_map : coq_type_desc Path.Map.t)
@@ -231,6 +242,8 @@ let rec transl_type ~loc (vars : string TypeMap.t) visited ty =
   | Tlink _ | Tsubst _ ->
       assert false
 
+let transl_type ~loc vars = transl_type ~loc vars TypeSet.empty
+
 let is_alpha name =
   name <> "" &&
   match name.[0] with
@@ -254,6 +267,7 @@ let transl_type_decl path td =
   ignore (path, td)
 
 let find_instantiation ~loc env edesc ty =
+  if edesc.ce_vars = [] then [] else
   let open Ctype in
   let ty0, vars =
     let ty1 = newgenty (Ttuple (edesc.ce_type :: edesc.ce_vars)) in
@@ -384,7 +398,7 @@ let rec transl_exp ~(tvars : string TypeMap.t) ~(vars : coq_term_desc Ident.tbl)
       let tvars = refresh_tvars tvars in
       let f = CTid desc.ce_name in
       let f =
-        ctapp f (List.map (transl_type ~loc tvars TypeSet.empty) ivars) in
+        ctapp f (List.map (transl_type ~loc tvars) ivars) in
       Btype.backtrack snap;
       (f, desc.ce_purary)
   | Texp_constant (Const_int n) ->
@@ -444,9 +458,10 @@ let rec transl_exp ~(tvars : string TypeMap.t) ~(vars : coq_term_desc Ident.tbl)
         {ce_name = Ident.name id; ce_type = pat_type;
          ce_vars = []; ce_purary = 1; ce_rec = Nonrecursive} in
       let vars = Ident.add id desc vars in
-      let cty = transl_type ~loc:pat_loc tvars TypeSet.empty pat_type in
+      let cty = transl_type ~loc:pat_loc tvars pat_type in
+      let cty = CTapp(CTid"coq_type",[cty]) in
       let ct, purary = transl_exp ~tvars ~vars c_rhs in
-      CTabs (Ident.name id, Some (CTapp(CTid"coq_type",[cty])), ct), purary + 1
+      CTabs (Ident.name id, Some cty, ct), purary + 1
   | Texp_apply (f, args)
     when List.for_all (function (Nolabel,Some _) -> true | _ -> false) args ->
       let args =
@@ -454,16 +469,14 @@ let rec transl_exp ~(tvars : string TypeMap.t) ~(vars : coq_term_desc Ident.tbl)
       let ct, purary = transl_exp ~tvars ~vars f in
       let ct_pura = List.map (transl_exp ~tvars ~vars) args in
       let names = Names.of_list (vars_names vars) in
-      let args, binds =
+      let args, binds, names =
         List.fold_right
-          (fun (ct, pa) (args, binds) ->
-            if pa = 1 then (ct :: args, binds) else
-            if pa > 1 then (shrink_purary ~names pa 1 ct :: args, binds) else
-            let names =
-              List.fold_right (fun (v,_) -> Names.add v) binds names in
-            let v = fresh_term_names ~names "v" in
-            (CTid v :: args, (v, ct) :: binds))
-          ct_pura ([],[])
+          (fun (ct, pa) (args, binds, names) ->
+            if pa = 1 then (ct :: args, binds, names) else
+            if pa > 1 then (shrink_purary ~names pa 1 ct :: args, binds, names)
+            else let v = fresh_term_names ~names "v" in
+            (CTid v :: args, (v, ct) :: binds, Names.add v names))
+          ct_pura ([],[],names)
       in
       let ct =
         if purary >= List.length args then ctapp ct args else
@@ -473,11 +486,33 @@ let rec transl_exp ~(tvars : string TypeMap.t) ~(vars : coq_term_desc Ident.tbl)
       in
       let ct, purary =
         if binds = [] then ct, max 0 (purary - List.length args) else
-        if purary - List.length args > 0 then ctRet ct, 0 else ct, 0
+        if purary - List.length args > 0 then
+          shrink_purary ~names (purary - List.length args) 0 ct, 0
+        else ct, 0
       in
       List.fold_left (fun ct (v,arg) -> ctBind arg (CTabs (v,None,ct)))
         ct binds,
       purary
+  | Texp_ifthenelse (be, e1, e2) ->
+      let ct, p = transl_exp ~tvars ~vars be
+      and ct1, p1 = transl_exp ~tvars ~vars e1
+      and ct2, p2 =
+        match e2 with
+        | None    -> CTid "tt", 1
+        | Some e2 -> transl_exp ~tvars ~vars e2
+      in
+      let names = Names.of_list (vars_names vars) in
+      if p = 0 then
+        let v = fresh_term_names ~names "v" in
+        let names = Names.add v names in
+        let ct1 = shrink_purary ~names p1 0 ct1
+        and ct2 = shrink_purary ~names p2 0 ct2 in
+        ctBind ct (CTabs (v, None, CTif (CTid v, ct1, ct2))), 0
+      else
+        let p' = min p1 p2 in
+        let ct1 = shrink_purary ~names p1 p' ct1
+        and ct2 = shrink_purary ~names p2 p' ct2 in
+        CTif (ct, ct1, ct2), p'
   | _ ->
       not_allowed ~loc "This kind of term"
 
@@ -512,12 +547,18 @@ and transl_binding ~(tvars : string TypeMap.t) ~(vars : coq_term_desc Ident.tbl)
           shrink_purary ~names purary 1 ct
         in
         let pat = vb.vb_pat in
-        let cty =
-          transl_type ~loc:pat.pat_loc tvars TypeSet.empty pat.pat_type in
-        let cty = CTapp (CTid "coq_type", [cty]) in
+        let loc = pat.pat_loc in
+        let cty = transl_type ~loc tvars pat.pat_type in
+        let _cty = CTapp (CTid "coq_type", [cty]) in
+        let cty1, cty2 =
+          match Btype.repr pat.pat_type with
+            {desc = Tarrow (Nolabel, t1, t2, _)} ->
+              transl_type ~loc tvars t1, transl_type ~loc tvars t2
+          | _ -> CTid"_", CTid"_"
+        in
         CTapp (CTid "Fix",
-               [CTid"_"; CTid"_";
-                CTabs (desc.ce_name, Some cty, ctRet ct)]), desc
+               [cty1; cty2; CTabs (desc.ce_name, None, ctRet ct)]),
+        {desc with ce_purary = 0}
     | Nonrecursive ->
         ct, {desc with ce_purary = purary}
   in
@@ -555,10 +596,7 @@ let rec transl_structure ~(vars : coq_term_desc Ident.tbl) = function
           | None -> assert false
         in
         let rem =  transl_structure ~vars rem in
-        if rec_flag = Recursive then
-          CTfixpoint (name, ct) :: rem
-        else
-          CTdefinition (name, ct) :: rem
+        CTdefinition (name, ct) :: rem
     | _ ->
         not_allowed ~loc:it.str_loc "This structure item"
 
@@ -592,6 +630,9 @@ let rec coq_vars = function
   | CTlet (x, cto, ct1, ct2) ->
       Names.union (coq_vars_opt cto)
         (Names.union (coq_vars ct1) (Names.remove x (coq_vars ct2)))
+  | CTif (ct1, ct2, ct3) ->
+      Names.union (coq_vars ct1) (Names.union (coq_vars ct2) (coq_vars ct3))
+
 and coq_vars_opt = function
   | None -> Names.empty
   | Some ct -> coq_vars ct
@@ -626,6 +667,9 @@ let rec coq_term_subst subs = function
         if Vars.mem x subs then Vars.remove x subs else subs in
       CTlet (x, Option.map (coq_term_subst subs) cto,
              coq_term_subst subs ct1, coq_term_subst subs' ct2)
+  | CTif (ct1, ct2, ct3) ->
+      CTif (coq_term_subst subs ct1, coq_term_subst subs ct2,
+            coq_term_subst subs ct3)
 
 let make_coq_type () =
   let make_case (_, ctd) =
@@ -693,7 +737,7 @@ Definition Fix T1 T2\
 \n  (F : coq_type (ml_arrow (ml_arrow T1 T2) (ml_arrow T1 T2)))\
 \n  : M (coq_type (ml_arrow T1 T2)) :=\
 \n  do r <- newref (ml_arrow T1 T2) (fun x => Fail);\
-\n  let f x :=  do f <- getref _ r; f x in\
+\n  let f x :=  do f <- getref _ r; AppM (F f) x in\
 \n  do _ <- setref _ r f; Ret f.\n"
   :: cmds
 
@@ -711,6 +755,7 @@ let priority_level = function
   | CTmatch _ -> 10
   | CTann _ -> 10
   | CTlet _ -> 0
+  | CTif _ -> 0
 
 let string_of_sort = function
   | Type -> "Type"
@@ -781,6 +826,11 @@ let rec print_term_rec lv ppf ty =
         x print_type_ann cto
         print_term ct1
         print_term ct2
+  | CTif (ct1, ct2, ct3) ->
+      fprintf ppf "@[if@;<1 2>%a@ then@;<1 2>%a@ else@;<1 2>%a@]"
+        print_term ct1
+        print_term ct2
+        print_term ct3
 
 and print_type_ann ppf = function
   | None -> ()
