@@ -121,5 +121,8 @@ Definition setref T (l : loc T) (val : coq_type T) : M unit := fun env =>
   in Option.bind (fun refs' => Some (mkEnv c refs', tt))
                  (update b refs).
 
+Definition lexi_compare (cmp1 cmp2 : M comparison) :=
+  do x <- cmp1; match x with Eq => cmp2 | _ => Ret x end.
+
 End monadic_operations.
 End REFmonad.

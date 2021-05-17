@@ -33,6 +33,8 @@ type coq_term =
 
 let ctid s = CTid s
 let ctapp ct args = if args = [] then ct else CTapp (ct, args)
+let ctRet ct = CTapp (CTid "Ret", [ct])
+let ctBind m f = CTapp (CTid "Bind", [m; f])
 
 type coq_def_kind =
   | CT_def of coq_term
@@ -43,6 +45,7 @@ type coq_type_desc =
     { ct_name: string;
       ct_args: string list;
       ct_def: coq_def_kind;
+      ct_compare: coq_term option;
     }
 
 type coq_term_desc =
@@ -62,6 +65,8 @@ let stdlib_ref = Path.Pdot (stdlib, "ref")
 let newgenconstr p tl = newgenty (Tconstr (p, tl, ref Mnil))
 let newgenarrow t1 t2 = newgenty (Tarrow (Nolabel, t1, t2, Cok))
 
+let xy = [CTid"x"; CTid"y"]
+
 let init_type_map =
   List.fold_left
     (fun map (rt, lid, desc) ->
@@ -70,20 +75,35 @@ let init_type_map =
     Path.Map.empty
     [
      (stdlib, ["ref"],
-      {ct_name = "ml_ref"; ct_args = ["a"]; ct_def = CT_abs});
+      {ct_name = "ml_ref"; ct_args = ["a"]; ct_def = CT_abs;
+       ct_compare = Some (
+       ctBind (ctapp (CTid"getref") [CTid"x"])
+         (CTabs ("x", None, ctBind (ctapp (CTid"getref") [CTid"y"])
+                   (CTabs ("y", None, ctapp (CTid"compare_rec")
+                             [CTid"T1";CTid"h";CTid"x";CTid"y"])))))
+     });
      (Predef.path_int, [],
-      {ct_name = "ml_int"; ct_args = []; ct_def = CT_def(CTid "Int63.int")});
+      {ct_name = "ml_int"; ct_args = []; ct_def = CT_def(CTid "Int63.int");
+       ct_compare = Some (ctRet (CTapp (CTid"Int63.compare", xy)))});
      (Predef.path_unit, [],
-      {ct_name = "ml_unit"; ct_args = []; ct_def = CT_def(CTid "unit")});
+      {ct_name = "ml_unit"; ct_args = []; ct_def = CT_def(CTid "unit");
+       ct_compare = Some (ctRet (CTid "true"))});
      (Predef.path_bool, [],
-      {ct_name = "ml_bool"; ct_args = []; ct_def = CT_def(CTid "bool")});
+      {ct_name = "ml_bool"; ct_args = []; ct_def = CT_def(CTid "bool");
+       ct_compare = Some (ctRet (CTapp (CTid"Bool.compare", xy)))});
      (Predef.path_list, [],
       {ct_name = "ml_list"; ct_args = ["a"];
-       ct_def = CT_def (CTapp (CTid "list", [CTid "a"]))});
+       ct_def = CT_def (CTapp (CTid "list", [CTid "a"]));
+       ct_compare = None;
+       (*Some (
+       CTmatch (CTpair(CTid"x",CTid"y"),[
+                (CTpair*)
+     });
      (coqgen, ["arrow"],
       {ct_name = "ml_arrow"; ct_args = ["a"; "b"];
        ct_def =
-       CT_def(CTapp(CTid"->", [CTid"a"; CTapp(CTid"M", [CTid"b"])]))});
+       CT_def(CTapp(CTid"->", [CTid"a"; CTapp(CTid"M", [CTid"b"])]));
+       ct_compare = None});
     ]
 
 let init_term_map =
@@ -345,9 +365,6 @@ let find_instantiation ~loc env edesc ty =
   (try unify env ty ty0
    with Unify _ -> not_allowed ~loc ("Type for " ^ edesc.ce_name));
   vars
-
-let ctRet ct = CTapp (CTid "Ret", [ct])
-let ctBind m f = CTapp (CTid "Bind", [m; f])
 
 let close_type ty =
   let vars = Ctype.free_variables ty in
@@ -780,6 +797,13 @@ let make_coq_type () =
   CTfixpoint ("coq_type",
               CTabs ("T", Some ml_tid,
                      CTann (CTmatch (CTid "T", cases), CTsort Type)))
+
+(*
+let make_compare_rec () =
+  CTfixpoint ("compare_rec", CTabs (
+              "T", Some ml_tid, CTabs (
+              "h", Some (CTid nat), CT
+*)
 
 let transl_implementation _modname st =
   let cmds = transl_structure ~vars:Ident.empty st.str_items in
