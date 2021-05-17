@@ -25,8 +25,9 @@ type coq_term =
   | CTapp of coq_term * coq_term list
   | CTabs of string * coq_term option * coq_term
   | CTsort of coq_sort
-  | CTprod of string * coq_term option * coq_term
-  | CTmatch of coq_term * (coq_term * coq_term) list
+  | CTprod of string option * coq_term * coq_term
+  | CTmatch of
+      coq_term * (string * coq_term) option * (coq_term * coq_term) list
   | CTann of coq_term * coq_term
   | CTlet of string * coq_term option * coq_term * coq_term
   | CTif of coq_term * coq_term * coq_term
@@ -35,6 +36,10 @@ let ctid s = CTid s
 let ctapp ct args = if args = [] then ct else CTapp (ct, args)
 let ctRet ct = CTapp (CTid "Ret", [ct])
 let ctBind m f = CTapp (CTid "Bind", [m; f])
+
+let ml_type = "ml_type"
+let ml_tid = CTid ml_type
+let coq_tid = CTid "coq_type"
 
 type coq_def_kind =
   | CT_def of coq_term
@@ -77,8 +82,8 @@ let init_type_map =
      (stdlib, ["ref"],
       {ct_name = "ml_ref"; ct_args = ["a"]; ct_def = CT_abs;
        ct_compare = Some (
-       ctBind (ctapp (CTid"getref") [CTid"x"])
-         (CTabs ("x", None, ctBind (ctapp (CTid"getref") [CTid"y"])
+       ctBind (ctapp (CTid"getref") [CTid"T1"; CTid"x"])
+         (CTabs ("x", None, ctBind (ctapp (CTid"getref") [CTid"T1"; CTid"y"])
                    (CTabs ("y", None, ctapp (CTid"compare_rec")
                              [CTid"T1";CTid"h";CTid"x";CTid"y"])))))
      });
@@ -87,7 +92,7 @@ let init_type_map =
        ct_compare = Some (ctRet (CTapp (CTid"Int63.compare", xy)))});
      (Predef.path_unit, [],
       {ct_name = "ml_unit"; ct_args = []; ct_def = CT_def(CTid "unit");
-       ct_compare = Some (ctRet (CTid "true"))});
+       ct_compare = Some (ctRet (CTid "Eq"))});
      (Predef.path_bool, [],
       {ct_name = "ml_bool"; ct_args = []; ct_def = CT_def(CTid "bool");
        ct_compare = Some (ctRet (CTapp (CTid"Bool.compare", xy)))});
@@ -101,8 +106,7 @@ let init_type_map =
      });
      (coqgen, ["arrow"],
       {ct_name = "ml_arrow"; ct_args = ["a"; "b"];
-       ct_def =
-       CT_def(CTapp(CTid"->", [CTid"a"; CTapp(CTid"M", [CTid"b"])]));
+       ct_def = CT_def (CTprod (None, CTid"a", CTapp(CTid"M", [CTid"b"])));
        ct_compare = None});
     ]
 
@@ -180,13 +184,26 @@ let init_term_map =
        ce_rec = Nonrecursive;
        ce_purary = 2});
      (["="],
-      {ce_name = "Int63.eqb";
-       ce_type =
-       newgenarrow Predef.type_unit
-         (newgenarrow Predef.type_int Predef.type_bool);
-       ce_vars = [];
-       ce_rec = Nonrecursive;
-       ce_purary = 3});
+      let tv = newgenvar () in
+      {ce_name = "ml_eq";
+       ce_vars = [tv];
+       ce_type = newgenarrow tv (newgenarrow tv Predef.type_bool);
+       ce_rec = Recursive;
+       ce_purary = 2});
+     (["<"],
+      let tv = newgenvar () in
+      {ce_name = "ml_lt";
+       ce_vars = [tv];
+       ce_type = newgenarrow tv (newgenarrow tv Predef.type_bool);
+       ce_rec = Recursive;
+       ce_purary = 2});
+     ([">"],
+      let tv = newgenvar () in
+      {ce_name = "ml_gt";
+       ce_vars = [tv];
+       ce_type = newgenarrow tv (newgenarrow tv Predef.type_bool);
+       ce_rec = Recursive;
+       ce_purary = 2});
    ]
 
 let type_map = ref (init_type_map : coq_type_desc Path.Map.t)
@@ -223,6 +240,11 @@ let used_var_name vars s =
 let fresh_var_name vars name =
   fresh_name ?name (used_var_name vars)
 
+let may_app f o x =
+  match o with
+    None -> x
+  | Some y -> f y x
+
 let rec coq_vars = function
   | CTid x -> Names.singleton x
   | CTapp (ct, ctl) ->
@@ -230,11 +252,15 @@ let rec coq_vars = function
   | CTabs (x, cto, ct) ->
       Names.union (Names.remove x (coq_vars ct)) (coq_vars_opt cto)
   | CTsort _ -> Names.empty
-  | CTprod (x, cto, ct) ->
-      Names.union (Names.remove x (coq_vars ct)) (coq_vars_opt cto)
-  | CTmatch (ct, cases) ->
+  | CTprod (ox, ct1, ct2) ->
+      let vars = may_app Names.remove ox (coq_vars ct2) in
+      Names.union vars (coq_vars ct1)
+  | CTmatch (ct, oret, cases) ->
+      let case_ret =
+        Option.to_list (Option.map (fun (v,ct) -> CTid v, ct) oret) in
       let cases_vars (lhs,rhs) = Names.diff (coq_vars rhs) (coq_vars lhs) in
-      List.fold_left Names.union (coq_vars ct) (List.map cases_vars cases)
+      List.fold_left Names.union (coq_vars ct)
+        (List.map cases_vars (case_ret @ cases))
   | CTann (ct1, ct2) ->
       Names.union (coq_vars ct1) (coq_vars ct2)
   | CTlet (x, cto, ct1, ct2) ->
@@ -259,17 +285,17 @@ let rec coq_term_subst subs = function
       CTabs (x, Option.map (coq_term_subst subs) t,
              coq_term_subst subs' b)
   | CTsort _ as ct -> ct
-  | CTprod (x, t, b) ->
-      let subs' =
-        if Vars.mem x subs then Vars.remove x subs else subs in
-      CTprod (x, Option.map (coq_term_subst subs) t,
-             coq_term_subst subs' b)
-  | CTmatch (ct, cases) ->
+  | CTprod (ox, t, b) ->
+      let subs' = may_app Vars.remove ox subs in
+      CTprod (ox, coq_term_subst subs t, coq_term_subst subs' b)
+  | CTmatch (ct, oret, cases) ->
+      let subs_ret (v, ct) = v, coq_term_subst (Vars.remove v subs) ct in
       let subs_case (lhs, rhs) =
         let subs' = Names.fold Vars.remove (coq_vars lhs) subs in
         (lhs, coq_term_subst subs' rhs)
       in
-      CTmatch (coq_term_subst subs ct, List.map subs_case cases)
+      CTmatch (coq_term_subst subs ct, Option.map subs_ret oret,
+               List.map subs_case cases)
   | CTann (ct1, ct2) ->
       CTann (coq_term_subst subs ct1, coq_term_subst subs ct2)
   | CTlet (x, cto, ct1, ct2) ->
@@ -322,7 +348,8 @@ let rec transl_type ~loc (vars : string TypeMap.t) visited ty =
           vars vl
       in
       let ct1 = transl_type ~loc vars visited t1 in
-      List.fold_right (fun tv ct -> CTprod (TypeMap.find tv vars, None, ct))
+      List.fold_right
+        (fun tv ct -> CTprod (Some (TypeMap.find tv vars), ml_tid, ct))
         vl ct1
   | Tpackage _ ->
       not_allowed ~loc "first class modules"
@@ -402,9 +429,6 @@ let name_tuple names =
   let ctl = List.map ctid names in
   make_tuple ctl
 
-let ml_type = "ml_type"
-let ml_tid = CTid ml_type
-
 let enter_free_variables tvars ty =
   (*close_type ty;*)
   let fvars = Ctype.free_variables ty in
@@ -483,7 +507,7 @@ let rec insert_guard ct =
   | CTann (ct, cty) when not (Names.mem "h" (coq_vars cty)) ->
       CTann (insert_guard ct, cty)
   | _ ->
-      CTmatch (CTid "h",
+      CTmatch (CTid "h", None,
                [(CTapp(CTid"S",[CTid"h"]),ct); (CTid"_", CTid"Fail")])
 
 let rec transl_exp ~(tvars : string TypeMap.t) ~(vars : coq_term_desc Ident.tbl)
@@ -555,9 +579,10 @@ let rec transl_exp ~(tvars : string TypeMap.t) ~(vars : coq_term_desc Ident.tbl)
                 id_descs pbody in
             let v = fresh_term_name vars in
             {pbody with pterm =
-             ctBind ct (CTabs (v, None, CTmatch (CTid v, [pat, pbody.pterm])))}
+             ctBind ct (CTabs (v, None,
+                               CTmatch (CTid v, None, [pat, pbody.pterm])))}
           else
-            {pbody with pterm = CTmatch (ct, [pat, pbody.pterm])}
+            {pbody with pterm = CTmatch (ct, None, [pat, pbody.pterm])}
       end
   | Texp_sequence (e1, e2) ->
       let names = Names.of_list (vars_names vars) in
@@ -574,7 +599,7 @@ let rec transl_exp ~(tvars : string TypeMap.t) ~(vars : coq_term_desc Ident.tbl)
          ce_vars = []; ce_purary = 1; ce_rec = Nonrecursive} in
       let vars = Ident.add id desc vars in
       let cty = transl_type ~loc:pat_loc tvars pat_type in
-      let cty = CTapp(CTid"coq_type",[cty]) in
+      let cty = CTapp(coq_tid,[cty]) in
       let ct = transl_exp ~tvars ~vars c_rhs in
       let ct =
         match ct.pterm with
@@ -582,7 +607,7 @@ let rec transl_exp ~(tvars : string TypeMap.t) ~(vars : coq_term_desc Ident.tbl)
         | pt ->
             if ct.pary >= 2 then ct else
             let cty = transl_type ~loc:c_rhs.exp_loc tvars c_rhs.exp_type in
-            let cty = CTapp (CTid"coq_type",[cty]) in
+            let cty = CTapp (coq_tid,[cty]) in
             let cty = if ct.pary = 0 then CTapp (CTid"M", [cty]) else cty in
             {ct with pterm = CTann (pt, cty)}
       in
@@ -721,7 +746,7 @@ type vernacular =
 
 let apply_recursive rec_flag ct =
   if rec_flag = Nonrecursive then ct else
-  coq_term_subst (Vars.add "h" (CTid"1000") Vars.empty) ct
+  coq_term_subst (Vars.add "h" (CTid"100000") Vars.empty) ct
   (* CTlet ("h", None, CTid"1000", ct) *)
 
 let rec transl_structure ~(vars : coq_term_desc Ident.tbl) = function
@@ -775,16 +800,14 @@ let make_coq_type () =
     let constr = CTid ctd.ct_name in
     let n = List.length ctd.ct_args in
     let names = iota_names 1 n "T" in
-    let lhs =
-      if n = 0 then constr else
-      CTapp (constr, List.map ctid names)
+    let lhs = ctapp constr (List.map ctid names)
     and rhs =
       match ctd.ct_def with
       | CT_def ct ->
           let subs =
             List.fold_left2
               (fun vars v1 v2 ->
-                Vars.add v1 (CTapp (CTid "coq_type", [CTid v2])) vars)
+                Vars.add v1 (CTapp (coq_tid, [CTid v2])) vars)
               Vars.empty ctd.ct_args names
           in
           coq_term_subst subs ct
@@ -796,14 +819,37 @@ let make_coq_type () =
   let cases = List.map make_case (Path.Map.bindings !type_map) in
   CTfixpoint ("coq_type",
               CTabs ("T", Some ml_tid,
-                     CTann (CTmatch (CTid "T", cases), CTsort Type)))
+                     CTann (CTmatch (CTid "T", None, cases), CTsort Type)))
 
-(*
 let make_compare_rec () =
+  let make_case (_, ctd) =
+    let constr = CTid ctd.ct_name in
+    let n = List.length ctd.ct_args in
+    let names = iota_names 1 n "T" in
+    let lhs = ctapp constr (List.map ctid names)
+    and rhs =
+      let ret =
+        match ctd.ct_compare with
+          None -> CTid "Fail"
+        | Some ct -> ct
+      in
+      CTabs ("x", None, CTabs ("y", None, ret))
+    in
+    (lhs, rhs)
+  in
   CTfixpoint ("compare_rec", CTabs (
               "T", Some ml_tid, CTabs (
-              "h", Some (CTid nat), CT
-*)
+              "h", Some (CTid "nat"), CTmatch (
+              CTid "h", None,
+              [CTapp (CTid "S", [CTid "h"]),
+               CTmatch (
+               CTid "T", Some ("T", CTprod (
+                               None, CTapp(coq_tid,[CTid "T"]), CTprod (
+                               None, CTapp(coq_tid,[CTid "T"]),
+                               CTapp (CTid"M", [CTid "comparison"])))),
+               List.map make_case (Path.Map.bindings !type_map));
+               CTid "_", CTabs ("_", None, CTabs ("_", None, CTid "Fail"))]
+             ))))
 
 let transl_implementation _modname st =
   let cmds = transl_structure ~vars:Ident.empty st.str_items in
@@ -844,14 +890,29 @@ Definition Fix T1 T2\
 \n  : M (coq_type (ml_arrow T1 T2)) :=\
 \n  do r <- newref (ml_arrow T1 T2) (fun x => Fail);\
 \n  let f x :=  do f <- getref _ r; AppM (F f) x in\
-\n  do _ <- setref _ r f; Ret f.\n"
+\n  do _ <- setref _ r f; Ret f.\
+\n" ::
+  make_compare_rec () ::
+  CTverbatim "Definition ml_compare := compare_rec.\
+\n\
+\nDefinition wrap_compare wrap T h x y : M bool :=\
+\n  do c <- compare_rec T h x y; Ret (wrap c).\
+\n\
+\nDefinition ml_eq :=\
+\n  wrap_compare (fun c => if c is Eq then true else false).\
+\n\
+\nDefinition ml_lt :=\
+\n  wrap_compare (fun c => if c is Lt then true else false).\
+\n\
+\nDefinition ml_gt :=\
+\n  wrap_compare (fun c => if c is Gt then true else false).\n\n"
   :: cmds
 
 open Format
 
 let priority_level = function
   | CTid _ -> 10
-  | CTapp (CTid "->", [_;_]) -> 2
+  | CTprod (None, _, _) -> 2
   | CTapp (CTid "*", [_;_]) -> 3
   | CTapp (CTid "Bind", [_;CTabs _]) -> 0
   | CTapp _ -> 4
@@ -883,7 +944,7 @@ let rec print_term_rec lv ppf ty =
   if lv > priority_level ty then fprintf ppf "(%a)" (print_term_rec 0) ty else
   match ty with
   | CTid s -> pp_print_string ppf s
-  | CTapp (CTid "->", [t1; t2]) ->
+  | CTprod (None, t1, t2) ->
       fprintf ppf "@[%a ->@ %a@]" (print_term_rec 3) t1 (print_term_rec 2) t2
   | CTapp (CTid "*", [t1; t2]) ->
       fprintf ppf "@[%a ->@ %a@]" (print_term_rec 3) t1 (print_term_rec 4) t2
@@ -897,30 +958,36 @@ let rec print_term_rec lv ppf ty =
   | CTapp (f, args) ->
       fprintf ppf "@[<2>%a@ %a@]" (print_term_rec 4) f
         (pp_print_list ~pp_sep:pp_print_space (print_term_rec 5)) args
-  | CTabs (x, ot, t1) ->
-      fprintf ppf "@[<hov2>@[<hov2>fun@ %s%a@ =>@]@ %a@]"
-        x print_type_ann ot print_term t1
+  | CTabs _ ->
+      fprintf ppf "@[<hov2>@[<hov2>fun";
+      let t1 = print_args false ppf ty in
+      fprintf ppf "@ =>@]@ %a@]" print_term t1
   | CTsort k -> pp_print_string ppf (string_of_sort k)
 (*  | CTtuple tl ->
       fprintf ppf "(@[%a)@]"
         (pp_print_list (print_term_rec 1)
            ~pp_sep:(fun ppf () -> fprintf ppf ",@ "))
         tl *)
-  | CTprod (x, ot, t1) ->
-      fprintf ppf "@[<hov2>@[<hov2>forall@ %s%a,]@ %a@]"
-        x print_type_ann ot print_term t1
-  | CTmatch (ct, [(p1,ct1); (CTid"_",ct2)]) ->
-      fprintf ppf "@[@[@[<2>if@ %a@ is@ %a@]@ then@ %a@]@ else@ %a@]"
+  | CTprod (Some x, t, t1) ->
+      fprintf ppf "@[<hov2>@[<hov2>forall@ %s@ :@ %a@]@ %a@]"
+        x print_term t print_term t1
+  | CTmatch (ct, None, [(p1,ct1); (CTid"_",ct2)]) ->
+      fprintf ppf
+        "@[<hv>@[<2>@[<2>if@ %a@ is@ %a@]@;<1 -2>then@ %a@]@ @[<2>else@ %a@]@]"
         print_term ct
         print_term p1
         print_term ct1
         print_term ct2
-  | CTmatch (ct, cases) ->
-      fprintf ppf "@[<hv>@[<2>match@ %a@ with@]"
-        print_term ct;
+  | CTmatch (ct, oret, cases) ->
+      fprintf ppf "@[<hv>@[<2>match@ %a" print_term ct;
+      Option.iter
+        (fun (v, ct) ->
+          fprintf ppf "@ as@ %s@ return@ %a" v print_term ct)
+        oret;
+      fprintf ppf "@ with@]";
       List.iter
         (fun (pat, ct) ->
-          fprintf ppf "@ @[@[| %a =>@] @[%a@]@]"
+          fprintf ppf "@ @[@[| %a =>@]@;<1 2>%a@]"
             print_term pat
             print_term ct)
         cases;
@@ -931,7 +998,7 @@ let rec print_term_rec lv ppf ty =
         print_term cty
   | CTlet (x, None, ct1, ct2) ->
       fprintf ppf "@[<2>@[let %s" x;
-      let ct1 = print_args ppf ct1 in
+      let ct1 = print_args true ppf ct1 in
       fprintf ppf "@ :=@]@ %a@;<1 -2>in@ %a@]"
         print_term ct1
         print_term ct2
@@ -952,7 +1019,7 @@ and print_type_ann ppf = function
 
 and print_term ppf = print_term_rec 0 ppf
 
-and print_args ppf ct =
+and print_args annot ppf ct =
   let (args, ct, ann) = extract_args ct in
   List.iter
     (fun (argl,cto) ->
@@ -965,13 +1032,13 @@ and print_args ppf ct =
     args;
   (*if List.exists (fun (l,_) -> List.mem "h" l) args then
     fprintf ppf "@ {struct h}";*)
-  print_type_ann ppf ann;
-  ct
+  if annot then (print_type_ann ppf ann; ct) else
+  may_app (fun cty ct -> CTann (ct, cty)) ann ct
 
 let emit_def ppf def s ct =
   fprintf ppf "@[<2>@[<2>%s %s" def s;
-  let ct = print_args ppf ct in
-  fprintf ppf " :=@]@ %a.@]" print_term ct
+  let ct = print_args true ppf ct in
+  fprintf ppf " :=@]@ %a.@]@ " print_term ct
 
 let print_arg_typed ppf (s, ct) =
   fprintf ppf "@ @[<1>(%s :@ %a)@]" s print_term ct
@@ -981,7 +1048,7 @@ let emit_vernacular ppf = function
   | CTdefinition (s, ct) -> emit_def ppf "Definition" s ct
   | CTfixpoint (s, ct)   -> emit_def ppf "Fixpoint" s ct
   | CTeval ct ->
-      fprintf ppf "@[<2>Eval vm_compute in@ %a.@]" print_term ct
+      fprintf ppf "@[<2>Eval vm_compute in@ %a.@]@ " print_term ct
   | CTinductive td ->
       fprintf ppf "@[<hv2>@[<2>Inductive %s" td.name;
       List.iter (print_arg_typed ppf) td.args;
@@ -993,7 +1060,7 @@ let emit_vernacular ppf = function
           if td.args = [] && ret = CTid td.name then fprintf ppf "@]"
           else fprintf ppf "@ : %a@]" print_term ret)
         td.cases;
-      fprintf ppf ".@]"
+      fprintf ppf ".@]@ "
 
 let emit_gallina _modname ppf cmds =
   pp_print_list ~pp_sep:pp_print_newline emit_vernacular ppf cmds
