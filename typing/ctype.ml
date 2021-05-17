@@ -1058,10 +1058,11 @@ let abbreviations = ref (ref Mnil)
    before we call type_pat *)
 let rec copy ?partial ?keep_names scope ty =
   let copy = copy ?partial ?keep_names scope in
-  match get_desc ty with
+  let tty = Transient_expr.repr ty in
+  match tty.desc with
     Tsubst (ty, _) -> ty
-  | _ ->
-    let level = get_level ty in
+  | desc ->
+    let level = tty.level in
     if level <> generic_level && partial = None then ty else
     (* We only forget types that are non generic and do not contain
        free univars *)
@@ -1075,9 +1076,8 @@ let rec copy ?partial ?keep_names scope ty =
           else generic_level
     in
     if forget <> generic_level then newty2 ~level:forget (Tvar None) else
-    let desc = get_desc ty in
-    let t = newstub ~scope:(get_scope ty) in
-    For_copy.redirect_desc scope ty (Tsubst (t, None));
+    let t = newstub ~scope:tty.scope in
+    For_copy.redirect_transient scope tty (Tsubst (t, None));
     let desc' =
       match desc with
       | Tconstr (p, tl, _) ->
@@ -1110,7 +1110,7 @@ let rec copy ?partial ?keep_names scope ty =
             Tsubst (_, Some ty2) ->
               (* This variant type has been already copied *)
               (* Change the stub to avoid Tlink in the new type *)
-              For_copy.redirect_desc scope ty (Tsubst (ty2, None));
+              For_copy.redirect_transient scope tty (Tsubst (ty2, None));
               Tlink ty2
           | _ ->
               (* If the row variable is not generic, we must keep it *)
