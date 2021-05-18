@@ -190,6 +190,13 @@ let init_term_map =
        ce_type = newgenarrow tv (newgenarrow tv Predef.type_bool);
        ce_rec = Recursive;
        ce_purary = 2});
+     (["<>"],
+      let tv = newgenvar () in
+      {ce_name = "ml_ne";
+       ce_vars = [tv];
+       ce_type = newgenarrow tv (newgenarrow tv Predef.type_bool);
+       ce_rec = Recursive;
+       ce_purary = 2});
      (["<"],
       let tv = newgenvar () in
       {ce_name = "ml_lt";
@@ -923,6 +930,7 @@ Definition Fix T1 T2\
 \nDefinition ml_eq := wrap_compare (fun c => if c is Eq then true else false).\
 \nDefinition ml_lt := wrap_compare (fun c => if c is Lt then true else false).\
 \nDefinition ml_gt := wrap_compare (fun c => if c is Gt then true else false).\
+\nDefinition ml_ne := wrap_compare (fun c => if c is Eq then false else true).\
 \nDefinition ml_ge := wrap_compare (fun c => if c is Lt then false else true).\
 \nDefinition ml_le := wrap_compare (fun c => if c is Gt then false else true).\
 \n"
