@@ -24,6 +24,24 @@ let rec ack m n =
 
 ack 3 7;;
 
+let rec iter_int n f x =
+  if n < 1 then x else iter_int (n-1) f (f x);;
+
+(*
+let fib2 n =
+  let l1 = ref 1 and l2 = ref 1 in
+  iter_int n (fun _z -> let x = !l1 and y = !l2 in l1 := y; l2 := x+y; !l1) 1;;
+*)
+
+let fib2 n =
+  let l1 = ref 1 in let l2 = ref 1 in
+  iter_int n
+    (fun _ -> let x = !l1 in let y = !l2 in l1 := y; l2 := x+y)
+    (l1 := 1);
+  !l1 ;;
+
+fib2 1000 ;;
+
 let omega n =
   let r = ref (fun x -> x) in
   let delta i = !r i in

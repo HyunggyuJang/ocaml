@@ -450,7 +450,8 @@ let refresh_tvars tvars =
 
 let rec fun_arity e =
   match e.exp_desc with
-  | Texp_function {cases=[{c_lhs={pat_desc=Tpat_var _};c_guard=None;c_rhs}]} ->
+  | Texp_function
+    {cases=[{c_lhs={pat_desc=(Tpat_var _|Tpat_any)};c_guard=None;c_rhs}]} ->
       1 + fun_arity c_rhs
   | Texp_function _ -> 1
   | _ -> 0
@@ -592,12 +593,19 @@ let rec transl_exp ~(tvars : string TypeMap.t) ~(vars : coq_term_desc Ident.tbl)
        prec = or_rec ct1.prec ct2.prec; pary = 0}
   | Texp_function
       {arg_label = Nolabel; param = _;
-       cases = [{c_lhs = {pat_desc = Tpat_var (id, _); pat_type; pat_loc};
+       cases = [{c_lhs = {pat_desc; pat_type; pat_loc};
                  c_rhs; c_guard = None}]} ->
-      let desc =
-        {ce_name = Ident.name id; ce_type = pat_type;
-         ce_vars = []; ce_purary = 1; ce_rec = Nonrecursive} in
-      let vars = Ident.add id desc vars in
+      let (arg, vars) =
+        match pat_desc with
+          Tpat_any -> "_", vars
+        | Tpat_var (id, _) ->
+            let arg = fresh_term_name vars ~name:(Ident.name id) in
+            let desc =
+              {ce_name = arg; ce_type = pat_type;
+               ce_vars = []; ce_purary = 1; ce_rec = Nonrecursive} in
+            arg, Ident.add id desc vars
+        | _ -> not_allowed ~loc:pat_loc "This pattern"
+      in
       let cty = transl_type ~loc:pat_loc tvars pat_type in
       let cty = CTapp(coq_tid,[cty]) in
       let ct = transl_exp ~tvars ~vars c_rhs in
@@ -611,7 +619,7 @@ let rec transl_exp ~(tvars : string TypeMap.t) ~(vars : coq_term_desc Ident.tbl)
             let cty = if ct.pary = 0 then CTapp (CTid"M", [cty]) else cty in
             {ct with pterm = CTann (pt, cty)}
       in
-      {pterm = CTabs (Ident.name id, Some cty, ct.pterm);
+      {pterm = CTabs (arg, Some cty, ct.pterm);
        prec  = ct.prec; pary  = ct.pary + 1}
   | Texp_apply (f, args)
     when List.for_all (function (Nolabel,Some _) -> true | _ -> false) args ->
@@ -1019,21 +1027,26 @@ and print_type_ann ppf = function
 
 and print_term ppf = print_term_rec 0 ppf
 
-and print_args annot ppf ct =
+and print_args is_def ppf ct =
   let (args, ct, ann) = extract_args ct in
+  let one_group = not is_def && List.length args = 1 in
   List.iter
     (fun (argl,cto) ->
       match cto with
       | None -> List.iter (fprintf ppf "@ %s") argl
+      | _ when not is_def && List.for_all ((=) "_") argl ->
+          List.iter (fprintf ppf "@ %s") argl
       | Some ct ->
-          fprintf ppf "@ @[<1>(";
+          let po, pc = if one_group then "", "" else "(", ")" in
+          fprintf ppf "@ @[<1>%s" po;
           List.iter (fprintf ppf "%s@ ") argl;
-          fprintf ppf ":@ %a)@]" print_term ct)
+          fprintf ppf ":@ %a%s@]" print_term ct pc)
     args;
   (*if List.exists (fun (l,_) -> List.mem "h" l) args then
     fprintf ppf "@ {struct h}";*)
-  if annot then (print_type_ann ppf ann; ct) else
-  may_app (fun cty ct -> CTann (ct, cty)) ann ct
+  if is_def then print_type_ann ppf ann;
+  ct
+  (* else may_app (fun cty ct -> CTann (ct, cty)) ann ct *)
 
 let emit_def ppf def s ct =
   fprintf ppf "@[<2>@[<2>%s %s" def s;
