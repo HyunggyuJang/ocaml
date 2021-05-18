@@ -1115,7 +1115,7 @@ endif
 
 partialclean::
 	for d in utils parsing typing bytecomp asmcomp middle_end file_formats \
-           lambda middle_end/closure middle_end/flambda \
+           lambda coqgen middle_end/closure middle_end/flambda \
            middle_end/flambda/base_types \
            driver toplevel toplevel/byte toplevel/native tools; do \
 	  rm -f $$d/*.cm[ioxt] $$d/*.cmti $$d/*.annot $$d/*.s $$d/*.asm \
