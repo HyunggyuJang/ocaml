@@ -117,115 +117,68 @@ let init_term_map =
     (fun map (lid, desc) ->
       let path = List.fold_left (fun m s -> Path.Pdot (m, s)) stdlib lid in
       Path.Map.add path desc map)
-    Path.Map.empty
-    [
-     (["*h"],
-      {ce_name = "h";
-       ce_type = Predef.type_int;
-       ce_vars = [];
-       ce_rec = Nonrecursive;
-       ce_purary = 1});
-     (["ref"],
-      let tv = newgenvar () in
-      {ce_name = "newref";
-       ce_type = newgenarrow tv (newgenconstr stdlib_ref [tv]);
-       ce_vars = [tv];
-       ce_rec = Nonrecursive;
-       ce_purary = 1});
-     (["!"],
-      let tv = newgenvar () in
-      {ce_name = "getref";
-       ce_type = newgenarrow (newgenconstr stdlib_ref [tv]) tv;
-       ce_vars = [tv];
-       ce_rec = Nonrecursive;
-       ce_purary = 1});
-     ([":="],
-      let tv = newgenvar () in
-      {ce_name = "setref";
-       ce_type = newgenarrow (newgenconstr stdlib_ref [tv])
-                             (newgenarrow tv Predef.type_unit);
-       ce_vars = [tv];
-       ce_rec = Nonrecursive;
-       ce_purary = 2});
-     (["+"],
-      {ce_name = "Int63.add";
+    Path.Map.empty (
+  [
+   (["*h"],
+    {ce_name = "h";
+     ce_type = Predef.type_int;
+     ce_vars = [];
+     ce_rec = Nonrecursive;
+     ce_purary = 1});
+   (["ref"],
+    let tv = newgenvar () in
+    {ce_name = "newref";
+     ce_type = newgenarrow tv (newgenconstr stdlib_ref [tv]);
+     ce_vars = [tv];
+     ce_rec = Nonrecursive;
+     ce_purary = 1});
+   (["!"],
+    let tv = newgenvar () in
+    {ce_name = "getref";
+     ce_type = newgenarrow (newgenconstr stdlib_ref [tv]) tv;
+     ce_vars = [tv];
+     ce_rec = Nonrecursive;
+     ce_purary = 1});
+   ([":="],
+    let tv = newgenvar () in
+    {ce_name = "setref";
+     ce_type = newgenarrow (newgenconstr stdlib_ref [tv])
+       (newgenarrow tv Predef.type_unit);
+     ce_vars = [tv];
+     ce_rec = Nonrecursive;
+     ce_purary = 2});
+  ] @
+  List.map
+    (fun (ml, coq) ->
+      [ml],
+      {ce_name = coq;
        ce_type = int_to_int_to_int;
        ce_vars = [];
        ce_rec = Nonrecursive;
-       ce_purary = 3});
-     (["-"],
-      {ce_name = "Int63.sub";
-       ce_type = int_to_int_to_int;
-       ce_vars = [];
-       ce_rec = Nonrecursive;
-       ce_purary = 3});
-     (["*"],
-      {ce_name = "Int63.mul";
-       ce_type = int_to_int_to_int;
-       ce_vars = [];
-       ce_rec = Nonrecursive;
-       ce_purary = 3});
-     (["/"],
-      {ce_name = "Int63.div";
-       ce_type = int_to_int_to_int;
-       ce_vars = [];
-       ce_rec = Nonrecursive;
-       ce_purary = 3});
-     (["mod"],
-      {ce_name = "Int63.mod";
-       ce_type = int_to_int_to_int;
-       ce_vars = [];
-       ce_rec = Nonrecursive;
-       ce_purary = 3});
-     (["~-"],
-      {ce_name = "Int63.opp";
-       ce_type = int_to_int;
-       ce_vars = [];
-       ce_rec = Nonrecursive;
-       ce_purary = 2});
-     (["="],
+       ce_purary = 3})
+    [("+", "Int63.add"); ("-", "Int63.sub"); ("*", "Int63.mul");
+     ("/", "Int63.div"); ("mod", "Int63.mod")]
+  @ [
+    (["~-"],
+     {ce_name = "Int63.opp";
+      ce_type = int_to_int;
+      ce_vars = [];
+      ce_rec = Nonrecursive;
+      ce_purary = 2})
+  ] @
+  List.map
+    (fun (ml, coq) ->
+      [ml],
       let tv = newgenvar () in
-      {ce_name = "ml_eq";
+      {ce_name = coq;
        ce_vars = [tv];
        ce_type = newgenarrow tv (newgenarrow tv Predef.type_bool);
        ce_rec = Recursive;
-       ce_purary = 2});
-     (["<>"],
-      let tv = newgenvar () in
-      {ce_name = "ml_ne";
-       ce_vars = [tv];
-       ce_type = newgenarrow tv (newgenarrow tv Predef.type_bool);
-       ce_rec = Recursive;
-       ce_purary = 2});
-     (["<"],
-      let tv = newgenvar () in
-      {ce_name = "ml_lt";
-       ce_vars = [tv];
-       ce_type = newgenarrow tv (newgenarrow tv Predef.type_bool);
-       ce_rec = Recursive;
-       ce_purary = 2});
-     ([">"],
-      let tv = newgenvar () in
-      {ce_name = "ml_gt";
-       ce_vars = [tv];
-       ce_type = newgenarrow tv (newgenarrow tv Predef.type_bool);
-       ce_rec = Recursive;
-       ce_purary = 2});
-     (["<="],
-      let tv = newgenvar () in
-      {ce_name = "ml_le";
-       ce_vars = [tv];
-       ce_type = newgenarrow tv (newgenarrow tv Predef.type_bool);
-       ce_rec = Recursive;
-       ce_purary = 2});
-     ([">="],
-      let tv = newgenvar () in
-      {ce_name = "ml_ge";
-       ce_vars = [tv];
-       ce_type = newgenarrow tv (newgenarrow tv Predef.type_bool);
-       ce_rec = Recursive;
-       ce_purary = 2});
-   ]
+       ce_purary = 2})
+    [("=", "ml_eq"); ("<>", "ml_ne");
+     ("<", "ml_lt"); (">", "ml_gt");
+     ("<=", "ml_le"); (">=", "ml_ge")]
+ )
 
 let type_map = ref (init_type_map : coq_type_desc Path.Map.t)
 let term_map = ref (init_term_map : coq_term_desc Path.Map.t)
