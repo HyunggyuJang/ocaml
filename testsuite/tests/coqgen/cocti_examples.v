@@ -107,14 +107,11 @@ Definition ml_compare := compare_rec.
 Definition wrap_compare wrap T h x y : M bool :=
   do c <- compare_rec T h x y; Ret (wrap c).
 
-Definition ml_eq :=
-  wrap_compare (fun c => if c is Eq then true else false).
-
-Definition ml_lt :=
-  wrap_compare (fun c => if c is Lt then true else false).
-
-Definition ml_gt :=
-  wrap_compare (fun c => if c is Gt then true else false).
+Definition ml_eq := wrap_compare (fun c => if c is Eq then true else false).
+Definition ml_lt := wrap_compare (fun c => if c is Lt then true else false).
+Definition ml_gt := wrap_compare (fun c => if c is Gt then true else false).
+Definition ml_ge := wrap_compare (fun c => if c is Lt then false else true).
+Definition ml_le := wrap_compare (fun c => if c is Gt then false else true).
 
 End comparisons.
 

@@ -204,6 +204,20 @@ let init_term_map =
        ce_type = newgenarrow tv (newgenarrow tv Predef.type_bool);
        ce_rec = Recursive;
        ce_purary = 2});
+     (["<="],
+      let tv = newgenvar () in
+      {ce_name = "ml_le";
+       ce_vars = [tv];
+       ce_type = newgenarrow tv (newgenarrow tv Predef.type_bool);
+       ce_rec = Recursive;
+       ce_purary = 2});
+     ([">="],
+      let tv = newgenvar () in
+      {ce_name = "ml_ge";
+       ce_vars = [tv];
+       ce_type = newgenarrow tv (newgenarrow tv Predef.type_bool);
+       ce_rec = Recursive;
+       ce_purary = 2});
    ]
 
 let type_map = ref (init_type_map : coq_type_desc Path.Map.t)
@@ -906,14 +920,12 @@ Definition Fix T1 T2\
 \nDefinition wrap_compare wrap T h x y : M bool :=\
 \n  do c <- compare_rec T h x y; Ret (wrap c).\
 \n\
-\nDefinition ml_eq :=\
-\n  wrap_compare (fun c => if c is Eq then true else false).\
-\n\
-\nDefinition ml_lt :=\
-\n  wrap_compare (fun c => if c is Lt then true else false).\
-\n\
-\nDefinition ml_gt :=\
-\n  wrap_compare (fun c => if c is Gt then true else false).\n\n"
+\nDefinition ml_eq := wrap_compare (fun c => if c is Eq then true else false).\
+\nDefinition ml_lt := wrap_compare (fun c => if c is Lt then true else false).\
+\nDefinition ml_gt := wrap_compare (fun c => if c is Gt then true else false).\
+\nDefinition ml_ge := wrap_compare (fun c => if c is Lt then false else true).\
+\nDefinition ml_le := wrap_compare (fun c => if c is Gt then false else true).\
+\n"
   :: cmds
 
 open Format
