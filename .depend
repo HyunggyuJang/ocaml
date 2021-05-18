@@ -3854,6 +3854,28 @@ file_formats/linear_format.cmx : \
 file_formats/linear_format.cmi : \
     asmcomp/linear.cmi \
     asmcomp/cmm.cmi
+coqgen/coqcore.cmo : \
+    typing/types.cmi \
+    typing/typedtree.cmi \
+    typing/predef.cmi \
+    typing/path.cmi \
+    utils/misc.cmi \
+    parsing/location.cmi \
+    typing/ident.cmi \
+    typing/ctype.cmi \
+    typing/btype.cmi \
+    parsing/asttypes.cmi
+coqgen/coqcore.cmx : \
+    typing/types.cmx \
+    typing/typedtree.cmx \
+    typing/predef.cmx \
+    typing/path.cmx \
+    utils/misc.cmx \
+    parsing/location.cmx \
+    typing/ident.cmx \
+    typing/ctype.cmx \
+    typing/btype.cmx \
+    parsing/asttypes.cmi
 middle_end/closure/closure.cmo : \
     utils/warnings.cmi \
     lambda/switch.cmi \

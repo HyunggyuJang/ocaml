@@ -1125,7 +1125,7 @@ partialclean::
 .PHONY: depend
 depend: beforedepend
 	(for d in utils parsing typing bytecomp asmcomp middle_end \
-         lambda file_formats middle_end/closure middle_end/flambda \
+         lambda file_formats coqgen middle_end/closure middle_end/flambda \
          middle_end/flambda/base_types \
          driver toplevel toplevel/byte toplevel/native; \
 	 do \
