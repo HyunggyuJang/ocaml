@@ -1,6 +1,15 @@
 (**************************************************************************)
 (*                                                                        *)
-(*                             OCaml in Coq                               *)
+(*                                 OCaml                                  *)
+(*                                                                        *)
+(*             Jacques Garrigue, Nagoya University                        *)
+(*                                                                        *)
+(*   Copyright 2021 Institut National de Recherche en Informatique et     *)
+(*     en Automatique.                                                    *)
+(*                                                                        *)
+(*   All rights reserved.  This file is distributed under the terms of    *)
+(*   the GNU Lesser General Public License version 2.1, with the          *)
+(*   special exception on linking described in the file LICENSE.          *)
 (*                                                                        *)
 (**************************************************************************)
 
@@ -403,7 +412,7 @@ let fresh_term_names ~names name =
   fresh_name ~name (used_term_names names)
 
 open Typedtree
-  
+
 let vars_names tbl =
   Ident.fold_name (fun _ {ce_name} l -> ce_name :: l) tbl []
 
@@ -555,7 +564,7 @@ let rec transl_exp ~(tvars : string TypeMap.t) ~(vars : coq_term_desc Ident.tbl)
           id_descs
           vars
       in
-      let pbody = transl_exp ~tvars ~vars body in      
+      let pbody = transl_exp ~tvars ~vars body in
       let pat = name_tuple names in
       let ct = make_tuple (List.map (fun ct -> ct.pterm) ctl) in
       let names = Names.of_list (vars_names vars) in
@@ -645,12 +654,12 @@ let rec transl_exp ~(tvars : string TypeMap.t) ~(vars : coq_term_desc Ident.tbl)
           {pterm = ctapp ct.pterm args; prec; pary = ct.pary - List.length args}
         else let args1, args2 = cut ct.pary args in
         let ct1 = ctapp ct.pterm args1 in
-        {pterm = 
+        {pterm =
          List.fold_left (fun ct1 arg -> CTapp (CTid"AppM", [ct1; arg]))
            ct1 args2;
          prec; pary = 0}
       in
-      if binds = [] then ct else 
+      if binds = [] then ct else
       List.fold_left
         (fun ct (v,arg) ->
           {ct with pterm = ctBind arg (CTabs (v,None,ct.pterm))})
@@ -665,7 +674,7 @@ let rec transl_exp ~(tvars : string TypeMap.t) ~(vars : coq_term_desc Ident.tbl)
         try
           let ct = Path.Map.find path !type_map in
           List.assoc cd.cstr_name ct.ct_constrs, tl
-        with Not_found -> 
+        with Not_found ->
           not_allowed ~loc
             ("The constructor " ^ cd.cstr_name ^ " of type " ^ Path.name path)
       in
