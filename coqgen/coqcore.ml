@@ -22,6 +22,7 @@ type coq_sort = Type | Set | Prop
 
 type coq_term =
     CTid of string
+  | CTcstr of string
   | CTapp of coq_term * coq_term list
   | CTabs of string * coq_term option * coq_term
   | CTsort of coq_sort
@@ -33,6 +34,7 @@ type coq_term =
   | CTif of coq_term * coq_term * coq_term
 
 let ctid s = CTid s
+let ctcstr s = CTcstr s
 let ctapp ct args = if args = [] then ct else CTapp (ct, args)
 let ctRet ct = CTapp (CTid "Ret", [ct])
 let ctBind m f = CTapp (CTid "Bind", [m; f])
@@ -230,6 +232,7 @@ let may_app f o x =
 
 let rec coq_vars = function
   | CTid x -> Names.singleton x
+  | CTcstr _ -> Names.empty
   | CTapp (ct, ctl) ->
       List.fold_left Names.union (coq_vars ct) (List.map coq_vars ctl)
   | CTabs (x, cto, ct) ->
@@ -260,6 +263,8 @@ and coq_vars_opt = function
 let rec coq_term_subst subs = function
   | CTid x as ct ->
       if Vars.mem x subs then Vars.find x subs else ct
+  | CTcstr _ as ct ->
+      ct
   | CTapp (x, l) ->
       CTapp (coq_term_subst subs x, List.map (coq_term_subst subs) l)
   | CTabs (x, t, b) ->
@@ -948,6 +953,7 @@ open Format
 
 let priority_level = function
   | CTid _ -> 10
+  | CTcstr _ -> 10
   | CTprod (None, _, _) -> 2
   | CTapp (CTid "*", [_;_]) -> 3
   | CTapp (CTid "Bind", [_;CTabs _]) -> 0
@@ -979,7 +985,7 @@ let rec extract_args = function
 let rec print_term_rec lv ppf ty =
   if lv > priority_level ty then fprintf ppf "(%a)" (print_term_rec 0) ty else
   match ty with
-  | CTid s -> pp_print_string ppf s
+  | CTid s | CTcstr s -> pp_print_string ppf s
   | CTprod (None, t1, t2) ->
       fprintf ppf "@[%a ->@ %a@]" (print_term_rec 3) t1 (print_term_rec 2) t2
   | CTapp (CTid "*", [t1; t2]) ->
