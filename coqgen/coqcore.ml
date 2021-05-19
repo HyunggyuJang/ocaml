@@ -50,6 +50,7 @@ type coq_type_desc =
     { ct_name: string;
       ct_args: string list;
       ct_def: coq_def_kind;
+      ct_constrs: (string * string) list;
       ct_compare: coq_term option;
     }
 
@@ -80,7 +81,7 @@ let init_type_map =
     Path.Map.empty
     [
      (stdlib, ["ref"],
-      {ct_name = "ml_ref"; ct_args = ["a"]; ct_def = CT_abs;
+      {ct_name = "ml_ref"; ct_args = ["a"]; ct_def = CT_abs; ct_constrs = [];
        ct_compare = Some (
        ctBind (ctapp (CTid"getref") [CTid"T1"; CTid"x"])
          (CTabs ("x", None, ctBind (ctapp (CTid"getref") [CTid"T1"; CTid"y"])
@@ -89,15 +90,19 @@ let init_type_map =
      });
      (Predef.path_int, [],
       {ct_name = "ml_int"; ct_args = []; ct_def = CT_def(CTid "Int63.int");
+       ct_constrs = [];
        ct_compare = Some (ctRet (CTapp (CTid"Int63.compare", xy)))});
      (Predef.path_unit, [],
       {ct_name = "ml_unit"; ct_args = []; ct_def = CT_def(CTid "unit");
+       ct_constrs = ["()", "tt"];
        ct_compare = Some (ctRet (CTid "Eq"))});
      (Predef.path_bool, [],
       {ct_name = "ml_bool"; ct_args = []; ct_def = CT_def(CTid "bool");
+       ct_constrs = List.map (fun x -> (x,x)) ["true"; "false"];
        ct_compare = Some (ctRet (CTapp (CTid"Bool.compare", xy)))});
      (Predef.path_list, [],
       {ct_name = "ml_list"; ct_args = ["a"];
+       ct_constrs = [("[]", "@nil"); ("::", "@cons")];
        ct_def = CT_def (CTapp (CTid "list", [CTid "a"]));
        ct_compare = None;
        (*Some (
@@ -105,7 +110,7 @@ let init_type_map =
                 (CTpair*)
      });
      (coqgen, ["arrow"],
-      {ct_name = "ml_arrow"; ct_args = ["a"; "b"];
+      {ct_name = "ml_arrow"; ct_args = ["a"; "b"]; ct_constrs = [];
        ct_def = CT_def (CTprod (None, CTid"a", CTapp(CTid"M", [CTid"b"])));
        ct_compare = None});
     ]
@@ -191,7 +196,11 @@ let get_used_top_names =
     let tm = !type_map and em = !term_map in
     if tm != !last_type_map || em != !last_term_map then begin
       let names =
-        Path.Map.fold (fun _ td -> Names.add td.ct_name) tm Names.empty in
+        Path.Map.fold
+          (fun _ td ->
+            List.fold_right Names.add
+              (td.ct_name :: List.map snd td.ct_constrs))
+          tm Names.empty in
       let names =
         Path.Map.fold (fun _ td -> Names.add td.ce_name) em names in
       used_top_names := names;
@@ -485,6 +494,25 @@ let rec insert_guard ct =
       CTmatch (CTid "h", None,
                [(CTapp(CTid"S",[CTid"h"]),ct); (CTid"_", CTid"Fail")])
 
+let is_primitive s =
+  String.length s >= 2 && s.[0] = '@'
+
+let type_ident ~loc ~tvars env desc ty =
+  let snap = Btype.snapshot () in
+  let ivars = find_instantiation ~loc env desc ty in
+  (*List.iter (Format.eprintf "ivar=%a@." Printtyp.raw_type_expr) ivars;*)
+  let tvars = refresh_tvars tvars in
+  let f = CTid desc.ce_name in
+  let args = List.map (transl_type ~loc tvars) ivars in
+  let args =
+    if is_primitive desc.ce_name
+    then List.map (fun x -> CTapp (coq_tid, [x])) args
+    else args in
+  Btype.backtrack snap;
+  let args =
+    if desc.ce_rec = Recursive then args @ [CTid"h"] else args in
+  {pterm = ctapp f args; prec = desc.ce_rec; pary = desc.ce_purary}
+
 let rec transl_exp ~(tvars : string TypeMap.t) ~(vars : coq_term_desc Ident.tbl)
     e =
   let loc = e.exp_loc in
@@ -500,16 +528,7 @@ let rec transl_exp ~(tvars : string TypeMap.t) ~(vars : coq_term_desc Ident.tbl)
           with Not_found ->
             not_allowed ~loc ("Identifier " ^ Path.name path)
       in
-      let snap = Btype.snapshot () in
-      let ivars = find_instantiation ~loc e.exp_env desc e.exp_type in
-      (*List.iter (Format.eprintf "ivar=%a@." Printtyp.raw_type_expr) ivars;*)
-      let tvars = refresh_tvars tvars in
-      let f = CTid desc.ce_name in
-      let args = List.map (transl_type ~loc tvars) ivars in
-      Btype.backtrack snap;
-      let args =
-        if desc.ce_rec = Recursive then args @ [CTid"h"] else args in
-      {pterm = ctapp f args; prec = desc.ce_rec; pary = desc.ce_purary}
+      type_ident ~loc ~tvars e.exp_env desc e.exp_type
   | Texp_constant (Const_int n) ->
       {pterm = CTid (string_of_int n ^ "%int63"); prec = Nonrecursive;
        pary = 1 }
@@ -631,6 +650,42 @@ let rec transl_exp ~(tvars : string TypeMap.t) ~(vars : coq_term_desc Ident.tbl)
         (fun ct (v,arg) ->
           {ct with pterm = ctBind arg (CTabs (v,None,ct.pterm))})
         (nullary ~names ct) binds
+  | Texp_construct (_, cd, []) ->
+      let name, tl =
+        let path, tl =
+          match repr cd.cstr_res with
+          | {desc = Tconstr (path, tl, _)} -> path, tl
+          | _ -> assert false
+        in
+        try
+          let ct = Path.Map.find path !type_map in
+          List.assoc cd.cstr_name ct.ct_constrs, tl
+        with Not_found -> 
+          not_allowed ~loc
+            ("The constructor " ^ cd.cstr_name ^ " of type " ^ Path.name path)
+      in
+      let ce =
+        {ce_name = name;
+         ce_type = List.fold_right newgenarrow cd.cstr_args cd.cstr_res;
+         ce_vars = tl;
+         ce_rec = Nonrecursive;
+         ce_purary = cd.cstr_arity + 1}
+      in
+      type_ident ~loc ~tvars e.exp_env ce e.exp_type
+  | Texp_construct (lid, cd, args) ->
+      let ty =
+        List.fold_right
+          (fun arg t2 ->
+            let t1 = arg.exp_type in
+            newty2 (min t1.level t2.level)
+              (Tarrow (Nolabel, arg.exp_type, t2, Cok)))
+          args e.exp_type
+      in
+      let constr =
+        {e with exp_desc = Texp_construct (lid, cd, []); exp_type = ty} in
+      let args = List.map (fun e -> (Nolabel, Some e)) args in
+      let app = {e with exp_desc = Texp_apply (constr, args)} in
+      transl_exp ~tvars ~vars app
   | Texp_ifthenelse (be, e1, e2) ->
       let ct = transl_exp ~tvars ~vars be
       and ct1 = transl_exp ~tvars ~vars e1

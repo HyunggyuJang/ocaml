@@ -37,10 +37,15 @@ let fib2 n =
   let l1 = ref 1 in let l2 = ref 1 in
   iter_int n
     (fun _ -> let x = !l1 in let y = !l2 in l1 := y; l2 := x+y)
-    (l1 := 1);
+    ();
   !l1 ;;
 
 fib2 1000 ;;
+
+let rec iota m n =
+  if n <= 0 then [] else m :: iota (m+1) (n-1) ;;
+
+iota 1 10;;
 
 let omega n =
   let r = ref (fun x -> x) in
