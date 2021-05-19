@@ -679,12 +679,7 @@ let rec transl_exp ~(tvars : string TypeMap.t) ~(vars : coq_term_desc Ident.tbl)
       type_ident ~loc ~tvars e.exp_env ce e.exp_type
   | Texp_construct (lid, cd, args) ->
       let ty =
-        List.fold_right
-          (fun arg t2 ->
-            let t1 = arg.exp_type in
-            newty2 (min t1.level t2.level)
-              (Tarrow (Nolabel, arg.exp_type, t2, Cok)))
-          args e.exp_type
+        List.fold_right (fun arg -> newgenarrow arg.exp_type) args e.exp_type
       in
       let constr =
         {e with exp_desc = Texp_construct (lid, cd, []); exp_type = ty} in
