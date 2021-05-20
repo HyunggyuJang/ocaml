@@ -52,5 +52,15 @@ let omega n =
   let delta i = !r i in
   r := delta; delta n ;;
 
+let fixpt f =
+  let r = ref (fun x -> loop x) in
+  let delta i = f !r i in
+  r := delta; delta ;;
+
+fixpt (fun fib n -> if n <= 1 then 1 else fib (n-1) + fib (n-2)) 10;;
+
 (* loops *)
 omega 1;;
+
+(* loops *)
+fixpt (fun f -> f) 0;;

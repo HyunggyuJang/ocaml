@@ -565,6 +565,8 @@ let rec transl_exp ~(tvars : string TypeMap.t) ~(vars : coq_term_desc Ident.tbl)
           vars
       in
       let pbody = transl_exp ~tvars ~vars body in
+      let prec = List.fold_right (fun ct -> or_rec ct.prec) ctl pbody.prec in
+      let pbody = {pbody with prec} in
       let pat = name_tuple names in
       let ct = make_tuple (List.map (fun ct -> ct.pterm) ctl) in
       let names = Names.of_list (vars_names vars) in
@@ -743,13 +745,13 @@ and transl_binding ~(tvars : string TypeMap.t) ~(vars : coq_term_desc Ident.tbl)
     | _ -> vars
   in
   let ct = transl_exp ~tvars ~vars vb.vb_expr in
-  let prec = ct.prec in
-  let ct, desc =
+  let ct, desc, prec =
     match rec_flag with
     | Recursive ->
         let names = Names.of_list (vars_names vars) in
         let ct = shrink_purary ~names ct desc.ce_purary in
-        CTabs ("h", Some (CTid"nat"), insert_guard ct.pterm), desc
+        CTabs ("h", Some (CTid"nat"), insert_guard ct.pterm), desc,
+        Nonrecursive
       (*
         let ct =
           if purary = desc.ce_purary then ct else
@@ -771,10 +773,7 @@ and transl_binding ~(tvars : string TypeMap.t) ~(vars : coq_term_desc Ident.tbl)
         {desc with ce_purary = 0}
       *)
     | Nonrecursive ->
-        let pt =
-          if ct.prec = Recursive then CTabs ("h", Some (CTid"nat"), ct.pterm)
-          else ct.pterm in
-        pt, {desc with ce_purary = ct.pary; ce_rec = ct.prec}
+        ct.pterm, {desc with ce_purary = ct.pary}, ct.prec
   in
   let ct =
      List.fold_right (fun tv ct -> CTabs (tv, Some ml_tid, ct))
@@ -795,20 +794,24 @@ let apply_recursive rec_flag ct =
   coq_term_subst (Vars.add "h" (CTid"100000") Vars.empty) ct
   (* CTlet ("h", None, CTid"1000", ct) *)
 
+let rec abstract_recursive ct =
+  match ct with
+  | CTabs (v, Some tid, ct) when tid = ml_tid ->
+      CTabs (v, Some tid, abstract_recursive ct)
+  | _ ->
+      CTabs ("h", Some (CTid"nat"), ct)
+
 let rec transl_structure ~(vars : coq_term_desc Ident.tbl) = function
     [] -> []
   | it :: rem -> match it.str_desc with
     | Tstr_eval (e, _) ->
-        let _fvars, fvar_names, tvars =
-          enter_free_variables TypeMap.empty e.exp_type in
+        Ctype.unify_var e.exp_env (Ctype.newvar ()) e.exp_type;
+        close_type e.exp_type;
+        let tvars = TypeMap.empty in
         let pt = transl_exp ~tvars ~vars e in
         let args =
           if pt.pary = 0 then [CTid "empty_env"] else [] in
         let ct = ctapp pt.pterm args in
-        let ct =
-           List.fold_right (fun tv ct -> CTabs (tv, Some ml_tid, ct))
-             fvar_names ct
-        in
         let ct = apply_recursive pt.prec ct in
         CTeval ct :: transl_structure ~vars rem
     | Tstr_value (rec_flag, [vb]) ->
@@ -816,14 +819,18 @@ let rec transl_structure ~(vars : coq_term_desc Ident.tbl) = function
           transl_binding ~tvars:TypeMap.empty ~vars ~rec_flag vb in
         let name, vars =
           match id with
-          | Some id -> Ident.name id, Ident.add id desc vars
+          | Some id ->
+              let desc = {desc with ce_rec = or_rec desc.ce_rec ct.prec} in
+              Ident.name id, Ident.add id desc vars
           | None -> assert false
         in
         let rem =  transl_structure ~vars rem in
         if desc.ce_rec = Recursive then
           CTfixpoint (name, ct.pterm) :: rem
         else
-          let ct = apply_recursive ct.prec ct.pterm in
+          let ct = 
+            if ct.prec = Recursive then abstract_recursive ct.pterm
+            else ct.pterm in
           CTdefinition (name, ct) :: rem
     | _ ->
         not_allowed ~loc:it.str_loc "This structure item"
@@ -929,14 +936,7 @@ Module REFmonadML := REFmonad (MLtypes).\n\
 Export REFmonadML.\n\
 \n\
 Definition coq_type := MLtypes.coq_type M.\n\
-Definition empty_env := mkEnv 0%int63 nil.\n\
-\n\
-Definition Fix T1 T2\
-\n  (F : coq_type (ml_arrow (ml_arrow T1 T2) (ml_arrow T1 T2)))\
-\n  : M (coq_type (ml_arrow T1 T2)) :=\
-\n  do r <- newref (ml_arrow T1 T2) (fun x => Fail);\
-\n  let f x :=  do f <- getref _ r; AppM (F f) x in\
-\n  do _ <- setref _ r f; Ret f.\
+Definition empty_env := mkEnv 0%int63 nil.\
 \n" ::
   make_compare_rec () ::
   CTverbatim "Definition ml_compare := compare_rec.\
