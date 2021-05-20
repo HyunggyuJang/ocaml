@@ -2,14 +2,14 @@
 
 let ref' = ref;;
 
-let id x = x;;
+let id h = h;;
 
 let incr r =
   let x = !r in r := x + 1;;
 
 let r = ref 1 in incr r;;
 
-let rec loop x = loop x;;
+let rec loop h = loop h;;
 
 let rec fib n =
   if n <= 1 then 1 else fib (n-1) + fib (n-2);;
@@ -57,7 +57,10 @@ let fixpt f =
   let delta i = f !r i in
   r := delta; delta ;;
 
-fixpt (fun fib n -> if n <= 1 then 1 else fib (n-1) + fib (n-2)) 10;;
+let fib =
+  fixpt (fun fib n -> if n <= 1 then 1 else fib (n-1) + fib (n-2));;
+
+fib 10;;
 
 (* loops *)
 omega 1;;

@@ -201,8 +201,8 @@ let term_map = ref (init_term_map : coq_term_desc Path.Map.t)
 
 let get_used_top_names =
   let used_top_names = ref Names.empty in
-  let last_type_map = ref !type_map in
-  let last_term_map = ref !term_map in
+  let last_type_map = ref Path.Map.empty in
+  let last_term_map = ref Path.Map.empty in
   fun () ->
     let tm = !type_map and em = !term_map in
     if tm != !last_type_map || em != !last_term_map then begin
@@ -728,7 +728,7 @@ and transl_binding ~(tvars : string TypeMap.t) ~(vars : coq_term_desc Ident.tbl)
   let name, id =
     match vb.vb_pat.pat_desc with
       Tpat_any -> "_", None
-    | Tpat_var (id, _) -> Ident.name id, Some id
+    | Tpat_var (id, _) -> fresh_term_name vars ~name:(Ident.name id), Some id
     | Tpat_construct (_, {cstr_name="()"}, [], _) -> "_", None
     | _ -> not_allowed ~loc:vb.vb_pat.pat_loc "This pattern"
   in
@@ -821,7 +821,7 @@ let rec transl_structure ~(vars : coq_term_desc Ident.tbl) = function
           match id with
           | Some id ->
               let desc = {desc with ce_rec = or_rec desc.ce_rec ct.prec} in
-              Ident.name id, Ident.add id desc vars
+              desc.ce_name, Ident.add id desc vars
           | None -> assert false
         in
         let rem =  transl_structure ~vars rem in
