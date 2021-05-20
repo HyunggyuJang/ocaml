@@ -62,6 +62,13 @@ let fib =
 
 fib 10;;
 
+(* need to fix the semantics of toplevel side effects *)
+let r = ref [3] ;;
+let z = r := 1 :: !r; !r;;
+!r;;
+z;;
+let r = r in r := 1 :: !r; !r;;
+
 (* loops *)
 omega 1;;
 
