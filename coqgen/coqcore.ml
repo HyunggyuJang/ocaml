@@ -828,7 +828,7 @@ let rec transl_structure ~(vars : coq_term_desc Ident.tbl) = function
         if desc.ce_rec = Recursive then
           CTfixpoint (name, ct.pterm) :: rem
         else
-          let ct = 
+          let ct =
             if ct.prec = Recursive then abstract_recursive ct.pterm
             else ct.pterm in
           CTdefinition (name, ct) :: rem
