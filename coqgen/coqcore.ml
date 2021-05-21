@@ -47,6 +47,7 @@ let ctcstr s = CTcstr s
 let ctapp ct args = if args = [] then ct else CTapp (ct, args)
 let ctRet ct = CTapp (CTid "Ret", [ct])
 let ctBind m f = CTapp (CTid "Bind", [m; f])
+let ctpair a b = CTapp (CTcstr "pair", [a;b])
 
 let ml_type = "ml_type"
 let ml_tid = CTid ml_type
@@ -518,6 +519,71 @@ let rec insert_guard ct =
       CTmatch (CTid "h", None,
                [(CTapp(CTid"S",[CTid"h"]),ct); (CTid"_", CTid"Fail")])
 
+let string_of_constant ~loc = function
+  | Const_int x ->
+      let s = string_of_int x ^ "%int63" in
+      if x < 0 then "("^s^")" else s
+  | Const_char c ->
+      let s = Char.escaped c in
+      let s =
+        if String.length s = 1 then s else
+        Printf.sprintf "%03d" (Char.code c) in
+      Printf.sprintf "\"%s\"%%ascii" s
+  | Const_string (s, _, _) ->
+      Printf.sprintf "\"%s\"%%string" s
+  | _ ->
+      not_allowed ~loc "This constant"
+
+let find_constructor ~loc ~vars cd =
+  let path, tl =
+    match repr cd.cstr_res with
+    | {desc = Tconstr (path, tl, _)} -> path, tl
+    | _ -> assert false
+  in
+  try
+    let ct = Path.Map.find path vars.type_map in
+    List.assoc cd.cstr_name ct.ct_constrs, tl
+  with Not_found ->
+    not_allowed ~loc
+      ("The constructor " ^ cd.cstr_name ^ " of type " ^ Path.name path)
+
+let rec transl_pat : type k. vars:_ -> k general_pattern -> _ =
+  fun ~vars pat ->
+  let loc = pat.pat_loc in
+  match pat.pat_desc with
+  | Tpat_any -> (CTid "_", vars)
+  | Tpat_var (id, _) ->
+      let name = fresh_name ~vars (Ident.name id) in
+      let desc =
+        { ce_name = name; ce_type = pat.pat_type;
+          ce_vars = []; ce_rec = Nonrecursive; ce_purary = 1 } in
+      let vars = add_term (Path.Pident id) desc vars in
+      (CTid name, vars)
+  | Tpat_constant cst ->
+      (CTcstr (string_of_constant ~loc cst), vars)
+  | Tpat_tuple [] ->
+      (CTcstr "()", vars)
+  | Tpat_tuple (pat1 :: patl) ->
+      List.fold_left
+        (fun (ctt, vars) pat ->
+          let (ct, vars) = transl_pat ~vars pat in (ctpair ctt ct, vars))
+        (transl_pat ~vars pat1) patl
+  | Tpat_construct (_, cd, patl, _) ->
+      let (ctl, vars) =
+        List.fold_left
+          (fun (ctl, vars) pat ->
+            let (ct, vars) = transl_pat ~vars pat in
+            (ct :: ctl, vars))
+          ([],vars) patl
+      in
+      let name, tl = find_constructor ~loc ~vars cd in
+      let args = List.map (fun _ -> CTid "_") tl @ List.rev ctl in
+      (ctapp (CTcstr name) args, vars)
+  | Tpat_value pat ->
+      transl_pat ~vars (pat :> value general_pattern)
+  | _ ->
+      not_allowed ~loc "transl_pat : This pattern"
+
 let is_primitive s =
   String.length s >= 2 && s.[0] = '@'
 
@@ -608,19 +674,9 @@ let rec transl_exp ~vars e =
        prec = or_rec ct1.prec ct2.prec; pary = 0}
   | Texp_function
       {arg_label = Nolabel; param = _;
-       cases = [{c_lhs = {pat_desc; pat_type; pat_loc};
+       cases = [{c_lhs = {pat_type; pat_loc} as pat;
                  c_rhs; c_guard = None}]} ->
-      let (arg, vars) =
-        match pat_desc with
-          Tpat_any -> "_", vars
-        | Tpat_var (id, _) ->
-            let arg = fresh_name ~vars (Ident.name id) in
-            let desc =
-              {ce_name = arg; ce_type = pat_type;
-               ce_vars = []; ce_purary = 1; ce_rec = Nonrecursive} in
-            arg, add_term (Path.Pident id) desc vars
-        | _ -> not_allowed ~loc:pat_loc "This pattern"
-      in
+      let (arg, vars) = transl_pat ~vars pat in
       let cty = transl_type ~loc:pat_loc ~vars pat_type in
       let cty = CTapp(coq_tid,[cty]) in
       let ct = transl_exp ~vars c_rhs in
@@ -634,8 +690,14 @@ let rec transl_exp ~vars e =
             let cty = if ct.pary = 0 then CTapp (CTid"M", [cty]) else cty in
             {ct with pterm = CTann (pt, cty)}
       in
-      {pterm = CTabs (arg, Some cty, ct.pterm);
-       prec  = ct.prec; pary  = ct.pary + 1}
+      let pterm =
+        match arg with
+          CTid v -> CTabs (v, Some cty, ct.pterm)
+        | pat ->
+            let v = fresh_name ~vars "v" in
+            CTabs (v, Some cty, CTmatch (CTid v, None, [pat, ct.pterm]))
+      in
+      {pterm; prec  = ct.prec; pary  = ct.pary + 1}
   | Texp_apply (f, args)
     when List.for_all (function (Nolabel,Some _) -> true | _ -> false) args ->
       let args =
@@ -672,19 +734,7 @@ let rec transl_exp ~vars e =
           {ct with pterm = ctBind arg (CTabs (v,None,ct.pterm))})
         (nullary ~vars ct) binds
   | Texp_construct (_, cd, []) ->
-      let name, tl =
-        let path, tl =
-          match repr cd.cstr_res with
-          | {desc = Tconstr (path, tl, _)} -> path, tl
-          | _ -> assert false
-        in
-        try
-          let ct = Path.Map.find path vars.type_map in
-          List.assoc cd.cstr_name ct.ct_constrs, tl
-        with Not_found ->
-          not_allowed ~loc
-            ("The constructor " ^ cd.cstr_name ^ " of type " ^ Path.name path)
-      in
+      let name, tl = find_constructor ~loc ~vars cd in
       let ce =
         {ce_name = name;
          ce_type = List.fold_right newgenarrow cd.cstr_args cd.cstr_res;
@@ -724,8 +774,39 @@ let rec transl_exp ~vars e =
         let ct1 = shrink_purary ~vars ct1 pary
         and ct2 = shrink_purary ~vars ct2 pary in
         {pterm = CTif (ct.pterm, ct1.pterm, ct2.pterm); prec; pary}
+  | Texp_match (e, cases, partial) ->
+      let ct = transl_exp ~vars e in
+      let ccases = List.map (transl_cases ~vars) cases in
+      let lhs, ctl = List.split ccases in
+      let prec =
+        if List.exists (fun ct -> ct.prec = Recursive) (ct :: ctl)
+        then Recursive else Nonrecursive
+      in
+      let pary =
+        if partial = Partial then 0 else
+        List.fold_left (fun pary ct -> min pary ct.pary) ct.pary ctl in
+      let ctl =
+        List.map2 (fun (_, vars) ct -> (shrink_purary ~vars ct pary).pterm)
+          lhs ctl
+      in
+      let ccases = List.combine (List.map fst lhs) ctl in
+      let ccases =
+        if partial = Partial then ccases @ [CTid"_", CTid"Fail"] else ccases in
+      let pterm =
+        if ct.pary = 0 then
+          let v = fresh_name ~vars "v" in
+          ctBind ct.pterm (CTabs (v, None, CTmatch (CTid v, None, ccases)))
+        else CTmatch (ct.pterm, None, ccases)
+      in
+      {pterm; prec; pary}
   | _ ->
       not_allowed ~loc "This kind of term"
+
+and transl_cases ~vars case =
+  Option.iter (fun e -> not_allowed ~loc:e.exp_loc "This guard") case.c_guard;
+  let ct_lhs, vars = transl_pat ~vars case.c_lhs in
+  let ct_rhs = transl_exp ~vars case.c_rhs in
+  ((ct_lhs, vars), ct_rhs)
 
 and transl_binding ~vars ~rec_flag vb =
   let name, id =

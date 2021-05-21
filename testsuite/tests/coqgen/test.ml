@@ -24,6 +24,14 @@ let rec ack m n =
 
 ack 3 7;;
 
+let rec map f l =
+  match l with
+  | [] -> []
+  | a :: l -> f a :: map f l
+;;
+
+map (fun x -> x + 1) [3;2;1] ;;
+
 let rec iter_int n f x =
   if n < 1 then x else iter_int (n-1) f (f x);;
 
