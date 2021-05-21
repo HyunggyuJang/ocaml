@@ -751,7 +751,11 @@ let rec transl_exp ~vars e =
         {e with exp_desc = Texp_construct (lid, cd, []); exp_type = ty} in
       let args = List.map (fun e -> (Nolabel, Some e)) args in
       let app = {e with exp_desc = Texp_apply (constr, args)} in
-      transl_exp ~vars app
+      begin match transl_exp ~vars app with
+      | {pterm = CTapp (CTapp (f, args1), args2)} as ct ->
+          {ct with pterm = CTapp (f, args1 @ args2)}
+      | ct -> ct
+      end
   | Texp_ifthenelse (be, e1, e2) ->
       let ct = transl_exp ~vars be
       and ct1 = transl_exp ~vars e1
@@ -1063,7 +1067,9 @@ let priority_level = function
   | CTprod (None, _, _) -> 2
   | CTapp (CTid "*", [_;_]) -> 3
   | CTapp (CTid "Bind", [_;CTabs _]) -> 0
-  | CTapp _ -> 4
+  | CTapp (CTid "@cons", [_;_;_]) -> 0
+  | CTapp (CTcstr "@cons", [_;_;_]) -> 0
+  | CTapp _ -> 8
   | CTabs _ -> 0
   | CTsort _ -> 10
   | CTprod _ -> 0
@@ -1095,7 +1101,7 @@ let rec print_term_rec lv ppf ty =
   | CTprod (None, t1, t2) ->
       fprintf ppf "@[%a ->@ %a@]" (print_term_rec 3) t1 (print_term_rec 2) t2
   | CTapp (CTid "*", [t1; t2]) ->
-      fprintf ppf "@[%a ->@ %a@]" (print_term_rec 3) t1 (print_term_rec 4) t2
+      fprintf ppf "@[%a ->@ %a@]" (print_term_rec 3) t1 (print_term_rec 8) t2
   | CTapp (CTid "Bind", [ct1; CTabs (x, cto, ct2)]) ->
       fprintf ppf "@[do %s%a <-@ %a;@ %a@]"
         x print_type_ann cto
@@ -1103,9 +1109,12 @@ let rec print_term_rec lv ppf ty =
         print_term ct2
   | CTapp (CTid "S", [t1]) ->
       fprintf ppf "@[%a.+1@]" (print_term_rec 10) t1
+  | CTapp (CTid "@cons", [_;t1;t2])
+  | CTapp (CTcstr "@cons", [_;t1;t2]) ->
+      fprintf ppf "@[%a ::@ %a@]" (print_term_rec 8) t1 (print_term_rec 0) t2
   | CTapp (f, args) ->
-      fprintf ppf "@[<2>%a@ %a@]" (print_term_rec 4) f
-        (pp_print_list ~pp_sep:pp_print_space (print_term_rec 5)) args
+      fprintf ppf "@[<2>%a@ %a@]" (print_term_rec 8) f
+        (pp_print_list ~pp_sep:pp_print_space (print_term_rec 9)) args
   | CTabs _ ->
       fprintf ppf "@[<hov2>@[<hov2>fun";
       let t1 = print_args false ppf ty in
