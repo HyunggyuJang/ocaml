@@ -805,16 +805,19 @@ let rec abstract_recursive ct =
 
 let close_top ~vars ct =
   let fvars = coq_vars ct.pterm in
-  let top_exec = Names.inter fvars (Names.of_list vars.top_exec) in
-  if Names.is_empty top_exec then ct else
-  Path.Map.fold (fun _ {ce_name = v; ce_rec = r} ct ->
-    if not (Names.mem v top_exec) then ct else
-    let vt =
-      if r = Recursive then ctapp (CTid v) [CTid "h"]
-      else CTid v in
-    {pterm = ctBind vt (CTabs (v, None, (nullary ~vars ct).pterm));
-     prec = or_rec r ct.prec; pary = 0})
-    vars.term_map ct
+  let is_pure =
+    ct.pary > 0 && Names.disjoint fvars (Names.of_list vars.top_exec) in
+  if is_pure then ct.pterm else
+  let ct = (nullary ~vars ct).pterm in
+  let fvars =
+    match vars.top_exec with [] -> fvars | v :: _ -> Names.add v fvars in
+  let ct =
+    List.fold_left
+      (fun ct v ->
+        if not (Names.mem v fvars) then ct else
+        ctBind (CTabs ("_", None, CTid v)) (CTabs (v, None, ct)))
+      ct vars.top_exec in
+  ctapp ct [CTid "empty_env"]
 
 let rec transl_structure ~vars = function
     [] -> ([], vars)
@@ -823,32 +826,33 @@ let rec transl_structure ~vars = function
         Ctype.unify_var e.exp_env (Ctype.newvar ()) e.exp_type;
         close_type e.exp_type;
         let pt = transl_exp ~vars e in
-        let pt = close_top ~vars pt in
-        let ct = apply_recursive pt.prec pt.pterm in
-        let args =
-          if pt.pary = 0 then [CTid "empty_env"] else [] in
-        let ct = ctapp ct args in
+        let ct = close_top ~vars pt in
+        let ct = apply_recursive pt.prec ct in
         let cmds, vars = transl_structure ~vars rem in
         (CTeval ct :: cmds, vars)
     | Tstr_value (rec_flag, [vb]) ->
-        let ((id, desc), ct) =
-          transl_binding ~vars ~rec_flag vb in
-        let ct = close_top ~vars ct in
-        let name, vars =
+        let ((id, desc), pt) = transl_binding ~vars ~rec_flag vb in
+        let name, vars' =
           match id with
           | Some id ->
-              let desc = {desc with ce_rec = or_rec desc.ce_rec ct.prec} in
+              let prec = if pt.pary > 0 then pt.prec else Nonrecursive in
+              let desc = {desc with ce_rec = or_rec desc.ce_rec prec} in
               desc.ce_name, add_term ~toplevel:true (Path.Pident id) desc vars
           | None -> assert false
         in
-        let cmds, vars = transl_structure ~vars rem in
+        let cmds, vars' = transl_structure ~vars:vars' rem in
         if desc.ce_rec = Recursive then
-          CTfixpoint (name, ct.pterm) :: cmds, vars
+          if pt.pary = 0 then
+            not_allowed ~loc:it.str_loc "This recursive definition"
+          else
+            CTfixpoint (name, pt.pterm) :: cmds, vars'
         else
+          let ct = close_top ~vars pt in
           let ct =
-            if ct.prec = Recursive then abstract_recursive ct.pterm
-            else ct.pterm in
-          CTdefinition (name, ct) :: cmds, vars
+            if ct = pt.pterm && pt.prec = Recursive
+            then abstract_recursive ct
+            else apply_recursive pt.prec ct in
+          CTdefinition (name, ct) :: cmds, vars'
     | _ ->
         not_allowed ~loc:it.str_loc "This structure item"
 

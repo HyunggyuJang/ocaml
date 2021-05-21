@@ -12,6 +12,7 @@ Module EFmonad (Env : ENV).
 Import Env.
 
 Definition M := M0 Env.
+Definition Res T := option (Env * T).
 
 Definition Fail {A} : M A := fun _ => None.
 
