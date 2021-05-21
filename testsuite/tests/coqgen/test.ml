@@ -69,6 +69,20 @@ let z = r := 1 :: !r; !r;;
 z;;
 let r = r in r := 1 :: !r; !r;;
 
+(* McCarthy 91 *)
+let rec mccarthy_m n =
+  if n > 100 then n - 10
+  else mccarthy_m (mccarthy_m (n + 11));;
+
+mccarthy_m 10;;
+
+(* Takeuchi tarai *)
+let rec tarai x y z =
+  if y < x then tarai (tarai (x - 1) y z) (tarai (y - 1) z x) (tarai (z - 1) x y)
+  else y;;
+
+tarai 1 2 3;;
+
 (* loops *)
 omega 1;;
 
