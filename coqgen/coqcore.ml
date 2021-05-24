@@ -52,6 +52,7 @@ let ctpair a b = CTapp (CTcstr "pair", [a;b])
 let ml_type = "ml_type"
 let ml_tid = CTid ml_type
 let coq_tid = CTid "coq_type"
+let mkcoqty ct = ctapp coq_tid [ct]
 
 type coq_def_kind =
   | CT_def of coq_term
@@ -333,12 +334,23 @@ let make_tuple_type ctl =
       if ct = CTid "unit" then ct' else CTapp (CTid "ml_pair", [ct; ct']))
     (CTid "unit") ctl
 
-let rec transl_type ~loc ~vars visited ty =
-  let ty = repr ty in
+let refresh_tvars vars =
+  { vars with tvar_map =
+    TypeMap.fold TypeMap.add vars.tvar_map TypeMap.empty }
+
+let with_snapshot ~vars f g =
+  let snap = Btype.snapshot () in
+  let x = f () in
+  let vars = refresh_tvars vars in
+  let y = g ~vars x in
+  Btype.backtrack snap;
+  y
+
+let rec transl_type ~loc ~env ~vars visited ty =
   if TypeSet.mem ty visited then not_allowed ~loc "recursive types" else
   let visited = TypeSet.add ty visited in
-  let transl_rec = transl_type ~loc ~vars visited in
-  match ty.desc with
+  let transl_rec = transl_type ~loc ~env ~vars visited in
+  match get_desc ty with
   | Tvar _ | Tunivar _ ->
       CTid (TypeMap.find ty vars.tvar_map)
   | Tarrow (Nolabel, t1, t2, _) ->
@@ -348,8 +360,16 @@ let rec transl_type ~loc ~vars visited ty =
   | Ttuple tl ->
       make_tuple_type (List.map transl_rec tl)
   | Tconstr (p, tl, _) ->
-      let desc = Path.Map.find p vars.type_map in
-      ctapp (CTid desc.ct_name) (List.map transl_rec tl)
+      begin match Path.Map.find p vars.type_map with
+        desc ->
+          ctapp (CTid desc.ct_name) (List.map transl_rec tl)
+      | exception Not_found ->
+          with_snapshot ~vars
+            (fun () -> Ctype.expand_head env ty)
+            (fun ~vars ty' ->
+              if eq_type ty ty' then not_allowed ~loc "This type";
+              transl_type ~loc ~env ~vars visited ty')
+      end
   | Tnil ->
       CTid "ml_unit"
   | Tobject _ | Tfield _ ->
@@ -357,17 +377,16 @@ let rec transl_type ~loc ~vars visited ty =
   | Tvariant _ ->
       not_allowed ~loc "polymorphic variants"
   | Tpoly (t1, vl) ->
-      let vl = List.map repr vl in
       let vars =
         List.fold_left
           begin fun vars tv ->
-            match tv.desc with
+            match get_desc tv with
             | Tunivar name -> add_tvar tv (fresh_var_name ~vars name) vars
             | _ -> assert false
           end
           vars vl
       in
-      let ct1 = transl_type ~loc ~vars visited t1 in
+      let ct1 = transl_type ~loc ~env ~vars visited t1 in
       List.fold_right
         (fun tv ct -> CTprod (Some (TypeMap.find tv vars.tvar_map), ml_tid, ct))
         vl ct1
@@ -376,7 +395,10 @@ let rec transl_type ~loc ~vars visited ty =
   | Tlink _ | Tsubst _ ->
       assert false
 
-let transl_type ~loc ~vars = transl_type ~loc ~vars TypeSet.empty
+let transl_type ~loc = transl_type ~loc TypeSet.empty
+
+let transl_coq_type ~loc ~env ~vars ty =
+  mkcoqty (transl_type ~loc ~env ~vars ty)
 
 let is_alpha name =
   name <> "" &&
@@ -400,25 +422,28 @@ let rec name_of_path path =
 let transl_type_decl path td =
   ignore (path, td)
 
-let find_instantiation ~loc env edesc ty =
+let find_instantiation ~loc ~env ~vars edesc ty =
   if edesc.ce_vars = [] then [] else
   let open Ctype in
-  let ty0, vars =
+  let ty0, ivars =
     let ty1 = newgenty (Ttuple (edesc.ce_type :: edesc.ce_vars)) in
-    match (generic_instance ty1).desc with
+    match get_desc (generic_instance ty1) with
       Ttuple (ty0 :: vars) -> ty0, vars
     | _ -> assert false
   in
-  (try unify env ty ty0
-   with Unify _ -> not_allowed ~loc ("Type for " ^ edesc.ce_name));
-  vars
+  with_snapshot ~vars
+    (fun () ->
+      try unify env ty ty0
+      with Unify _ -> not_allowed ~loc ("Type for " ^ edesc.ce_name))
+    (fun ~vars () -> List.map (transl_type ~loc ~env ~vars) ivars)
 
 let close_type ty =
   let vars = Ctype.free_variables ty in
   List.iter
     (fun ty ->
-      if ty.level <> Btype.generic_level then
-        Btype.link_type ty (Btype.newty2 ty.level Tnil))
+      let level = get_level ty in
+      if level <> Btype.generic_level then
+        Types.link_type ty (newty2 ~level Tnil))
     vars
 
 open Typedtree
@@ -443,7 +468,7 @@ let enter_free_variables ~vars ty =
     List.filter (fun ty -> not (TypeMap.mem ty vars.tvar_map)) fvars in
   let (fvar_names, vars) =
     List.fold_left
-      (fun (names, vars) tv -> match tv.desc with
+      (fun (names, vars) tv -> match get_desc tv with
       | Tvar name ->
           let v = fresh_var_name ~vars name in
           v :: names, add_tvar tv v vars
@@ -452,10 +477,6 @@ let enter_free_variables ~vars ty =
   in
   (*List.iter (Format.eprintf "fvar=%a@." Printtyp.raw_type_expr) fvars;*)
   fvars, List.rev fvar_names, vars
-
-let refresh_tvars vars =
-  { vars with tvar_map =
-    TypeMap.fold (fun ty -> TypeMap.add (repr ty)) vars.tvar_map TypeMap.empty }
 
 let rec fun_arity e =
   match e.exp_desc with
@@ -536,8 +557,8 @@ let string_of_constant ~loc = function
 
 let find_constructor ~loc ~vars cd =
   let path, tl =
-    match repr cd.cstr_res with
-    | {desc = Tconstr (path, tl, _)} -> path, tl
+    match get_desc cd.cstr_res with
+    | Tconstr (path, tl, _) -> path, tl
     | _ -> assert false
   in
   try
@@ -588,23 +609,16 @@ let is_primitive s =
   String.length s >= 2 && s.[0] = '@'
 
 let transl_ident ~loc ~vars env desc ty =
-  if desc.ce_purary = 0 then
-    {pterm = CTid desc.ce_name; prec = Nonrecursive; pary = 1}
-  else
-  let snap = Btype.snapshot () in
-  let ivars = find_instantiation ~loc env desc ty in
-  (*List.iter (Format.eprintf "ivar=%a@." Printtyp.raw_type_expr) ivars;*)
-  let vars = refresh_tvars vars in
   let f = CTid desc.ce_name in
-  let args = List.map (transl_type ~loc ~vars) ivars in
-  let args =
-    if is_primitive desc.ce_name
-    then List.map (fun x -> CTapp (coq_tid, [x])) args
-    else args in
-  Btype.backtrack snap;
-  let args =
-    if desc.ce_rec = Recursive then args @ [CTid"h"] else args in
-  {pterm = ctapp f args; prec = desc.ce_rec; pary = desc.ce_purary}
+  if desc.ce_purary = 0 then
+    {pterm = f; prec = Nonrecursive; pary = 1}
+  else
+    let args = find_instantiation ~loc ~env ~vars desc ty in
+    let args =
+      if is_primitive desc.ce_name then List.map mkcoqty args else args in
+    let args =
+      if desc.ce_rec = Recursive then args @ [CTid"h"] else args in
+    {pterm = ctapp f args; prec = desc.ce_rec; pary = desc.ce_purary}
 
 let rec transl_exp ~vars e =
   let loc = e.exp_loc in
@@ -677,16 +691,16 @@ let rec transl_exp ~vars e =
        cases = [{c_lhs = {pat_type; pat_loc} as pat;
                  c_rhs; c_guard = None}]} ->
       let (arg, vars) = transl_pat ~vars pat in
-      let cty = transl_type ~loc:pat_loc ~vars pat_type in
-      let cty = CTapp(coq_tid,[cty]) in
+      let cty = transl_coq_type ~loc:pat_loc ~env:pat.pat_env ~vars pat_type in
       let ct = transl_exp ~vars c_rhs in
       let ct =
         match ct.pterm with
           CTabs _ | CTann _ -> ct
         | pt ->
             if ct.pary >= 2 then ct else
-            let cty = transl_type ~loc:c_rhs.exp_loc ~vars c_rhs.exp_type in
-            let cty = CTapp (coq_tid,[cty]) in
+            let cty =
+              transl_coq_type ~loc:c_rhs.exp_loc ~env:c_rhs.exp_env
+                ~vars c_rhs.exp_type in
             let cty = if ct.pary = 0 then CTapp (CTid"M", [cty]) else cty in
             {ct with pterm = CTann (pt, cty)}
       in
@@ -1003,8 +1017,8 @@ let make_compare_rec vars =
               [CTapp (CTid "S", [CTid "h"]),
                CTmatch (
                CTid "T", Some ("T", CTprod (
-                               None, CTapp(coq_tid,[CTid "T"]), CTprod (
-                               None, CTapp(coq_tid,[CTid "T"]),
+                               None, mkcoqty (CTid "T"), CTprod (
+                               None, mkcoqty (CTid "T"),
                                CTapp (CTid"M", [CTid "comparison"])))),
                List.map make_case (Path.Map.bindings vars.type_map));
                CTid "_", CTabs ("_", None, CTabs ("_", None, CTid "Fail"))]
