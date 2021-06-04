@@ -56,7 +56,7 @@ let mkcoqty ct = ctapp coq_tid [ct]
 
 type coq_def_kind =
   | CT_def of coq_term
-  | CT_ind of (string * coq_term) list
+  | CT_ind of (string * coq_term list) list
   | CT_abs
 
 type coq_type_desc =
@@ -328,11 +328,13 @@ let rec coq_term_subst subs = function
       CTif (coq_term_subst subs ct1, coq_term_subst subs ct2,
             coq_term_subst subs ct3)
 
-let make_tuple_type ctl =
+let make_tuple_type ~def ctl =
+  let unit = if def then "unit" else "ml_unit" in
+  let pair = if def then "pair" else "ml_pair" in
   List.fold_left
     (fun ct ct' ->
-      if ct = CTid "unit" then ct' else CTapp (CTid "ml_pair", [ct; ct']))
-    (CTid "unit") ctl
+      if ct = CTid unit then ct' else CTapp (CTid pair, [ct; ct']))
+    (CTid unit) ctl
 
 let refresh_tvars vars =
   { vars with tvar_map =
@@ -346,32 +348,40 @@ let with_snapshot ~vars f g =
   Btype.backtrack snap;
   y
 
-let rec transl_type ~loc ~env ~vars visited ty =
+let rec transl_type ~loc ~env ~vars ~def visited ty =
   if TypeSet.mem ty visited then not_allowed ~loc "recursive types" else
   let visited = TypeSet.add ty visited in
-  let transl_rec = transl_type ~loc ~env ~vars visited in
+  let transl_rec = transl_type ~loc ~env ~vars ~def visited in
   match get_desc ty with
   | Tvar _ | Tunivar _ ->
       CTid (TypeMap.find ty vars.tvar_map)
   | Tarrow (Nolabel, t1, t2, _) ->
-      CTapp (CTid "ml_arrow", [transl_rec t1; transl_rec t2])
+      let arrow = if def then "->" else "ml_arrow" in
+      CTapp (CTid arrow, [transl_rec t1; transl_rec t2])
   | Tarrow _ ->
       not_allowed ~loc "labels"
   | Ttuple tl ->
-      make_tuple_type (List.map transl_rec tl)
+      make_tuple_type ~def (List.map transl_rec tl)
   | Tconstr (p, tl, _) ->
       begin match Path.Map.find p vars.type_map with
         desc ->
-          ctapp (CTid desc.ct_name) (List.map transl_rec tl)
+          let name =
+            if def then
+              match desc.ct_def with
+                CT_def (CTapp (CTid name, _)) -> name
+              | _ -> not_allowed ~loc desc.ct_name
+            else desc.ct_name
+          in
+          ctapp (CTid name) (List.map transl_rec tl)
       | exception Not_found ->
           with_snapshot ~vars
             (fun () -> Ctype.expand_head env ty)
             (fun ~vars ty' ->
               if eq_type ty ty' then not_allowed ~loc "This type";
-              transl_type ~loc ~env ~vars visited ty')
+              transl_type ~loc ~env ~vars ~def visited ty')
       end
   | Tnil ->
-      CTid "ml_unit"
+      CTid (if def then "unit" else "ml_unit")
   | Tobject _ | Tfield _ ->
       not_allowed ~loc "object types"
   | Tvariant _ ->
@@ -386,7 +396,7 @@ let rec transl_type ~loc ~env ~vars visited ty =
           end
           vars vl
       in
-      let ct1 = transl_type ~loc ~env ~vars visited t1 in
+      let ct1 = transl_type ~loc ~env ~vars ~def visited t1 in
       List.fold_right
         (fun tv ct -> CTprod (Some (TypeMap.find tv vars.tvar_map), ml_tid, ct))
         vl ct1
@@ -395,10 +405,10 @@ let rec transl_type ~loc ~env ~vars visited ty =
   | Tlink _ | Tsubst _ ->
       assert false
 
-let transl_type ~loc = transl_type ~loc TypeSet.empty
-
+let transl_type ~loc ~env ~vars ?(def=false) =
+  transl_type ~loc ~env ~vars ~def TypeSet.empty
 let transl_coq_type ~loc ~env ~vars ty =
-  mkcoqty (transl_type ~loc ~env ~vars ty)
+  CTapp (coq_tid, [transl_type ~loc ~env ~vars ty])
 
 let is_alpha name =
   name <> "" &&
@@ -461,22 +471,26 @@ let name_tuple names =
   let ctl = List.map ctid names in
   make_tuple ctl
 
-let enter_free_variables ~vars ty =
-  (*close_type ty;*)
-  let fvars = Ctype.free_variables ty in
-  let fvars =
-    List.filter (fun ty -> not (TypeMap.mem ty vars.tvar_map)) fvars in
-  let (fvar_names, vars) =
+let enter_tvars ~loc ~vars tvl =
+  let names, vars =
     List.fold_left
       (fun (names, vars) tv -> match get_desc tv with
       | Tvar name ->
           let v = fresh_var_name ~vars name in
           v :: names, add_tvar tv v vars
-      | _ -> assert false)
-      ([],vars) fvars
+      | _ -> not_allowed ~loc "Non-variable parameter")
+      ([],vars) tvl
   in
+  (List.rev names, vars)
+
+let enter_free_variables ~loc ~vars ty =
+  (*close_type ty;*)
+  let fvars = Ctype.free_variables ty in
+  let fvars =
+    List.filter (fun ty -> not (TypeMap.mem ty vars.tvar_map)) fvars in
+  let (fvar_names, vars) =  enter_tvars ~loc ~vars fvars in
   (*List.iter (Format.eprintf "fvar=%a@." Printtyp.raw_type_expr) fvars;*)
-  fvars, List.rev fvar_names, vars
+  fvars, fvar_names, vars
 
 let rec fun_arity e =
   match e.exp_desc with
@@ -606,7 +620,7 @@ let rec transl_pat : type k. vars:_ -> k general_pattern -> _ =
       not_allowed ~loc "transl_pat : This pattern"
 
 let is_primitive s =
-  String.length s >= 2 && s.[0] = '@'
+  String.length s >= 2 && (s.[0] >= '@' && s.[0] <= 'Z')
 
 let transl_ident ~loc ~vars env desc ty =
   let f = CTid desc.ce_name in
@@ -836,7 +850,8 @@ and transl_binding ~vars ~rec_flag vb =
   in
   let ty = vb.vb_expr.exp_type in
   (*Format.eprintf "exp_type=%a@." Printtyp.raw_type_expr ty;*)
-  let fvars, fvar_names, vars = enter_free_variables ~vars ty in
+  let fvars, fvar_names, vars =
+    enter_free_variables ~loc:vb.vb_loc ~vars ty in
   let desc =
     {ce_name = name; ce_type = ty; ce_vars = fvars;
      ce_rec = rec_flag; ce_purary = fun_arity vb.vb_expr}
@@ -952,6 +967,57 @@ let rec transl_structure ~vars = function
             then abstract_recursive ct
             else apply_recursive pt.prec ct in
           CTdefinition (name, ct) :: cmds, vars'
+    | Tstr_type (Recursive, [td]) ->
+        let id = td.typ_id and loc = td.typ_loc in
+        let ml_name = fresh_name ~vars ("ml_" ^ Ident.name id) in
+        let name = fresh_name ~vars (Ident.name id) in
+        let vars = add_reserved name vars in
+        let typ = td.typ_type in
+        let params, vars = enter_tvars ~loc ~vars typ.type_params in
+        let ret_type = ctapp (CTid name) (List.map ctid params) in
+        let ctd =
+          { ct_name = ml_name; ct_args = params; ct_def = CT_def ret_type;
+            ct_compare = None; ct_constrs = [] } in
+        let vars = add_type (Path.Pident id) ctd vars in
+        if typ.type_private <> Public then not_allowed ~loc "Private type";
+        begin match typ.type_kind with
+        | Type_variant (cl, _) ->
+            let env = it.str_env in
+            let names_types, vars =
+              List.fold_left
+                (fun (ntl, vars) (cd : Types.constructor_declaration) ->
+                  let cname = fresh_name ~vars (Ident.name cd.cd_id) in
+                  let vars = add_reserved cname vars in
+                  let args =
+                    match cd.cd_args with
+                    | Cstr_tuple tyl -> tyl
+                    | Cstr_record _ ->
+                        not_allowed ~loc "Inline record"
+                  in
+                  if cd.cd_res <> None then not_allowed ~loc "GADT";
+                  let ctl =
+                    List.map (transl_type ~loc ~env ~vars ~def:true) args in
+                  (cname, List.map (fun ct -> "_",ct) ctl) :: ntl, vars)
+                ([],vars) cl
+            in
+            let names_types = List.rev names_types in
+            let ctd =
+              { ctd with ct_constrs =
+                List.map2
+                  (fun cd (cname, _) -> (Ident.name cd.Types.cd_id, cname))
+                  cl names_types }
+            in
+            let vars = add_type (Path.Pident id) ctd vars in
+            let cmds, vars = transl_structure ~vars rem in
+            CTinductive
+              { name; args = List.map (fun v -> v, CTsort Type) params;
+                kind = CTsort Type;
+                cases = List.map
+                  (fun (cname, args) -> cname, args, ret_type)
+                  names_types } :: cmds,
+            vars
+        | _ -> not_allowed ~loc "Non-inductive type definition"
+        end
     | _ ->
         not_allowed ~loc:it.str_loc "This structure item"
 
@@ -1026,8 +1092,11 @@ let make_compare_rec vars =
 
 let transl_implementation _modname st =
   let cmds, vars = transl_structure ~vars:init_vars st.str_items in
+  let typedefs, cmds = 
+    List.partition (function CTinductive _ -> true | _ -> false) cmds in
   CTverbatim "From mathcomp Require Import all_ssreflect.\n\
 Require Import Int63 cocti_defs.\n" ::
+  typedefs @
   make_ml_type vars ::
   CTverbatim "\nModule MLtypes.\n\
 Definition ml_type_eq_dec (T1 T2 : ml_type) : {T1=T2}+{T1<>T2}.\n\

@@ -32,6 +32,12 @@ let rec map f l =
 
 map (fun x -> x + 1) [3;2;1] ;;
 
+type color = Red | Green | Blue ;;
+
+type ('a,'b) tree = Leaf of 'a | Node of ('a,'b) tree * 'a * ('a,'b) tree ;;
+
+let mknode t1 t2 = Node (t1, 0, t2) ;;
+
 let rec iter_int n f x =
   if n < 1 then x else iter_int (n-1) f (f x);;
 
