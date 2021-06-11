@@ -55,7 +55,7 @@ let emit_bytecode i (bytecode, required_globals) =
     )
 
 let to_gallina i Typedtree.{structure; _} =
-  Coqcore.transl_implementation i.module_name structure
+  Coqgen.transl_implementation i.module_name structure
 
 let emit_gallina i ct =
   let v_name = i.output_prefix ^ ".v" in
@@ -63,7 +63,7 @@ let emit_gallina i ct =
   let open Format in
   let ppf = formatter_of_out_channel vfile in
   fprintf ppf "@[<v>";
-  Coqcore.emit_gallina i.module_name ppf ct;
+  Coqprint.emit_gallina i.module_name ppf ct;
   fprintf ppf "@]@.";
   close_out vfile
 
