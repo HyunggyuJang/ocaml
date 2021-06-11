@@ -1,4 +1,4 @@
-(* ../../../ocamlc -c -coq test.ml *)
+(* ../../../ocamlc -c -coq -I ../../../stdlib test.ml *)
 
 let ref' = ref;;
 
