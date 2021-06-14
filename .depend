@@ -3860,11 +3860,12 @@ coqgen/coqcore.cmo : \
     typing/path.cmi \
     typing/ident.cmi \
     typing/ctype.cmi \
-    coqgen/coqtypes.cmo \
+    coqgen/coqtypes.cmi \
     coqgen/coqinit.cmi \
     coqgen/coqdef.cmi \
     typing/btype.cmi \
-    parsing/asttypes.cmi
+    parsing/asttypes.cmi \
+    coqgen/coqcore.cmi
 coqgen/coqcore.cmx : \
     typing/types.cmx \
     typing/typedtree.cmx \
@@ -3875,6 +3876,11 @@ coqgen/coqcore.cmx : \
     coqgen/coqinit.cmx \
     coqgen/coqdef.cmx \
     typing/btype.cmx \
+    parsing/asttypes.cmi \
+    coqgen/coqcore.cmi
+coqgen/coqcore.cmi : \
+    typing/typedtree.cmi \
+    coqgen/coqdef.cmi \
     parsing/asttypes.cmi
 coqgen/coqdef.cmo : \
     typing/types.cmi \
@@ -3903,12 +3909,11 @@ coqgen/coqgen.cmo : \
     typing/types.cmi \
     typing/typedtree.cmi \
     typing/path.cmi \
-    coqgen/coqtypes.cmo \
+    coqgen/coqtypes.cmi \
     coqgen/coqinit.cmi \
     coqgen/coqdef.cmi \
-    coqgen/coqcore.cmo \
-    typing/btype.cmi \
-    parsing/asttypes.cmi
+    coqgen/coqcore.cmi \
+    coqgen/coqgen.cmi
 coqgen/coqgen.cmx : \
     typing/types.cmx \
     typing/typedtree.cmx \
@@ -3917,8 +3922,10 @@ coqgen/coqgen.cmx : \
     coqgen/coqinit.cmx \
     coqgen/coqdef.cmx \
     coqgen/coqcore.cmx \
-    typing/btype.cmx \
-    parsing/asttypes.cmi
+    coqgen/coqgen.cmi
+coqgen/coqgen.cmi : \
+    typing/typedtree.cmi \
+    coqgen/coqdef.cmi
 coqgen/coqinit.cmo : \
     typing/types.cmi \
     typing/predef.cmi \
@@ -3942,23 +3949,34 @@ coqgen/coqinit.cmi : \
     typing/path.cmi \
     coqgen/coqdef.cmi
 coqgen/coqprint.cmo : \
-    coqgen/coqdef.cmi
+    coqgen/coqdef.cmi \
+    coqgen/coqprint.cmi
 coqgen/coqprint.cmx : \
-    coqgen/coqdef.cmx
+    coqgen/coqdef.cmx \
+    coqgen/coqprint.cmi
+coqgen/coqprint.cmi : \
+    coqgen/coqdef.cmi
 coqgen/coqtypes.cmo : \
     typing/types.cmi \
     typing/path.cmi \
     typing/ctype.cmi \
     coqgen/coqdef.cmi \
     typing/btype.cmi \
-    parsing/asttypes.cmi
+    parsing/asttypes.cmi \
+    coqgen/coqtypes.cmi
 coqgen/coqtypes.cmx : \
     typing/types.cmx \
     typing/path.cmx \
     typing/ctype.cmx \
     coqgen/coqdef.cmx \
     typing/btype.cmx \
-    parsing/asttypes.cmi
+    parsing/asttypes.cmi \
+    coqgen/coqtypes.cmi
+coqgen/coqtypes.cmi : \
+    typing/types.cmi \
+    parsing/location.cmi \
+    typing/env.cmi \
+    coqgen/coqdef.cmi
 middle_end/closure/closure.cmo : \
     utils/warnings.cmi \
     lambda/switch.cmi \
@@ -5931,8 +5949,8 @@ driver/compile.cmo : \
     utils/misc.cmi \
     lambda/lambda.cmi \
     bytecomp/emitcode.cmi \
-    coqgen/coqprint.cmo \
-    coqgen/coqgen.cmo \
+    coqgen/coqprint.cmi \
+    coqgen/coqgen.cmi \
     driver/compile_common.cmi \
     utils/clflags.cmi \
     bytecomp/bytegen.cmi \

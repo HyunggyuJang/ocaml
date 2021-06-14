@@ -23,9 +23,6 @@ open Coqtypes
 type term_props =
     { pterm: coq_term; prec: rec_flag; pary: int }
 
-let vars_names tbl =
-  Ident.fold_name (fun _ {ce_name} l -> ce_name :: l) tbl []
-
 let make_tuple ctl =
   List.fold_left
     (fun ct ct' ->
@@ -412,26 +409,6 @@ and transl_binding ~vars ~rec_flag vb =
         let ct = shrink_purary ~vars ct desc.ce_purary in
         CTabs ("h", Some (CTid"nat"), insert_guard ct.pterm), desc,
         Nonrecursive
-      (*
-        let ct =
-          if purary = desc.ce_purary then ct else
-          let names = Names.of_list (vars_names vars) in
-          shrink_purary ~vars purary 1 ct
-        in
-        let pat = vb.vb_pat in
-        let loc = pat.pat_loc in
-        let cty = transl_type ~loc tvars pat.pat_type in
-        let _cty = CTapp (CTid "coq_type", [cty]) in
-        let cty1, cty2 =
-          match Btype.repr pat.pat_type with
-            {desc = Tarrow (Nolabel, t1, t2, _)} ->
-              transl_type ~loc tvars t1, transl_type ~loc tvars t2
-          | _ -> CTid"_", CTid"_"
-        in
-        CTapp (CTid "Fix",
-               [cty1; cty2; CTabs (desc.ce_name, None, ctRet ct)]),
-        {desc with ce_purary = 0}
-      *)
     | Nonrecursive ->
         ct.pterm, {desc with ce_purary = ct.pary}, ct.prec
   in

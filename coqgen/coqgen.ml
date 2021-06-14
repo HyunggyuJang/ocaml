@@ -45,7 +45,7 @@ let make_coq_type vars =
           let subs =
             List.fold_left2
               (fun vars v1 v2 ->
-                Vars.add v1 (CTapp (coq_tid, [CTid v2])) vars)
+                Vars.add v1 (mkcoqty (CTid v2)) vars)
               Vars.empty ctd.ct_args names
           in
           coq_term_subst subs ct

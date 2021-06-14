@@ -99,7 +99,7 @@ let rec transl_type ~loc ~env ~vars ~def visited ty =
 let transl_type ~loc ~env ~vars ?(def=false) =
   transl_type ~loc ~env ~vars ~def TypeSet.empty
 let transl_coq_type ~loc ~env ~vars ty =
-  CTapp (coq_tid, [transl_type ~loc ~env ~vars ty])
+  mkcoqty (transl_type ~loc ~env ~vars ty)
 
 let find_instantiation ~loc ~env ~vars edesc ty =
   if edesc.ce_vars = [] then [] else
