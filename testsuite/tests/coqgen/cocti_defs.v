@@ -1,5 +1,5 @@
 From mathcomp Require Import all_ssreflect.
-Require Import Int63.
+Require Import Int63 BinNums Ascii String ZArith.
 
 (* failStateMonad *)
 Definition M0 Env T := Env -> option (Env * T).
@@ -122,8 +122,52 @@ Definition setref T (l : loc T) (val : coq_type T) : M unit := fun env =>
   in Option.bind (fun refs' => Some (mkEnv c refs', tt))
                  (update b refs).
 
+Section Comparison.
 Definition lexi_compare (cmp1 cmp2 : M comparison) :=
   do x <- cmp1; match x with Eq => cmp2 | _ => Ret x end.
 
+Fixpoint compare_list {T} compare_rec (l1 l2 : list T) : M comparison :=
+  match l1, l2 with
+  | nil, nil => Ret Eq
+  | nil, _   => Ret Lt
+  | _  , nil => Ret Gt
+  | a1 :: t1, a2 :: t2 =>
+    lexi_compare (compare_rec a1 a2) (Delay (compare_list compare_rec t1 t2))
+  end.
+
+Variable T : ml_type.
+Variable compare_rec : coq_type T -> coq_type T -> M comparison.
+
+Definition compare_ref (r1 r2 : loc T) :=
+  do x <- getref T r1; do y <- getref T r2; compare_rec x y.
+End Comparison.
+
+Definition nat_of_int (n : int) : M nat :=
+  match to_Z n with
+  | Z0 => Ret 0
+  | Zpos pos => Ret (Pos.to_nat pos)
+  | Zneg _ => Fail
+  end.
 End monadic_operations.
 End REFmonad.
+
+Section Comparison.
+Definition compare_ascii (c d : ascii) :=
+  BinNat.N.compare (N_of_ascii c) (N_of_ascii d).
+
+Fixpoint compare_string (s1 s2 : string) :=
+  match s1, s2 with
+  | EmptyString, EmptyString => Eq
+  | EmptyString, _ => Lt
+  | _, EmptyString => Gt
+  | String c1 s1, String c2 s2 =>
+    match compare_ascii c1 c2 with
+    | Eq => compare_string s1 s2
+    | cmp => cmp
+    end
+  end.
+End Comparison.
+
+Section Helpers.
+Definition K {A B} (x : A) (y : B) := x.
+End Helpers.

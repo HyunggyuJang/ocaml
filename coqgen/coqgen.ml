@@ -50,8 +50,11 @@ let make_coq_type vars =
           in
           coq_term_subst subs ct
       | _ ->
-          if ctd.ct_name = "ml_ref" then (CTapp (CTid "loc", [CTid "T1"]))
-          else CTid "unit"
+          match ctd.ct_name with
+          | "ml_ref" -> ctapp (CTid "loc") [CTid "T1"]
+          | "ml_array" ->
+              ctapp (CTid "loc") [ctapp (CTid "ml_list") [CTid "T1"]]
+          | _ -> CTid "unit"
     in lhs, rhs
   in
   let cases = List.map make_case (Path.Map.bindings vars.type_map) in
@@ -93,39 +96,42 @@ let transl_implementation _modname st =
   let cmds, vars = transl_structure ~vars:init_vars st.str_items in
   let typedefs, cmds = 
     List.partition (function CTinductive _ -> true | _ -> false) cmds in
-  CTverbatim "From mathcomp Require Import all_ssreflect.\n\
-Require Import Int63 cocti_defs.\n" ::
+  CTverbatim "From mathcomp Require Import ssreflect ssrnat seq.\
+\nRequire Import Int63 Ascii String cocti_defs.\
+\n\n(* Generated type definitions *)" ::
   typedefs @
+  CTverbatim "(* Generated representation of all ML types *)" ::
   make_ml_type vars ::
-  CTverbatim "\nModule MLtypes.\n\
-Definition ml_type_eq_dec (T1 T2 : ml_type) : {T1=T2}+{T1<>T2}.\n\
-revert T2; induction T1; destruct T2;\n\
-  try (right; intro; discriminate); try (now left);\n\
-  try (case (IHT1_5 T2_5); [|right; injection; intros; contradiction]);\n\
-  try (case (IHT1_4 T2_4); [|right; injection; intros; contradiction]);\n\
-  try (case (IHT1_3 T2_3); [|right; injection; intros; contradiction]);\n\
-  try (case (IHT1_2 T2_2); [|right; injection; intros; contradiction]);\n\
-  (case (IHT1 T2) || case (IHT1_1 T2_1)); try (left; now subst);\n\
-    right; injection; intros; contradiction.\n\
-Defined.\n\n\
-Local Definition ml_type := ml_type.\n\
-Record key := mkkey {key_id : int; key_type : ml_type}.\n\
-Variant loc : ml_type -> Type := mkloc : forall k : key, loc (key_type k).\n\
+  CTverbatim "(* Module argument for monadic functor *)\
+\nModule MLtypes.\
+\nDefinition ml_type_eq_dec (T1 T2 : ml_type) : {T1=T2}+{T1<>T2}.\
+\nrevert T2; induction T1; destruct T2;\
+\n  try (right; intro; discriminate); try (now left);\
+\n  try (case (IHT1_5 T2_5); [|right; injection; intros; contradiction]);\
+\n  try (case (IHT1_4 T2_4); [|right; injection; intros; contradiction]);\
+\n  try (case (IHT1_3 T2_3); [|right; injection; intros; contradiction]);\
+\n  try (case (IHT1_2 T2_2); [|right; injection; intros; contradiction]);\
+\n  (case (IHT1 T2) || case (IHT1_1 T2_1)); try (left; now subst);\
+\n    right; injection; intros; contradiction.\
+\nDefined.\n\
+\nLocal Definition ml_type := ml_type.\
+\nRecord key := mkkey {key_id : int; key_type : ml_type}.\
+\nVariant loc : ml_type -> Type := mkloc : forall k : key, loc (key_type k).\
 \n\
-Section with_monad.\n\
-Variable M : Type -> Type.\n\
-Local" ::
+\nSection with_monad.\
+\nVariable M : Type -> Type.\
+\nLocal (* Generated type translation function *)" ::
   make_coq_type vars ::
-  CTverbatim "End with_monad.\n\
-End MLtypes.\n\
-Export MLtypes.\n\
+  CTverbatim "End with_monad.\
+\nEnd MLtypes.\
+\nExport MLtypes.\
 \n\
-Module REFmonadML := REFmonad (MLtypes).\n\
-Export REFmonadML.\n\
+\nModule REFmonadML := REFmonad (MLtypes).\
+\nExport REFmonadML.\
 \n\
-Definition coq_type := MLtypes.coq_type M.\n\
-Definition empty_env := mkEnv 0%int63 nil.\
-\n" ::
+\nDefinition coq_type := MLtypes.coq_type M.\
+\nDefinition empty_env := mkEnv 0%int63 nil.\
+\n\n(* Generated comparison function *)" ::
   make_compare_rec vars ::
   CTverbatim "Definition ml_compare := compare_rec.\
 \n\
@@ -138,5 +144,18 @@ Definition empty_env := mkEnv 0%int63 nil.\
 \nDefinition ml_ne := wrap_compare (fun c => if c is Eq then false else true).\
 \nDefinition ml_ge := wrap_compare (fun c => if c is Lt then false else true).\
 \nDefinition ml_le := wrap_compare (fun c => if c is Gt then false else true).\
-\n"
+\n" ::
+  CTverbatim "(* Array operations *)\
+\nDefinition newarray T len (x : coq_type T) :=\
+\n  do len <- nat_of_int len; newref (ml_list T) (nseq len x).\
+\nDefinition getarray T (a : coq_type (ml_array T)) n : M (coq_type T) :=\
+\n  do n <- nat_of_int n;\
+\n  do s <- getref (ml_list T) a;\
+\n  if n >= seq.size s then Fail else\
+\n  if s is x :: _ then Ret (nth x s n) else Fail.\
+\nDefinition setarray T (a : coq_type (ml_array T)) n (x : coq_type T) :=\
+\n  do n <- nat_of_int n;\
+\n  do s <- getref (ml_list T) a;\
+\n  if n < seq.size s then setref (ml_list T) a (set_nth x s n x) else Fail.\
+\n\n(* Translated code *)\n"
   :: cmds

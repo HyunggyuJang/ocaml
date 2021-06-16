@@ -96,7 +96,7 @@ let string_of_constant ~loc = function
       let s =
         if String.length s = 1 then s else
         Printf.sprintf "%03d" (Char.code c) in
-      Printf.sprintf "\"%s\"%%ascii" s
+      Printf.sprintf "\"%s\"%%char" s
   | Const_string (s, _, _) ->
       Printf.sprintf "\"%s\"%%string" s
   | _ ->
@@ -186,8 +186,8 @@ let rec transl_exp ~vars e =
           not_allowed ~loc ("Identifier " ^ Path.name path)
       in
       transl_ident ~loc ~vars e.exp_env desc e.exp_type
-  | Texp_constant (Const_int n) ->
-      {pterm = CTid (string_of_int n ^ "%int63"); prec = Nonrecursive;
+  | Texp_constant cst ->
+      {pterm = CTcstr (string_of_constant ~loc cst); prec = Nonrecursive;
        pary = 1 }
   | Texp_let (Nonrecursive, vbl, body) ->
       let ctl =
@@ -441,7 +441,7 @@ let close_top ~vars ct =
     List.fold_left
       (fun ct v ->
         if not (Names.mem v fvars) then ct else
-        ctBind (CTabs ("_", None, CTid v)) (CTabs (v, None, ct)))
+        ctBind (CTapp (CTid"K",[CTid v])) (CTabs (v, None, ct)))
       ct vars.top_exec in
   ctapp ct [CTid "empty_env"]
 
@@ -454,8 +454,19 @@ let rec transl_structure ~vars = function
         let pt = transl_exp ~vars e in
         let ct = close_top ~vars pt in
         let ct = apply_recursive pt.prec ct in
-        let cmds, vars = transl_structure ~vars rem in
-        (CTeval ct :: cmds, vars)
+        if pt.pary > 0 then
+          let cmds, vars = transl_structure ~vars rem in
+          (CTeval ct :: cmds, vars)
+        else
+          let name = fresh_name ~vars "it" in
+          let id = Ident.create_local name in
+          (* dummy descriptor *)
+          let desc =
+            {ce_name = name; ce_rec = Nonrecursive; ce_purary = 0;
+             ce_type = e.exp_type; ce_vars = []} in
+          let vars = add_term ~toplevel:true (Path.Pident id) desc vars in
+          let cmds, vars = transl_structure ~vars rem in
+          (CTdefinition (name, ct) :: CTeval (CTid name) :: cmds, vars)
     | Tstr_value (rec_flag, [vb]) ->
         let ((id, desc), pt) = transl_binding ~vars ~rec_flag vb in
         let name, vars' =

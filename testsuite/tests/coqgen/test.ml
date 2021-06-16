@@ -1,3 +1,9 @@
+(* TEST
+flags = "-coq"
+compile_only = "true"
+* setup-ocamlc.byte-build-env
+** ocamlc.byte
+*)
 (* ../../../ocamlc -c -coq -I ../../../stdlib test.ml *)
 
 let ref' = ref;;
@@ -14,7 +20,6 @@ let rec loop h = loop h;;
 let rec fib n =
   if n <= 1 then 1 else fib (n-1) + fib (n-2);;
 
-let f10 = fib 10;;
 fib 10;;
 
 let rec ack m n =
@@ -24,6 +29,9 @@ let rec ack m n =
 
 ack 3 7;;
 
+"hellas" < "hello";;
+let cmp = 'a' < 'A';;
+
 let rec map f l =
   match l with
   | [] -> []
@@ -31,6 +39,14 @@ let rec map f l =
 ;;
 
 map (fun x -> x + 1) [3;2;1] ;;
+
+(* Arrays *)
+
+let arr = Array.make 3 5;;
+
+arr.(1) <- 6;;
+
+(* Datatypes *)
 
 type color = Red | Green | Blue ;;
 

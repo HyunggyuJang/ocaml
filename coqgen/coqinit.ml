@@ -35,16 +35,20 @@ let init_type_map vars =
   [
    (stdlib, ["ref"],
     {ct_name = "ml_ref"; ct_args = ["a"]; ct_def = CT_abs; ct_constrs = [];
-     ct_compare = Some (
-     ctBind (ctapp (CTid"getref") [CTid"T1"; CTid"x"])
-       (CTabs ("x", None, ctBind (ctapp (CTid"getref") [CTid"T1"; CTid"y"])
-                 (CTabs ("y", None, ctapp (CTid"compare_rec")
-                           [CTid"T1";CTid"h";CTid"x";CTid"y"])))))
-   });
+     ct_compare = Some (CTapp (CTid"compare_ref",
+         CTid "T1" :: ctapp (CTid"compare_rec") [CTid"T1"; CTid"h"] :: xy))});
    (Predef.path_int, [],
     {ct_name = "ml_int"; ct_args = []; ct_def = CT_def(CTid "Int63.int");
      ct_constrs = [];
      ct_compare = Some (ctRet (CTapp (CTid"Int63.compare", xy)))});
+   (Predef.path_char, [],
+    {ct_name = "ml_char"; ct_args = []; ct_def = CT_def(CTid "Ascii.ascii");
+     ct_constrs = [];
+     ct_compare = Some (ctRet (CTapp (CTid"compare_ascii", xy)))});
+   (Predef.path_string, [],
+    {ct_name = "ml_string"; ct_args = []; ct_def = CT_def(CTid "String.string");
+     ct_constrs = [];
+     ct_compare = Some (ctRet (CTapp (CTid"compare_string", xy)))});
    (Predef.path_unit, [],
     {ct_name = "ml_unit"; ct_args = []; ct_def = CT_def(CTid "unit");
      ct_constrs = ["()", "tt"];
@@ -57,11 +61,17 @@ let init_type_map vars =
     {ct_name = "ml_list"; ct_args = ["a"];
      ct_constrs = [("[]", "@nil"); ("::", "@cons")];
      ct_def = CT_def (CTapp (CTid "list", [CTid "a"]));
-     ct_compare = None;
-     (*Some (
-       CTmatch (CTpair(CTid"x",CTid"y"),[
-       (CTpair*)
-   });
+     ct_compare = Some
+       (CTapp (CTid"compare_list",
+               ctapp (CTid"compare_rec") [CTid"T1"; CTid"h"] :: xy))});
+   (Predef.path_array, [],
+    {ct_name = "ml_array"; ct_args = ["a"]; ct_constrs = []; ct_def = CT_abs;
+     ct_compare = Some
+       (CTapp (CTid"compare_ref",
+               ctapp (CTid"ml_list") [CTid "T1"] ::
+               ctapp (CTid"compare_list")
+                 [ctapp (CTid"compare_rec") [CTid"T1"; CTid"h"]]
+               :: xy))});
    (coqgen, ["arrow"],
     {ct_name = "ml_arrow"; ct_args = ["a"; "b"]; ct_constrs = [];
      ct_def = CT_def (CTprod (None, CTid"a", CTapp(CTid"M", [CTid"b"])));
@@ -105,6 +115,30 @@ let init_term_map vars =
      ce_vars = [tv];
      ce_rec = Nonrecursive;
      ce_purary = 2});
+   (["Array";"make"],
+    let tv = newgenvar () in
+    {ce_name = "newarray";
+     ce_type = newgenarrow Predef.type_int
+       (newgenarrow tv (Predef.type_array tv));
+     ce_vars = [tv];
+     ce_rec = Nonrecursive;
+     ce_purary = 2});
+   (["Array";"get"],
+    let tv = newgenvar () in
+    {ce_name = "getarray";
+     ce_type = newgenarrow (Predef.type_array tv)
+       (newgenarrow Predef.type_int tv);
+     ce_vars = [tv];
+     ce_rec = Nonrecursive;
+     ce_purary = 2});
+   (["Array";"set"],
+    let tv = newgenvar () in
+    {ce_name = "setarray";
+     ce_type = newgenarrow (Predef.type_array tv)
+       (newgenarrow Predef.type_int (newgenarrow tv Predef.type_unit));
+     ce_vars = [tv];
+     ce_rec = Nonrecursive;
+     ce_purary = 3});
   ] @
   List.map
     (fun (ml, coq) ->
@@ -138,7 +172,9 @@ let init_term_map vars =
      ("<=", "ml_le"); (">=", "ml_ge")]
  )
 
-let init_reserved = ["fix"; "Definition"; "Fixpoint"; "Inductive"]
+let init_reserved =
+  [ "fix"; "Definition"; "Fixpoint"; "Inductive"; "unit"; "bool"; "int63";
+    "M"; "Res"; "Fail"; "K"; "coq_type"; "S"; "Eq"; "Lt"; "Gt" ]
 
 let init_vars =
   init_type_map (

@@ -155,7 +155,9 @@ and print_args is_def ppf ct =
 let emit_def ppf def s ct =
   fprintf ppf "@[<2>@[<2>%s %s" def s;
   let ct = print_args true ppf ct in
-  fprintf ppf " :=@]@ %a.@]@ " print_term ct
+  fprintf ppf " :=@]@ %a.@]" print_term ct;
+  let is_it = s = "it" || String.length s >= 3 && String.sub s 0 3 = "it_" in
+  if not is_it then pp_print_newline ppf ()
 
 let print_arg_typed ppf (s, ct) =
   fprintf ppf "@ @[<1>(%s :@ %a)@]" s print_term ct
