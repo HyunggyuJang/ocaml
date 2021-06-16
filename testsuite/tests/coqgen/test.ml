@@ -50,9 +50,14 @@ arr.(1) <- 6;;
 
 type color = Red | Green | Blue ;;
 
-type ('a,'b) tree = Leaf of 'a | Node of ('a,'b) tree * 'a * ('a,'b) tree ;;
+Green >= Blue ;;
+
+type ('a,'b) tree = Leaf of 'a | Node of ('a,'b) tree * 'b * ('a,'b) tree ;;
 
 let mknode t1 t2 = Node (t1, 0, t2) ;;
+
+mknode (Leaf "a") (Leaf "b") < mknode (Leaf "a") (mknode (Leaf "b") (Leaf "b"))
+;;
 
 let rec iter_int n f x =
   if n < 1 then x else iter_int (n-1) f (f x);;

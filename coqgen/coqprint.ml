@@ -24,6 +24,8 @@ let priority_level = function
   | CTapp (CTid "Bind", [_;CTabs _]) -> 0
   | CTapp (CTid "@cons", [_;_;_]) -> 0
   | CTapp (CTcstr "@cons", [_;_;_]) -> 0
+  | CTapp (CTcstr "|", [_;_]) -> 0
+  | CTapp (CTcstr "pair", [_;_]) -> -1
   | CTapp _ -> 8
   | CTabs _ -> 0
   | CTsort _ -> 10
@@ -50,8 +52,8 @@ let rec extract_args = function
   | ct -> ([], ct, None)
 
 let rec print_term_rec lv ppf ty =
-  if lv > priority_level ty then fprintf ppf "(%a)" (print_term_rec 0) ty else
-  match ty with
+  if lv > priority_level ty then fprintf ppf "(%a)" (print_term_rec (-1)) ty
+  else match ty with
   | CTid s | CTcstr s -> pp_print_string ppf s
   | CTprod (None, t1, t2) ->
       fprintf ppf "@[%a ->@ %a@]" (print_term_rec 3) t1 (print_term_rec 2) t2
@@ -67,6 +69,10 @@ let rec print_term_rec lv ppf ty =
   | CTapp (CTid "@cons", [_;t1;t2])
   | CTapp (CTcstr "@cons", [_;t1;t2]) ->
       fprintf ppf "@[%a ::@ %a@]" (print_term_rec 8) t1 (print_term_rec 0) t2
+  | CTapp (CTcstr "|", [t1;t2]) ->
+      fprintf ppf "@[%a |@ %a@]" (print_term_rec lv) t1 (print_term_rec lv) t2
+  | CTapp (CTcstr "pair", [t1;t2]) ->
+      fprintf ppf "@[%a,@ %a@]" (print_term_rec (-1)) t1 (print_term_rec 0) t2
   | CTapp (f, args) ->
       fprintf ppf "@[<2>%a@ %a@]" (print_term_rec 8) f
         (pp_print_list ~pp_sep:pp_print_space (print_term_rec 9)) args
@@ -91,7 +97,7 @@ let rec print_term_rec lv ppf ty =
         print_term ct1
         print_term ct2
   | CTmatch (ct, oret, cases) ->
-      fprintf ppf "@[<hv>@[<2>match@ %a" print_term ct;
+      fprintf ppf "@[<hv>@[<2>match@ %a" (print_term_rec (-1)) ct;
       Option.iter
         (fun (v, ct) ->
           fprintf ppf "@ as@ %s@ return@ %a" v print_term ct)
@@ -100,7 +106,7 @@ let rec print_term_rec lv ppf ty =
       List.iter
         (fun (pat, ct) ->
           fprintf ppf "@ @[@[| %a =>@]@;<1 2>%a@]"
-            print_term pat
+            (print_term_rec (-1)) pat
             print_term ct)
         cases;
       fprintf ppf "@ end@]"

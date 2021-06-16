@@ -33,6 +33,9 @@ let rec iota m n = if n <= 0 then [] else m :: iota (m+1) (n-1)
 let iota_names m n t =
   List.map (fun i -> t ^ string_of_int i) (iota m n)
 
+let make_subst args names =
+  List.fold_right2 Vars.add args names Vars.empty
+
 let make_coq_type vars =
   let make_case (_, ctd) =
     let constr = CTid ctd.ct_name in
@@ -41,13 +44,9 @@ let make_coq_type vars =
     let lhs = ctapp constr (List.map ctid names)
     and rhs =
       match ctd.ct_def with
-      | CT_def ct ->
-          let subs =
-            List.fold_left2
-              (fun vars v1 v2 ->
-                Vars.add v1 (mkcoqty (CTid v2)) vars)
-              Vars.empty ctd.ct_args names
-          in
+      | CT_def (ct, _) ->
+          let vars = List.map (fun v -> mkcoqty (CTid v)) names in
+          let subs = make_subst ctd.ct_args vars in
           coq_term_subst subs ct
       | _ ->
           match ctd.ct_name with
@@ -62,6 +61,8 @@ let make_coq_type vars =
               CTabs ("T", Some ml_tid,
                      CTann (CTmatch (CTid "T", None, cases), CTsort Type)))
 
+let retEq = ctRet (CTid "Eq")
+
 let make_compare_rec vars =
   let make_case (_, ctd) =
     let constr = CTid ctd.ct_name in
@@ -70,9 +71,47 @@ let make_compare_rec vars =
     let lhs = ctapp constr (List.map ctid names)
     and rhs =
       let ret =
-        match ctd.ct_compare with
-          None -> CTid "Fail"
-        | Some ct -> ct
+        match ctd.ct_compare, ctd.ct_def with
+        | Some ct, _ -> ct
+        | None, CT_def (_, Some [_,[]]) -> retEq
+        | None, CT_def (_, Some cases) ->
+            let subs = make_subst ctd.ct_args (List.map ctid names) in
+            let eq_cases =
+              List.map (fun (cname, ctl) ->
+                let len = List.length ctl in
+                let xs = List.map ctid (iota_names 1 len "x")
+                and ys = List.map ctid (iota_names 1 len "y") in
+                (ctpair (ctcstr cname xs) (ctcstr cname ys),
+                 List.fold_right2
+                   (fun cty (x,y) ct ->
+                     let xy =
+                       ctapp (CTid"compare_rec")
+                         [coq_term_subst subs cty; CTid"h"; x; y] in
+                     if ct = retEq then xy else
+                     ctapp (CTid"lexi_compare")
+                       [xy; ctapp (CTid"Delay") [ct]])
+                   ctl (List.combine xs ys) (ctRet (CTid "Eq"))))
+                cases in
+            let rec mk_lt_cases = function
+                [] -> []
+              | (cname, ctl) :: cases ->
+                  List.map (fun (cname', ctl') ->
+                    let mkcstr cname ctl =
+                      ctcstr cname (List.map (fun _ -> CTid"_") ctl) in
+                    ctpair (mkcstr cname ctl) (mkcstr cname' ctl'))
+                    cases @
+                  mk_lt_cases cases
+            in
+            let neq_cases =
+              match mk_lt_cases cases with
+                [] -> []
+              | pat :: patl ->
+                  [List.fold_left (fun pat1 pat2 -> ctcstr "|" [pat1; pat2])
+                     pat patl, ctRet (CTid "Lt");
+                   ctpair (CTid "_") (CTid "_"), ctRet (CTid "Gt")]
+            in
+            CTmatch (ctpair (CTid"x") (CTid"y"), None, eq_cases @ neq_cases)
+        | None, _ -> CTid "Fail"
       in
       CTabs ("x", None, CTabs ("y", None, ret))
     in

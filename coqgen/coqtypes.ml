@@ -59,7 +59,7 @@ let rec transl_type ~loc ~env ~vars ~def visited ty =
           let name =
             if def then
               match desc.ct_def with
-                CT_def (CTapp (CTid name, _)) -> name
+                CT_def (CTapp (CTid name, _), _) -> name
               | _ -> not_allowed ~loc desc.ct_name
             else desc.ct_name
           in

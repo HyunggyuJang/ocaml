@@ -122,15 +122,14 @@ let rec coq_term_subst subs = function
             coq_term_subst subs ct3)
 
 let ctid s = CTid s
-let ctcstr s = CTcstr s
 let ctapp ct args = if args = [] then ct else CTapp (ct, args)
+let ctcstr s args = ctapp (CTcstr s) args
 let ctRet ct = CTapp (CTid "Ret", [ct])
 let ctBind m f = CTapp (CTid "Bind", [m; f])
-let ctpair a b = CTapp (CTcstr "pair", [a;b])
+let ctpair a b = ctcstr "pair" [a;b]
 
 type coq_def_kind =
-  | CT_def of coq_term
-  | CT_ind of (string * coq_term list) list
+  | CT_def of coq_term * (string * coq_term list) list option
   | CT_abs
 
 type coq_type_desc =

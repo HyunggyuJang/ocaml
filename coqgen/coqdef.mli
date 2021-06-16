@@ -49,15 +49,14 @@ val coq_vars_opt : coq_term option -> Names.t
 val coq_term_subst : coq_term Types.Vars.t -> coq_term -> coq_term
 
 val ctid : string -> coq_term
-val ctcstr : string -> coq_term
 val ctapp : coq_term -> coq_term list -> coq_term
+val ctcstr : string -> coq_term list -> coq_term
 val ctRet : coq_term -> coq_term
 val ctBind : coq_term -> coq_term -> coq_term
 val ctpair : coq_term -> coq_term -> coq_term
 
 type coq_def_kind =
-    CT_def of coq_term
-  | CT_ind of (string * coq_term list) list
+    CT_def of coq_term * (string * coq_term list) list option
   | CT_abs
 
 type coq_type_desc = {
