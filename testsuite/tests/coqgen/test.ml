@@ -59,6 +59,12 @@ let mknode t1 t2 = Node (t1, 0, t2) ;;
 mknode (Leaf "a") (Leaf "b") < mknode (Leaf "a") (mknode (Leaf "b") (Leaf "b"))
 ;;
 
+type point = Point of int ref * int ref ;;
+
+type 'a endo = Endo of ('a -> 'a);;
+
+(* Recursion *)
+
 let rec iter_int n f x =
   if n < 1 then x else iter_int (n-1) f (f x);;
 

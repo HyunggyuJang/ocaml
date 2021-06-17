@@ -496,6 +496,7 @@ let rec transl_structure ~vars = function
         let name = fresh_name ~vars (Ident.name id) in
         let vars = add_reserved name vars in
         let typ = td.typ_type in
+        let old_tvars = get_tvars vars in
         let params, vars = enter_tvars ~loc ~vars typ.type_params in
         let ret_type = ctapp (CTid name) (List.map ctid params) in
         let ctd =
@@ -547,7 +548,7 @@ let rec transl_structure ~vars = function
                 cases = List.map
                   (fun (cname, args, _) -> cname, args, ret_type)
                   names_types } :: cmds,
-            vars
+            set_tvars vars old_tvars
         | _ -> not_allowed ~loc "Non-inductive type definition"
         end
     | _ ->

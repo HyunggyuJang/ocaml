@@ -192,6 +192,11 @@ let refresh_tvars vars =
   { vars with tvar_map =
     TypeMap.fold (fun ty -> TypeMap.add ty) vars.tvar_map TypeMap.empty }
 
+type tvar_map = string TypeMap.t
+
+let get_tvars vars = vars.tvar_map
+let set_tvars vars map = {vars with tvar_map = map}
+
 let fresh_name ~vars name =
   if not (Names.mem name vars.coq_names) then name else
   let rec search n =

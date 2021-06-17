@@ -36,7 +36,9 @@ let init_type_map vars =
     vars
   [
    (stdlib, ["ref"],
-    {ct_name = "ml_ref"; ct_args = ["a"]; ct_def = CT_abs; ct_constrs = [];
+    {ct_name = "ml_ref"; ct_args = ["a"];
+     ct_def =  CT_def (CTapp (CTid "loc", [CTid "a"]), None);
+     ct_constrs = [];
      ct_compare = Some (CTapp (CTid"compare_ref",
          CTid "T1" :: ctapp (CTid"compare_rec") [CTid"T1"; CTid"h"] :: xy))});
    (Predef.path_int, [],

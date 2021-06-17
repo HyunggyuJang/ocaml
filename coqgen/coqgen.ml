@@ -43,16 +43,16 @@ let make_coq_type vars =
     let names = iota_names 1 n "T" in
     let lhs = ctapp constr (List.map ctid names)
     and rhs =
-      match ctd.ct_def with
-      | CT_def (ct, _) ->
-          let vars = List.map (fun v -> mkcoqty (CTid v)) names in
-          let subs = make_subst ctd.ct_args vars in
-          coq_term_subst subs ct
+      match ctd.ct_name with
+      | "ml_ref" -> ctapp (CTid "loc") [CTid "T1"]
+      | "ml_array" ->
+          ctapp (CTid "loc") [ctapp (CTid "ml_list") [CTid "T1"]]
       | _ ->
-          match ctd.ct_name with
-          | "ml_ref" -> ctapp (CTid "loc") [CTid "T1"]
-          | "ml_array" ->
-              ctapp (CTid "loc") [ctapp (CTid "ml_list") [CTid "T1"]]
+          match ctd.ct_def with
+          | CT_def (ct, _) ->
+              let vars = List.map (fun v -> mkcoqty (CTid v)) names in
+              let subs = make_subst ctd.ct_args vars in
+              coq_term_subst subs ct
           | _ -> CTid "unit"
     in lhs, rhs
   in
@@ -137,9 +137,7 @@ let transl_implementation _modname st =
     List.partition (function CTinductive _ -> true | _ -> false) cmds in
   CTverbatim "From mathcomp Require Import ssreflect ssrnat seq.\
 \nRequire Import Int63 Ascii String cocti_defs.\
-\n\n(* Generated type definitions *)" ::
-  typedefs @
-  CTverbatim "(* Generated representation of all ML types *)" ::
+\n\n(* Generated representation of all ML types *)" ::
   make_ml_type vars ::
   CTverbatim "(* Module argument for monadic functor *)\
 \nModule MLtypes.\
@@ -159,7 +157,9 @@ let transl_implementation _modname st =
 \n\
 \nSection with_monad.\
 \nVariable M : Type -> Type.\
-\nLocal (* Generated type translation function *)" ::
+\n\n(* Generated type definitions *)" ::
+  typedefs @
+  CTverbatim "\nLocal (* Generated type translation function *)" ::
   make_coq_type vars ::
   CTverbatim "End with_monad.\
 \nEnd MLtypes.\

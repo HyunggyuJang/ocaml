@@ -1,13 +1,6 @@
 From mathcomp Require Import ssreflect ssrnat seq.
 Require Import Int63 Ascii String cocti_defs.
 
-(* Generated type definitions *)
-Inductive color := | Red | Green | Blue.
-
-Inductive tree (a : Type) (b : Type) :=
-  | Leaf (_ : a) : tree a b
-  | Node (_ : tree a b) (_ : b) (_ : tree a b) : tree a b.
-
 (* Generated representation of all ML types *)
 Inductive ml_type :=
   | ml_int
@@ -19,6 +12,8 @@ Inductive ml_type :=
   | ml_string
   | ml_color
   | ml_tree (_ : ml_type) (_ : ml_type)
+  | ml_point
+  | ml_endo (_ : ml_type)
   | ml_ref (_ : ml_type)
   | ml_arrow (_ : ml_type) (_ : ml_type).
 
@@ -41,6 +36,19 @@ Variant loc : ml_type -> Type := mkloc : forall k : key, loc (key_type k).
 
 Section with_monad.
 Variable M : Type -> Type.
+
+(* Generated type definitions *)
+Inductive color := | Red | Green | Blue.
+
+Inductive tree (a : Type) (b : Type) :=
+  | Leaf (_ : a) : tree a b
+  | Node (_ : tree a b) (_ : b) (_ : tree a b) : tree a b.
+
+Inductive point := | Point (_ : loc ml_int) (_ : loc ml_int).
+
+Inductive endo (a_1 : Type) := | Endo (_ : a_1 -> M a_1) : endo a_1.
+
+
 Local (* Generated type translation function *)
 Fixpoint coq_type (T : ml_type) : Type :=
   match T with
@@ -53,6 +61,8 @@ Fixpoint coq_type (T : ml_type) : Type :=
   | ml_string => String.string
   | ml_color => color
   | ml_tree T1 T2 => tree (coq_type T1) (coq_type T2)
+  | ml_point => point
+  | ml_endo T1 => endo (coq_type T1)
   | ml_ref T1 => loc T1
   | ml_arrow T1 T2 => coq_type T1 -> M (coq_type T2)
   end.
@@ -100,6 +110,18 @@ Fixpoint compare_rec (T : ml_type) (h : nat) :=
                   (Delay (compare_rec (ml_tree T1 T2) h x3 y3))))
         | Leaf _, Node _ _ _ => Ret Lt
         | _, _ => Ret Gt
+        end
+    | ml_point =>
+      fun x y =>
+        match x, y with
+        | Point x1 x2, Point y1 y2 =>
+          lexi_compare (compare_rec (ml_ref ml_int) h x1 y1)
+            (Delay (compare_rec (ml_ref ml_int) h x2 y2))
+        end
+    | ml_endo T1 =>
+      fun x y =>
+        match x, y with
+        | Endo x1, Endo y1 => compare_rec (ml_arrow T1 T1) h x1 y1
         end
     | ml_ref T1 => fun x y => compare_ref T1 (compare_rec T1 h) x y
     | ml_arrow T1 T2 => fun x y => Fail

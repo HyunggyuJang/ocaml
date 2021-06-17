@@ -90,6 +90,9 @@ val add_term :
 val add_tvar : Types.type_expr -> Names.elt -> coq_env -> coq_env
 val add_reserved : Names.elt -> coq_env -> coq_env
 val refresh_tvars : coq_env -> coq_env
+type tvar_map
+val get_tvars : coq_env -> tvar_map
+val set_tvars : coq_env -> tvar_map -> coq_env
 val fresh_name : vars:coq_env -> Names.elt -> Names.elt
 val fresh_opt_name : ?name:Names.elt -> coq_env -> Names.elt
 val fresh_var_name : vars:coq_env -> Names.elt option -> Names.elt

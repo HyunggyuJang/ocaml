@@ -45,10 +45,12 @@ let rec transl_type ~loc ~env ~vars ~def visited ty =
   let transl_rec = transl_type ~loc ~env ~vars ~def visited in
   match get_desc ty with
   | Tvar _ | Tunivar _ ->
-      CTid (TypeMap.find ty vars.tvar_map)
+      let ct = CTid (TypeMap.find ty vars.tvar_map) in
+      (*if def then mkcoqty ct else*) ct
   | Tarrow (Nolabel, t1, t2, _) ->
-      let arrow = if def then "->" else "ml_arrow" in
-      CTapp (CTid arrow, [transl_rec t1; transl_rec t2])
+      let ct1 = transl_rec t1 and ct2 = transl_rec t2 in
+      if def then CTprod (None, ct1, ctapp (CTid"M") [ct2])
+      else ctapp (CTid "ml_arrow") [ct1; ct2]
   | Tarrow _ ->
       not_allowed ~loc "labels"
   | Ttuple tl ->
@@ -63,6 +65,9 @@ let rec transl_type ~loc ~env ~vars ~def visited ty =
               | _ -> not_allowed ~loc desc.ct_name
             else desc.ct_name
           in
+          let transl_rec =
+            if name = "list" || name = "ml_arrow" then transl_rec else
+            transl_type ~loc ~env ~vars ~def:false visited in
           ctapp (CTid name) (List.map transl_rec tl)
       | exception Not_found ->
           with_snapshot ~vars
