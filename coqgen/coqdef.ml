@@ -128,14 +128,11 @@ let ctRet ct = CTapp (CTid "Ret", [ct])
 let ctBind m f = CTapp (CTid "Bind", [m; f])
 let ctpair a b = ctcstr "pair" [a;b]
 
-type coq_def_kind =
-  | CT_def of coq_term * (string * coq_term list) list option
-  | CT_abs
-
 type coq_type_desc =
     { ct_name: string;
       ct_args: string list;
-      ct_def: coq_def_kind;
+      ct_type: coq_term;
+      ct_def: (string * coq_term list) list option;
       ct_constrs: (string * string) list;
       ct_compare: coq_term option;
     }

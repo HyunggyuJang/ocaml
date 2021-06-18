@@ -26,8 +26,6 @@ let newgenarrow t1 t2 = newgenty (Tarrow (Nolabel, t1, t2, Cok))
 
 let xy = [CTid"x"; CTid"y"]
 
-let ct_def f = CT_def (CTid f, None)
-
 let init_type_map vars =
   List.fold_left
     (fun map (rt, lid, desc) ->
@@ -37,40 +35,44 @@ let init_type_map vars =
   [
    (stdlib, ["ref"],
     {ct_name = "ml_ref"; ct_args = ["a"];
-     ct_def =  CT_def (CTapp (CTid "loc", [CTid "a"]), None);
+     ct_type = CTapp (CTid "loc", [CTid "a"]);
+     ct_def = None;
      ct_constrs = [];
      ct_compare = Some (CTapp (CTid"compare_ref",
          CTid "T1" :: ctapp (CTid"compare_rec") [CTid"T1"; CTid"h"] :: xy))});
    (Predef.path_int, [],
-    {ct_name = "ml_int"; ct_args = []; ct_def = ct_def "Int63.int";
-     ct_constrs = [];
+    {ct_name = "ml_int"; ct_args = []; ct_type = CTid "Int63.int";
+     ct_def = None; ct_constrs = [];
      ct_compare = Some (ctRet (CTapp (CTid"Int63.compare", xy)))});
    (Predef.path_char, [],
-    {ct_name = "ml_char"; ct_args = []; ct_def = ct_def "Ascii.ascii";
-     ct_constrs = [];
+    {ct_name = "ml_char"; ct_args = []; ct_type = CTid "Ascii.ascii";
+     ct_def = None; ct_constrs = [];
      ct_compare = Some (ctRet (CTapp (CTid"compare_ascii", xy)))});
    (Predef.path_string, [],
-    {ct_name = "ml_string"; ct_args = []; ct_def = ct_def "String.string";
-     ct_constrs = [];
+    {ct_name = "ml_string"; ct_args = []; ct_type = CTid "String.string";
+     ct_def = None; ct_constrs = [];
      ct_compare = Some (ctRet (CTapp (CTid"compare_string", xy)))});
    (Predef.path_unit, [],
     {ct_name = "ml_unit"; ct_args = [];
-     ct_def = CT_def (CTid "unit", Some ["tt", []]);
+     ct_type = CTid "unit"; ct_def = Some ["tt", []];
      ct_constrs = ["()", "tt"];
      ct_compare = None});
    (Predef.path_bool, [],
-    {ct_name = "ml_bool"; ct_args = []; ct_def = ct_def "bool";
+    {ct_name = "ml_bool"; ct_args = []; ct_type = CTid "bool";
+     ct_def = None;
      ct_constrs = List.map (fun x -> (x,x)) ["true"; "false"];
      ct_compare = Some (ctRet (CTapp (CTid"Bool.compare", xy)))});
    (Predef.path_list, [],
     {ct_name = "ml_list"; ct_args = ["a"];
      ct_constrs = [("[]", "@nil"); ("::", "@cons")];
-     ct_def = CT_def (CTapp (CTid "list", [CTid "a"]), None);
+     ct_type = CTapp (CTid "list", [CTid "a"]); ct_def = None;
      ct_compare = Some
        (CTapp (CTid"compare_list",
                ctapp (CTid"compare_rec") [CTid"T1"; CTid"h"] :: xy))});
    (Predef.path_array, [],
-    {ct_name = "ml_array"; ct_args = ["a"]; ct_constrs = []; ct_def = CT_abs;
+    {ct_name = "ml_array"; ct_args = ["a"]; ct_constrs = [];
+     ct_type = CTapp (CTid"loc", [CTapp (CTid"ml_list", [CTid"a"])]);
+     ct_def = None;
      ct_compare = Some
        (CTapp (CTid"compare_ref",
                ctapp (CTid"ml_list") [CTid "T1"] ::
@@ -79,7 +81,8 @@ let init_type_map vars =
                :: xy))});
    (coqgen, ["arrow"],
     {ct_name = "ml_arrow"; ct_args = ["a"; "b"]; ct_constrs = [];
-     ct_def = CT_def (CTprod (None, CTid"a", CTapp(CTid"M", [CTid"b"])), None);
+     ct_type = CTprod (None, CTid"a", CTapp(CTid"M", [CTid"b"]));
+     ct_def = None;
      ct_compare = None});
   ]
 

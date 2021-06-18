@@ -60,8 +60,8 @@ let rec transl_type ~loc ~env ~vars ~def visited ty =
         desc ->
           let name =
             if def then
-              match desc.ct_def with
-                CT_def (CTapp (CTid name, _), _) -> name
+              match desc.ct_type with
+                CTid name | CTapp (CTid name, _) -> name
               | _ -> not_allowed ~loc desc.ct_name
             else desc.ct_name
           in
@@ -151,7 +151,7 @@ let transl_typedecl ~loc ~env ~vars id td =
   let ret_type = ctapp (CTid name) (List.map ctid params) in
   let ctd =
     { ct_name = ml_name; ct_args = params;
-      ct_def = CT_def (ret_type, None);
+      ct_type = ret_type; ct_def = None;
       ct_compare = None; ct_constrs = [] } in
   let vars = add_type (Path.Pident id) ctd vars in
   if td.type_private <> Public then not_allowed ~loc "Private type";
@@ -186,8 +186,7 @@ let transl_typedecl ~loc ~env ~vars id td =
             (fun cd (cname, _, _) -> (Ident.name cd.Types.cd_id, cname))
             cl names_types
         in
-        { ctd with ct_constrs;
-          ct_def = CT_def (ret_type, Some cmp_cases) }
+        { ctd with ct_constrs; ct_def = Some cmp_cases }
       in
       let vars = add_type (Path.Pident id) ctd vars in
       CTinductive

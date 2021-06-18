@@ -48,12 +48,9 @@ let make_coq_type vars =
       | "ml_array" ->
           ctapp (CTid "loc") [ctapp (CTid "ml_list") [CTid "T1"]]
       | _ ->
-          match ctd.ct_def with
-          | CT_def (ct, _) ->
-              let vars = List.map (fun v -> mkcoqty (CTid v)) names in
-              let subs = make_subst ctd.ct_args vars in
-              coq_term_subst subs ct
-          | _ -> CTid "unit"
+          let vars = List.map (fun v -> mkcoqty (CTid v)) names in
+          let subs = make_subst ctd.ct_args vars in
+          coq_term_subst subs ctd.ct_type
     in lhs, rhs
   in
   let cases = List.map make_case (Path.Map.bindings vars.type_map) in
@@ -73,8 +70,8 @@ let make_compare_rec vars =
       let ret =
         match ctd.ct_compare, ctd.ct_def with
         | Some ct, _ -> ct
-        | None, CT_def (_, Some [_,[]]) -> retEq
-        | None, CT_def (_, Some cases) ->
+        | None, Some [_,[]] -> retEq
+        | None, Some cases ->
             let subs = make_subst ctd.ct_args (List.map ctid names) in
             let eq_cases =
               List.map (fun (cname, ctl) ->

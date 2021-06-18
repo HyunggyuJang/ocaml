@@ -55,14 +55,11 @@ val ctRet : coq_term -> coq_term
 val ctBind : coq_term -> coq_term -> coq_term
 val ctpair : coq_term -> coq_term -> coq_term
 
-type coq_def_kind =
-    CT_def of coq_term * (string * coq_term list) list option
-  | CT_abs
-
 type coq_type_desc = {
   ct_name : string;
   ct_args : string list;
-  ct_def : coq_def_kind;
+  ct_type: coq_term;
+  ct_def: (string * coq_term list) list option;
   ct_constrs : (string * string) list;
   ct_compare : coq_term option;
 }
