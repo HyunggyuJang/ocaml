@@ -89,10 +89,8 @@ Fixpoint compare_rec (h : nat) (T : ml_type) :=
     | ml_char => fun x y => Ret (compare_ascii x y)
     | ml_bool => fun x y => Ret (Bool.compare x y)
     | ml_unit => fun x y => Ret Eq
-    | ml_array T1 =>
-      fun x y =>
-        compare_ref (ml_list T1) (compare_list (compare_rec h T1)) x y
-    | ml_list T1 => fun x y => compare_list (compare_rec h T1) x y
+    | ml_array T1 => fun x y => compare_ref (compare_rec h) (ml_list T1) x y
+    | ml_list T1 => fun x y => compare_list (compare_rec h) T1 x y
     | ml_string => fun x y => Ret (compare_string x y)
     | ml_color =>
       fun x y =>
@@ -134,7 +132,7 @@ Fixpoint compare_rec (h : nat) (T : ml_type) :=
         match x, y with
         | Endo x1, Endo y1 => compare_rec h (ml_arrow T1 T1) x1 y1
         end
-    | ml_ref T1 => fun x y => compare_ref T1 (compare_rec h T1) x y
+    | ml_ref T1 => fun x y => compare_ref (compare_rec h) T1 x y
     | ml_arrow T1 T2 => fun x y => Fail
     end
   else fun _ _ => Fail.

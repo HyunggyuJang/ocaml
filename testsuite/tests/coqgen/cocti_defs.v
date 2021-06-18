@@ -126,20 +126,21 @@ Section Comparison.
 Definition lexi_compare (cmp1 cmp2 : M comparison) :=
   do x <- cmp1; match x with Eq => cmp2 | _ => Ret x end.
 
-Fixpoint compare_list {T} compare_rec (l1 l2 : list T) : M comparison :=
+Variable compare_rec : forall T, coq_type T -> coq_type T -> M comparison.
+
+Fixpoint compare_list T (l1 l2 : list (coq_type T)) : M comparison :=
   match l1, l2 with
   | nil, nil => Ret Eq
   | nil, _   => Ret Lt
   | _  , nil => Ret Gt
   | a1 :: t1, a2 :: t2 =>
-    lexi_compare (compare_rec a1 a2) (Delay (compare_list compare_rec t1 t2))
+    lexi_compare (compare_rec T a1 a2) (Delay (compare_list T t1 t2))
   end.
 
 Variable T : ml_type.
-Variable compare_rec : coq_type T -> coq_type T -> M comparison.
 
-Definition compare_ref (r1 r2 : loc T) :=
-  do x <- getref T r1; do y <- getref T r2; compare_rec x y.
+Definition compare_ref T (r1 r2 : loc T) :=
+  do x <- getref T r1; do y <- getref T r2; compare_rec T x y.
 End Comparison.
 
 Definition nat_of_int (n : int) : M nat :=
