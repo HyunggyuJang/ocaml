@@ -164,7 +164,7 @@ let transl_ident ~loc ~vars env desc ty =
     let args =
       if is_primitive desc.ce_name then List.map mkcoqty args else args in
     let args =
-      if desc.ce_rec = Recursive then args @ [CTid"h"] else args in
+      if desc.ce_rec = Recursive then CTid"h" :: args else args in
     {pterm = ctapp f args; prec = desc.ce_rec; pary = desc.ce_purary}
 
 let rec fun_arity e =
@@ -174,6 +174,9 @@ let rec fun_arity e =
       1 + fun_arity c_rhs
   | Texp_function _ -> 1
   | _ -> 0
+
+let abstract_recursive ct =
+  CTabs ("h", Some (CTid"nat"), ct)
 
 let rec transl_exp ~vars e =
   let loc = e.exp_loc in
@@ -407,27 +410,21 @@ and transl_binding ~vars ~rec_flag vb =
     match rec_flag with
     | Recursive ->
         let ct = shrink_purary ~vars ct desc.ce_purary in
-        CTabs ("h", Some (CTid"nat"), insert_guard ct.pterm), desc,
-        Nonrecursive
+        insert_guard ct.pterm, desc, Nonrecursive
     | Nonrecursive ->
         ct.pterm, {desc with ce_purary = ct.pary}, ct.prec
   in
   let ct =
      List.fold_right (fun tv ct -> CTabs (tv, Some ml_tid, ct))
        fvar_names ct in
+  let ct =
+    if rec_flag = Recursive then abstract_recursive ct else ct in
   ((id, desc), {pterm = ct; prec; pary = desc.ce_purary})
 
 let apply_recursive rec_flag ct =
   if rec_flag = Nonrecursive then ct else
   coq_term_subst (Vars.add "h" (CTid"100000") Vars.empty) ct
   (* CTlet ("h", None, CTid"1000", ct) *)
-
-let rec abstract_recursive ct =
-  match ct with
-  | CTabs (v, Some tid, ct) when tid = ml_tid ->
-      CTabs (v, Some tid, abstract_recursive ct)
-  | _ ->
-      CTabs ("h", Some (CTid"nat"), ct)
 
 let close_top ~vars ct =
   let fvars = coq_vars ct.pterm in

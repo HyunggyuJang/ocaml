@@ -77,7 +77,7 @@ let make_compare_rec vars =
                    (fun cty (x,y) ct ->
                      let xy =
                        ctapp (CTid"compare_rec")
-                         [coq_term_subst subs cty; CTid"h"; x; y] in
+                         [CTid"h"; coq_term_subst subs cty; x; y] in
                      if ct = retEq then xy else
                      ctapp (CTid"lexi_compare")
                        [xy; ctapp (CTid"Delay") [ct]])
@@ -109,8 +109,8 @@ let make_compare_rec vars =
     (lhs, rhs)
   in
   CTfixpoint ("compare_rec", CTabs (
-              "T", Some ml_tid, CTabs (
-              "h", Some (CTid "nat"), CTmatch (
+              "h", Some (CTid "nat"), CTabs (
+              "T", Some ml_tid, CTmatch (
               CTid "h", None,
               [CTapp (CTid "S", [CTid "h"]),
                CTmatch (

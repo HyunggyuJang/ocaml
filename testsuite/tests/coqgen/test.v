@@ -82,7 +82,7 @@ Definition coq_type := MLtypes.coq_type M.
 Definition empty_env := mkEnv 0%int63 nil.
 
 (* Generated comparison function *)
-Fixpoint compare_rec (T : ml_type) (h : nat) :=
+Fixpoint compare_rec (h : nat) (T : ml_type) :=
   if h is h.+1 then
     match T as T return coq_type T -> coq_type T -> M comparison with
     | ml_int => fun x y => Ret (Int63.compare x y)
@@ -91,8 +91,8 @@ Fixpoint compare_rec (T : ml_type) (h : nat) :=
     | ml_unit => fun x y => Ret Eq
     | ml_array T1 =>
       fun x y =>
-        compare_ref (ml_list T1) (compare_list (compare_rec T1 h)) x y
-    | ml_list T1 => fun x y => compare_list (compare_rec T1 h) x y
+        compare_ref (ml_list T1) (compare_list (compare_rec h T1)) x y
+    | ml_list T1 => fun x y => compare_list (compare_rec h T1) x y
     | ml_string => fun x y => Ret (compare_string x y)
     | ml_color =>
       fun x y =>
@@ -106,12 +106,12 @@ Fixpoint compare_rec (T : ml_type) (h : nat) :=
     | ml_tree T1 T2 =>
       fun x y =>
         match x, y with
-        | Leaf x1, Leaf y1 => compare_rec T1 h x1 y1
+        | Leaf x1, Leaf y1 => compare_rec h T1 x1 y1
         | Node x1 x2 x3, Node y1 y2 y3 =>
-          lexi_compare (compare_rec (ml_tree T1 T2) h x1 y1)
+          lexi_compare (compare_rec h (ml_tree T1 T2) x1 y1)
             (Delay
-               (lexi_compare (compare_rec T2 h x2 y2)
-                  (Delay (compare_rec (ml_tree T1 T2) h x3 y3))))
+               (lexi_compare (compare_rec h T2 x2 y2)
+                  (Delay (compare_rec h (ml_tree T1 T2) x3 y3))))
         | Leaf _, Node _ _ _ => Ret Lt
         | _, _ => Ret Gt
         end
@@ -119,22 +119,22 @@ Fixpoint compare_rec (T : ml_type) (h : nat) :=
       fun x y =>
         match x, y with
         | Point x1 x2, Point y1 y2 =>
-          lexi_compare (compare_rec (ml_ref ml_int) h x1 y1)
-            (Delay (compare_rec (ml_ref ml_int) h x2 y2))
+          lexi_compare (compare_rec h (ml_ref ml_int) x1 y1)
+            (Delay (compare_rec h (ml_ref ml_int) x2 y2))
         end
     | ml_ref_vals T1 =>
       fun x y =>
         match x, y with
         | RefVal x1 x2, RefVal y1 y2 =>
-          lexi_compare (compare_rec (ml_ref T1) h x1 y1)
-            (Delay (compare_rec (ml_list T1) h x2 y2))
+          lexi_compare (compare_rec h (ml_ref T1) x1 y1)
+            (Delay (compare_rec h (ml_list T1) x2 y2))
         end
     | ml_endo T1 =>
       fun x y =>
         match x, y with
-        | Endo x1, Endo y1 => compare_rec (ml_arrow T1 T1) h x1 y1
+        | Endo x1, Endo y1 => compare_rec h (ml_arrow T1 T1) x1 y1
         end
-    | ml_ref T1 => fun x y => compare_ref T1 (compare_rec T1 h) x y
+    | ml_ref T1 => fun x y => compare_ref T1 (compare_rec h T1) x y
     | ml_arrow T1 T2 => fun x y => Fail
     end
   else fun _ _ => Fail.
@@ -176,12 +176,12 @@ Definition incr (r : coq_type (ml_ref ml_int)) : M (coq_type ml_unit) :=
 Definition it := (do r <- newref ml_int 1%int63; incr r) empty_env.
 Eval vm_compute in it.
 
-Fixpoint loop (T T_1 : ml_type) (h : nat) (h_1 : coq_type T_1)
-  : M (coq_type T) := if h is h.+1 then loop T T_1 h h_1 else Fail.
+Fixpoint loop (h : nat) (T T_1 : ml_type) (h_1 : coq_type T_1)
+  : M (coq_type T) := if h is h.+1 then loop h T T_1 h_1 else Fail.
 
 Fixpoint fib (h : nat) (n : coq_type ml_int) : M (coq_type ml_int) :=
   if h is h.+1 then
-    do v <- ml_le ml_int h n 1%int63;
+    do v <- ml_le h ml_int n 1%int63;
     if v then Ret 1%int63 else
       do v <- fib h (Int63.sub n 2%int63);
       do v_1 <- fib h (Int63.sub n 1%int63); Ret (Int63.add v_1 v)
@@ -192,9 +192,9 @@ Eval vm_compute in it_1.
 
 Fixpoint ack (h : nat) (m n : coq_type ml_int) : M (coq_type ml_int) :=
   if h is h.+1 then
-    do v <- ml_le ml_int h m 0%int63;
+    do v <- ml_le h ml_int m 0%int63;
     if v then Ret (Int63.add n 1%int63) else
-      do v <- ml_le ml_int h n 0%int63;
+      do v <- ml_le h ml_int n 0%int63;
       if v then ack h (Int63.sub m 1%int63) 1%int63 else
         do v <- ack h m (Int63.sub n 1%int63); ack h (Int63.sub m 1%int63) v
   else Fail.
@@ -203,27 +203,27 @@ Definition it_2 := (do it_1 <- K it_1; ack 100000 3%int63 7%int63) empty_env.
 Eval vm_compute in it_2.
 
 Definition it_3 :=
-  (do it_2 <- K it_2; ml_lt ml_string 100000 "hellas"%string "hello"%string)
+  (do it_2 <- K it_2; ml_lt 100000 ml_string "hellas"%string "hello"%string)
     empty_env.
 Eval vm_compute in it_3.
 
 Definition cmp :=
-  (do it_3 <- K it_3; ml_lt ml_char 100000 "a"%char "A"%char) empty_env.
+  (do it_3 <- K it_3; ml_lt 100000 ml_char "a"%char "A"%char) empty_env.
 
-Fixpoint map (T T_1 : ml_type) (h : nat) (f : coq_type (ml_arrow T_1 T))
+Fixpoint map (h : nat) (T T_1 : ml_type) (f : coq_type (ml_arrow T_1 T))
   (l : coq_type (ml_list T_1)) : M (coq_type (ml_list T)) :=
   if h is h.+1 then
     match l with
     | @nil _ => Ret (@nil (coq_type T))
     | a :: l_1 =>
-      do v <- map T T_1 h f l_1;
+      do v <- map h T T_1 f l_1;
       do v_1 <- f a; Ret (@cons (coq_type T) v_1 v)
     end
   else Fail.
 
 Definition it_4 :=
   (do cmp <- K cmp;
-   map ml_int ml_int 100000
+   map 100000 ml_int ml_int
      (fun x : coq_type ml_int => Ret (Int63.add x 1%int63 : coq_type ml_int))
      (3%int63 :: 2%int63 :: 1%int63 :: @nil (coq_type ml_int)))
     empty_env.
@@ -237,7 +237,7 @@ Definition it_5 :=
 Eval vm_compute in it_5.
 
 Definition it_6 :=
-  (do it_5 <- K it_5; ml_ge ml_color 100000 Green Blue) empty_env.
+  (do it_5 <- K it_5; ml_ge 100000 ml_color Green Blue) empty_env.
 Eval vm_compute in it_6.
 
 Definition mknode (T : ml_type) (t1 t2 : coq_type (ml_tree T ml_int))
@@ -246,7 +246,7 @@ Definition mknode (T : ml_type) (t1 t2 : coq_type (ml_tree T ml_int))
 
 Definition it_7 :=
   (do it_6 <- K it_6;
-   ml_lt (ml_tree ml_string ml_int) 100000
+   ml_lt 100000 (ml_tree ml_string ml_int)
      (mknode ml_string
         (Leaf (coq_type ml_string) (coq_type ml_int) "a"%string)
         (Leaf (coq_type ml_string) (coq_type ml_int) "b"%string))
@@ -258,18 +258,18 @@ Definition it_7 :=
     empty_env.
 Eval vm_compute in it_7.
 
-Fixpoint iter_int (T : ml_type) (h : nat) (n : coq_type ml_int)
+Fixpoint iter_int (h : nat) (T : ml_type) (n : coq_type ml_int)
   (f : coq_type (ml_arrow T T)) (x : coq_type T) : M (coq_type T) :=
   if h is h.+1 then
-    do v <- ml_lt ml_int h n 1%int63;
-    if v then Ret x else do v <- f x; iter_int T h (Int63.sub n 1%int63) f v
+    do v <- ml_lt h ml_int n 1%int63;
+    if v then Ret x else do v <- f x; iter_int h T (Int63.sub n 1%int63) f v
   else Fail.
 
 Definition fib2 (h : nat) (n : coq_type ml_int) : M (coq_type ml_int) :=
   do l1 <- newref ml_int 1%int63;
   do l2 <- newref ml_int 1%int63;
   do _ <-
-  iter_int ml_unit h n
+  iter_int h ml_unit n
     (fun _ =>
        do x <- getref ml_int l1;
        do y <- getref ml_int l2;
@@ -283,7 +283,7 @@ Eval vm_compute in it_8.
 Fixpoint iota (h : nat) (m n : coq_type ml_int)
   : M (coq_type (ml_list ml_int)) :=
   if h is h.+1 then
-    do v <- ml_le ml_int h n 0%int63;
+    do v <- ml_le h ml_int n 0%int63;
     if v then Ret (@nil (coq_type ml_int)) else
       do v <- iota h (Int63.add m 1%int63) (Int63.sub n 1%int63);
       Ret (@cons (coq_type ml_int) m v)
@@ -299,21 +299,21 @@ Definition omega (T : ml_type) (n : coq_type T) : M (coq_type T) :=
     AppM (getref (ml_arrow T T) r) i
   in do _ <- setref (ml_arrow T T) r delta; delta n.
 
-Definition fixpt (T T_1 : ml_type) (h : nat)
+Definition fixpt (h : nat) (T T_1 : ml_type)
   (f : coq_type (ml_arrow (ml_arrow T_1 T) (ml_arrow T_1 T)))
   : M (coq_type (ml_arrow T_1 T)) :=
-  do r <- newref (ml_arrow T_1 T) (fun x : coq_type T_1 => loop T T_1 h x);
+  do r <- newref (ml_arrow T_1 T) (fun x : coq_type T_1 => loop h T T_1 x);
   let delta (i : coq_type T_1) : M (coq_type T) :=
     do v <- getref (ml_arrow T_1 T) r; AppM (f v) i
   in do _ <- setref (ml_arrow T_1 T) r delta; Ret delta.
 
 Definition fib_1 :=
   (do it_9 <- K it_9;
-   fixpt ml_int ml_int 100000
+   fixpt 100000 ml_int ml_int
      (fun fib_1 : coq_type (ml_arrow ml_int ml_int) =>
         Ret
           (fun n : coq_type ml_int =>
-             do v <- ml_le ml_int 100000 n 1%int63;
+             do v <- ml_le 100000 ml_int n 1%int63;
              if v then Ret 1%int63 else
                do v <- fib_1 (Int63.sub n 2%int63);
                do v_1 <- fib_1 (Int63.sub n 1%int63); Ret (Int63.add v_1 v))))
@@ -356,7 +356,7 @@ Eval vm_compute in it_12.
 
 Fixpoint mccarthy_m (h : nat) (n : coq_type ml_int) : M (coq_type ml_int) :=
   if h is h.+1 then
-    do v <- ml_gt ml_int h n 100%int63;
+    do v <- ml_gt h ml_int n 100%int63;
     if v then Ret (Int63.sub n 10%int63) else
       do v <- mccarthy_m h (Int63.add n 11%int63); mccarthy_m h v
   else Fail.
@@ -367,7 +367,7 @@ Eval vm_compute in it_13.
 
 Fixpoint tarai (h : nat) (x y z_1 : coq_type ml_int) : M (coq_type ml_int) :=
   if h is h.+1 then
-    do v <- ml_lt ml_int h y x;
+    do v <- ml_lt h ml_int y x;
     if v then
       do v <- tarai h (Int63.sub z_1 1%int63) x y;
       do v_1 <- tarai h (Int63.sub y 1%int63) z_1 x;
@@ -385,7 +385,7 @@ Eval vm_compute in it_15.
 Definition it_16 :=
   (do it_15 <- K it_15;
    AppM
-     (fixpt ml_unit ml_int 100000
+     (fixpt 100000 ml_unit ml_int
         (fun f : coq_type (ml_arrow ml_int ml_unit) =>
            Ret (f : coq_type (ml_arrow ml_int ml_unit))))
      0%int63)
