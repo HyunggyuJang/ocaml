@@ -117,7 +117,7 @@ let rec print_term_rec lv ppf ty =
   | CTlet (x, None, ct1, ct2) ->
       fprintf ppf "@[<2>@[let %s" x;
       let ct1 = print_args true ppf ct1 in
-      fprintf ppf "@ :=@]@ %a@;<1 -2>in@ %a@]"
+      fprintf ppf "@ :=@]@ %a@ in@;<1 -2>%a@]"
         print_term ct1
         print_term ct2
   | CTlet (x, cto, ct1, ct2) ->

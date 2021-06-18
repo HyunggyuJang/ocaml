@@ -149,6 +149,11 @@ Definition nat_of_int (n : int) : M nat :=
   | Zpos pos => Ret (Pos.to_nat pos)
   | Zneg _ => Fail
   end.
+
+Definition bounded_nat_of_int (m : nat) (n : int) : M nat :=
+  do n <- nat_of_int n;
+  if n < m then Ret n else Fail.
+
 End monadic_operations.
 End REFmonad.
 

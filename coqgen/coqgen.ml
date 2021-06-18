@@ -77,7 +77,7 @@ let make_compare_rec vars =
                    (fun cty (x,y) ct ->
                      let xy =
                        ctapp (CTid"compare_rec")
-                         [CTid"h"; coq_term_subst subs cty; x; y] in
+                         [coq_term_subst subs cty; x; y] in
                      if ct = retEq then xy else
                      ctapp (CTid"lexi_compare")
                        [xy; ctapp (CTid"Delay") [ct]])
@@ -112,13 +112,14 @@ let make_compare_rec vars =
               "h", Some (CTid "nat"), CTabs (
               "T", Some ml_tid, CTmatch (
               CTid "h", None,
-              [CTapp (CTid "S", [CTid "h"]),
+              [CTapp (CTid "S", [CTid "h"]), CTlet (
+               "compare_rec", None, ctapp (CTid"compare_rec") [CTid"h"],
                CTmatch (
                CTid "T", Some ("T", CTprod (
                                None, mkcoqty (CTid "T"), CTprod (
                                None, mkcoqty (CTid "T"),
                                CTapp (CTid"M", [CTid "comparison"])))),
-               List.map make_case (Path.Map.bindings vars.type_map));
+               List.map make_case (Path.Map.bindings vars.type_map)));
                CTid "_", CTabs ("_", None, CTabs ("_", None, CTid "Fail"))]
              ))))
 
@@ -179,13 +180,12 @@ let transl_implementation _modname st =
 \nDefinition newarray T len (x : coq_type T) :=\
 \n  do len <- nat_of_int len; newref (ml_list T) (nseq len x).\
 \nDefinition getarray T (a : coq_type (ml_array T)) n : M (coq_type T) :=\
-\n  do n <- nat_of_int n;\
 \n  do s <- getref (ml_list T) a;\
-\n  if n >= seq.size s then Fail else\
+\n  do n <- bounded_nat_of_int (seq.size s) n;\
 \n  if s is x :: _ then Ret (nth x s n) else Fail.\
 \nDefinition setarray T (a : coq_type (ml_array T)) n (x : coq_type T) :=\
-\n  do n <- nat_of_int n;\
 \n  do s <- getref (ml_list T) a;\
-\n  if n < seq.size s then setref (ml_list T) a (set_nth x s n x) else Fail.\
+\n  do n <- bounded_nat_of_int (seq.size s) n;\
+\n  setref (ml_list T) a (set_nth x s n x).\
 \n\n(* Translated code *)\n"
   :: cmds

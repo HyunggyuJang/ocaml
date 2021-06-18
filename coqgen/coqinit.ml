@@ -41,8 +41,8 @@ let init_type_map vars =
     {ctd with ct_name = "ml_ref";
      ct_arity = 1; ct_mlargs = [0, "a"];
      ct_type = CTapp (CTid "loc", [CTid "a"]);
-     ct_compare = Some (CTapp (CTid"compare_ref",
-         ctapp (CTid"compare_rec") [CTid"h"] :: CTid"T1" :: xy))});
+     ct_compare =
+     Some (CTapp (CTid"compare_ref", CTid"compare_rec" :: CTid"T1" :: xy))});
    (Predef.path_int, [],
     {ctd with ct_name = "ml_int";
      ct_type = CTid "Int63.int";
@@ -73,15 +73,14 @@ let init_type_map vars =
      ct_type = CTapp (CTid "list", [CTid "a"]); ct_def = None;
      ct_compare = Some
        (CTapp (CTid"compare_list",
-               ctapp (CTid"compare_rec") [CTid"h"] :: CTid "T1" :: xy))});
+               CTid"compare_rec" :: CTid "T1" :: xy))});
    (Predef.path_array, [],
     {ctd with ct_name = "ml_array";
      ct_arity = 1; ct_mlargs = [0, "a"];
      ct_type = CTapp (CTid"loc", [CTapp (CTid"ml_list", [CTid"a"])]);
      ct_compare = Some
        (CTapp (CTid"compare_ref",
-               ctapp (CTid"compare_rec") [CTid"h"] ::
-               ctapp (CTid"ml_list") [CTid "T1"] :: xy))});
+               CTid"compare_rec" :: ctapp (CTid"ml_list") [CTid "T1"] :: xy))});
    (coqgen, ["arrow"],
     {ctd with ct_name = "ml_arrow";
      ct_arity = 2; ct_args = [0, "a"; 1, "b"];

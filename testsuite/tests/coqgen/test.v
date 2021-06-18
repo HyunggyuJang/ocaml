@@ -84,13 +84,14 @@ Definition empty_env := mkEnv 0%int63 nil.
 (* Generated comparison function *)
 Fixpoint compare_rec (h : nat) (T : ml_type) :=
   if h is h.+1 then
+    let compare_rec := compare_rec h in
     match T as T return coq_type T -> coq_type T -> M comparison with
     | ml_int => fun x y => Ret (Int63.compare x y)
     | ml_char => fun x y => Ret (compare_ascii x y)
     | ml_bool => fun x y => Ret (Bool.compare x y)
     | ml_unit => fun x y => Ret Eq
-    | ml_array T1 => fun x y => compare_ref (compare_rec h) (ml_list T1) x y
-    | ml_list T1 => fun x y => compare_list (compare_rec h) T1 x y
+    | ml_array T1 => fun x y => compare_ref compare_rec (ml_list T1) x y
+    | ml_list T1 => fun x y => compare_list compare_rec T1 x y
     | ml_string => fun x y => Ret (compare_string x y)
     | ml_color =>
       fun x y =>
@@ -104,12 +105,12 @@ Fixpoint compare_rec (h : nat) (T : ml_type) :=
     | ml_tree T1 T2 =>
       fun x y =>
         match x, y with
-        | Leaf x1, Leaf y1 => compare_rec h T1 x1 y1
+        | Leaf x1, Leaf y1 => compare_rec T1 x1 y1
         | Node x1 x2 x3, Node y1 y2 y3 =>
-          lexi_compare (compare_rec h (ml_tree T1 T2) x1 y1)
+          lexi_compare (compare_rec (ml_tree T1 T2) x1 y1)
             (Delay
-               (lexi_compare (compare_rec h T2 x2 y2)
-                  (Delay (compare_rec h (ml_tree T1 T2) x3 y3))))
+               (lexi_compare (compare_rec T2 x2 y2)
+                  (Delay (compare_rec (ml_tree T1 T2) x3 y3))))
         | Leaf _, Node _ _ _ => Ret Lt
         | _, _ => Ret Gt
         end
@@ -117,22 +118,22 @@ Fixpoint compare_rec (h : nat) (T : ml_type) :=
       fun x y =>
         match x, y with
         | Point x1 x2, Point y1 y2 =>
-          lexi_compare (compare_rec h (ml_ref ml_int) x1 y1)
-            (Delay (compare_rec h (ml_ref ml_int) x2 y2))
+          lexi_compare (compare_rec (ml_ref ml_int) x1 y1)
+            (Delay (compare_rec (ml_ref ml_int) x2 y2))
         end
     | ml_ref_vals T1 =>
       fun x y =>
         match x, y with
         | RefVal x1 x2, RefVal y1 y2 =>
-          lexi_compare (compare_rec h (ml_ref T1) x1 y1)
-            (Delay (compare_rec h (ml_list T1) x2 y2))
+          lexi_compare (compare_rec (ml_ref T1) x1 y1)
+            (Delay (compare_rec (ml_list T1) x2 y2))
         end
     | ml_endo T1 =>
       fun x y =>
         match x, y with
-        | Endo x1, Endo y1 => compare_rec h (ml_arrow T1 T1) x1 y1
+        | Endo x1, Endo y1 => compare_rec (ml_arrow T1 T1) x1 y1
         end
-    | ml_ref T1 => fun x y => compare_ref (compare_rec h) T1 x y
+    | ml_ref T1 => fun x y => compare_ref compare_rec T1 x y
     | ml_arrow T1 T2 => fun x y => Fail
     end
   else fun _ _ => Fail.
@@ -153,14 +154,13 @@ Definition ml_le := wrap_compare (fun c => if c is Gt then false else true).
 Definition newarray T len (x : coq_type T) :=
   do len <- nat_of_int len; newref (ml_list T) (nseq len x).
 Definition getarray T (a : coq_type (ml_array T)) n : M (coq_type T) :=
-  do n <- nat_of_int n;
   do s <- getref (ml_list T) a;
-  if n >= seq.size s then Fail else
+  do n <- bounded_nat_of_int (seq.size s) n;
   if s is x :: _ then Ret (nth x s n) else Fail.
 Definition setarray T (a : coq_type (ml_array T)) n (x : coq_type T) :=
-  do n <- nat_of_int n;
   do s <- getref (ml_list T) a;
-  if n < seq.size s then setref (ml_list T) a (set_nth x s n x) else Fail.
+  do n <- bounded_nat_of_int (seq.size s) n;
+  setref (ml_list T) a (set_nth x s n x).
 
 (* Translated code *)
 
@@ -294,16 +294,16 @@ Eval vm_compute in it_9.
 Definition omega (T : ml_type) (n : coq_type T) : M (coq_type T) :=
   do r <- newref (ml_arrow T T) (fun x : coq_type T => Ret (x : coq_type T));
   let delta (i : coq_type T) : M (coq_type T) :=
-    AppM (getref (ml_arrow T T) r) i
-  in do _ <- setref (ml_arrow T T) r delta; delta n.
+    AppM (getref (ml_arrow T T) r) i in
+  do _ <- setref (ml_arrow T T) r delta; delta n.
 
 Definition fixpt (h : nat) (T T_1 : ml_type)
   (f : coq_type (ml_arrow (ml_arrow T_1 T) (ml_arrow T_1 T)))
   : M (coq_type (ml_arrow T_1 T)) :=
   do r <- newref (ml_arrow T_1 T) (fun x : coq_type T_1 => loop h T T_1 x);
   let delta (i : coq_type T_1) : M (coq_type T) :=
-    do v <- getref (ml_arrow T_1 T) r; AppM (f v) i
-  in do _ <- setref (ml_arrow T_1 T) r delta; Ret delta.
+    do v <- getref (ml_arrow T_1 T) r; AppM (f v) i in
+  do _ <- setref (ml_arrow T_1 T) r delta; Ret delta.
 
 Definition fib_1 :=
   (do it_9 <- K it_9;
@@ -343,13 +343,12 @@ Definition it_12 :=
   (do r <- K r;
    do it_11 <- K it_11;
    let r_1 := r in
-     do _ <-
-     (do v <-
-      (do v <- getref (ml_list ml_int) r_1;
-       Ret (@cons (coq_type ml_int) 1%int63 v));
-      setref (ml_list ml_int) r_1 v);
-     getref (ml_list ml_int) r_1)
-    empty_env.
+   do _ <-
+   (do v <-
+    (do v <- getref (ml_list ml_int) r_1;
+     Ret (@cons (coq_type ml_int) 1%int63 v));
+    setref (ml_list ml_int) r_1 v);
+   getref (ml_list ml_int) r_1) empty_env.
 Eval vm_compute in it_12.
 
 Fixpoint mccarthy_m (h : nat) (n : coq_type ml_int) : M (coq_type ml_int) :=
