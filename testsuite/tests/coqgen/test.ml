@@ -61,6 +61,8 @@ mknode (Leaf "a") (Leaf "b") < mknode (Leaf "a") (mknode (Leaf "b") (Leaf "b"))
 
 type point = Point of int ref * int ref ;;
 
+type 'a ref_vals = RefVal of 'a ref * 'a list ;;
+
 type 'a endo = Endo of ('a -> 'a);;
 
 (* Recursion *)

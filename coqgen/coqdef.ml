@@ -48,7 +48,7 @@ type vernacular =
   | CTeval of coq_term
   | CTinductive of
       { name: string; args: (string * coq_term) list; kind: coq_term;
-        cases: (string * (string * coq_term) list * coq_term) list }
+        cases: (string * (string * coq_term) list * coq_term option) list }
   | CTverbatim of string
 
 let may_app f o x =
@@ -56,36 +56,44 @@ let may_app f o x =
     None -> x
   | Some y -> f y x
 
-let rec coq_vars = function
-  | CTid x -> Names.singleton x
-  | CTcstr _ -> Names.empty
-  | CTapp (ct, ctl) ->
-      List.fold_left Names.union (coq_vars ct) (List.map coq_vars ctl)
-  | CTabs (x, cto, ct) ->
-      Names.union (Names.remove x (coq_vars ct)) (coq_vars_opt cto)
-  | CTsort _ -> Names.empty
-  | CTprod (ox, ct1, ct2) ->
-      let vars = may_app Names.remove ox (coq_vars ct2) in
-      Names.union vars (coq_vars ct1)
-  | CTmatch (ct, oret, cases) ->
-      let case_ret =
-        Option.to_list (Option.map (fun (v,ct) -> CTid v, ct) oret) in
-      let cases_vars (lhs,rhs) = Names.diff (coq_vars rhs) (coq_vars lhs) in
-      List.fold_left Names.union (coq_vars ct)
-        (List.map cases_vars (case_ret @ cases))
-  | CTann (ct1, ct2) ->
-      Names.union (coq_vars ct1) (coq_vars ct2)
-  | CTlet (x, cto, ct1, ct2) ->
-      Names.union (coq_vars_opt cto)
-        (Names.union (coq_vars ct1) (Names.remove x (coq_vars ct2)))
-  | CTif (ct1, ct2, ct3) ->
-      Names.union (coq_vars ct1) (Names.union (coq_vars ct2) (coq_vars ct3))
+let coq_vars ?(skip = fun _ -> false) =
+  let rec coq_vars ct0 =
+    if skip ct0 then Names.empty else
+    match ct0 with
+    | CTid x -> Names.singleton x
+    | CTcstr _ -> Names.empty
+    | CTapp (ct, ctl) ->
+        List.fold_left Names.union (coq_vars ct) (List.map coq_vars ctl)
+    | CTabs (x, cto, ct) ->
+        Names.union (Names.remove x (coq_vars ct)) (coq_vars_opt cto)
+    | CTsort _ -> Names.empty
+    | CTprod (ox, ct1, ct2) ->
+        let vars = may_app Names.remove ox (coq_vars ct2) in
+        Names.union vars (coq_vars ct1)
+    | CTmatch (ct, oret, cases) ->
+        let case_ret =
+          Option.to_list (Option.map (fun (v,ct) -> CTid v, ct) oret) in
+        let cases_vars (lhs,rhs) = Names.diff (coq_vars rhs) (coq_vars lhs) in
+        List.fold_left Names.union (coq_vars ct)
+          (List.map cases_vars (case_ret @ cases))
+    | CTann (ct1, ct2) ->
+        Names.union (coq_vars ct1) (coq_vars ct2)
+    | CTlet (x, cto, ct1, ct2) ->
+        Names.union (coq_vars_opt cto)
+          (Names.union (coq_vars ct1) (Names.remove x (coq_vars ct2)))
+    | CTif (ct1, ct2, ct3) ->
+        Names.union (coq_vars ct1) (Names.union (coq_vars ct2) (coq_vars ct3))
 
-and coq_vars_opt = function
-  | None -> Names.empty
-  | Some ct -> coq_vars ct
+  and coq_vars_opt = function
+    | None -> Names.empty
+    | Some ct -> coq_vars ct
+
+  in coq_vars
 
 (* XXX should handle capture *)
+let remove x subs =
+  if Vars.mem x subs then (prerr_endline ("Removed " ^ x); Vars.remove x subs)
+  else subs
 let rec coq_term_subst subs = function
   | CTid x as ct ->
       if Vars.mem x subs then Vars.find x subs else ct
@@ -95,17 +103,17 @@ let rec coq_term_subst subs = function
       CTapp (coq_term_subst subs x, List.map (coq_term_subst subs) l)
   | CTabs (x, t, b) ->
       let subs' =
-        if Vars.mem x subs then Vars.remove x subs else subs in
+        if Vars.mem x subs then remove x subs else subs in
       CTabs (x, Option.map (coq_term_subst subs) t,
              coq_term_subst subs' b)
   | CTsort _ as ct -> ct
   | CTprod (ox, t, b) ->
-      let subs' = may_app Vars.remove ox subs in
+      let subs' = may_app remove ox subs in
       CTprod (ox, coq_term_subst subs t, coq_term_subst subs' b)
   | CTmatch (ct, oret, cases) ->
-      let subs_ret (v, ct) = v, coq_term_subst (Vars.remove v subs) ct in
+      let subs_ret (v, ct) = v, coq_term_subst (remove v subs) ct in
       let subs_case (lhs, rhs) =
-        let subs' = Names.fold Vars.remove (coq_vars lhs) subs in
+        let subs' = Names.fold remove (coq_vars lhs) subs in
         (lhs, coq_term_subst subs' rhs)
       in
       CTmatch (coq_term_subst subs ct, Option.map subs_ret oret,
@@ -114,7 +122,7 @@ let rec coq_term_subst subs = function
       CTann (coq_term_subst subs ct1, coq_term_subst subs ct2)
   | CTlet (x, cto, ct1, ct2) ->
       let subs' =
-        if Vars.mem x subs then Vars.remove x subs else subs in
+        if Vars.mem x subs then remove x subs else subs in
       CTlet (x, Option.map (coq_term_subst subs) cto,
              coq_term_subst subs ct1, coq_term_subst subs' ct2)
   | CTif (ct1, ct2, ct3) ->
@@ -128,14 +136,22 @@ let ctRet ct = CTapp (CTid "Ret", [ct])
 let ctBind m f = CTapp (CTid "Bind", [m; f])
 let ctpair a b = ctcstr "pair" [a;b]
 
-type coq_type_desc =
-    { ct_name: string;
-      ct_args: string list;
-      ct_type: coq_term;
-      ct_def: (string * coq_term list) list option;
-      ct_constrs: (string * string) list;
-      ct_compare: coq_term option;
-    }
+let ml_type = "ml_type"
+let ml_tid = CTid ml_type
+let coq_tid = CTid "coq_type"
+let mkcoqty ct = ctapp coq_tid [ct]
+
+type coq_type_desc = {
+    ct_name: string;
+    ct_arity: int; (* ML type arity *)
+    ct_args: (int * string) list; (* Type vars *)
+    ct_mlargs: (int * string) list; (* ML vars *)
+    ct_type: coq_term;
+    ct_def: (string list * (string * coq_term list) list) option;
+       (* cases for comparison *)
+    ct_constrs: (string * string) list;
+    ct_compare: coq_term option;
+  }
 
 type coq_term_desc =
     { ce_name: string;
@@ -202,9 +218,19 @@ let refresh_tvars vars =
 
 type tvar_map = string TypeMap.t * string TypeMap.t
 
+let names_of_tvars tvars =
+  TypeMap.fold (fun _ -> Names.add) tvars Names.empty
+
 let get_tvars vars = (vars.tvar_map, vars.ctvar_map)
 let set_tvars vars (tvars, ctvars) =
-  { vars with tvar_map = tvars; ctvar_map = ctvars }
+  let current_names =
+    Names.union (names_of_tvars vars.tvar_map) (names_of_tvars vars.ctvar_map)
+  and orig_names =
+    Names.union (names_of_tvars tvars) (names_of_tvars ctvars) in
+  let coq_names =
+    Names.union orig_names
+      (Names.diff vars.coq_names (Names.diff current_names orig_names)) in
+  { vars with tvar_map = tvars; ctvar_map = ctvars; coq_names }
 
 let fresh_name ~vars name =
   if not (Names.mem name vars.coq_names) then name else

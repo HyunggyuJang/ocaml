@@ -39,13 +39,12 @@ type vernacular =
   | CTeval of coq_term
   | CTinductive of { name : string; args : (string * coq_term) list;
       kind : coq_term;
-      cases : (string * (string * coq_term) list * coq_term) list;
+      cases : (string * (string * coq_term) list * coq_term option) list;
     }
   | CTverbatim of string
 
 module Names = Misc.Stdlib.String.Set
-val coq_vars : coq_term -> Names.t
-val coq_vars_opt : coq_term option -> Names.t
+val coq_vars : ?skip:(coq_term -> bool) -> coq_term -> Names.t
 val coq_term_subst : coq_term Types.Vars.t -> coq_term -> coq_term
 
 val ctid : string -> coq_term
@@ -55,14 +54,21 @@ val ctRet : coq_term -> coq_term
 val ctBind : coq_term -> coq_term -> coq_term
 val ctpair : coq_term -> coq_term -> coq_term
 
+val ml_type : string
+val ml_tid : coq_term
+val mkcoqty : coq_term -> coq_term
+
 type coq_type_desc = {
-  ct_name : string;
-  ct_args : string list;
-  ct_type: coq_term;
-  ct_def: (string * coq_term list) list option;
-  ct_constrs : (string * string) list;
-  ct_compare : coq_term option;
-}
+    ct_name: string;
+    ct_arity: int; (* ML type arity *)
+    ct_args: (int * string) list; (* Type vars *)
+    ct_mlargs: (int * string) list; (* ML vars *)
+    ct_type: coq_term;
+    ct_def: (string list * (string * coq_term list) list) option;
+       (* cases for comparison *)
+    ct_constrs: (string * string) list;
+    ct_compare: coq_term option;
+  }
 
 type coq_term_desc = {
   ce_name : string;

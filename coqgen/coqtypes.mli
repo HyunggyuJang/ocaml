@@ -24,22 +24,24 @@ val transl_coq_type :
   loc:Location.t ->
   env:Env.t -> vars:coq_env -> type_expr -> coq_term
 
+val make_subst :
+  mkcoq:('a -> coq_term) ->
+  mkml: ('a -> coq_term) ->
+  coq_type_desc -> 'a list -> coq_term Vars.t
+
 val find_instantiation :
   loc:Location.t ->
   env:Env.t ->
   vars:coq_env ->
   coq_term_desc -> type_expr -> coq_term list
 
-val ml_type : string
-val ml_tid : coq_term
-val mkcoqty : coq_term -> coq_term
-val close_type : type_expr -> unit
-
 val transl_typedecl :
     loc:Location.t ->
     env:Env.t ->
     vars:coq_env ->
     Ident.t -> type_declaration -> vernacular * coq_env
+
+val close_type : type_expr -> unit
 
 val enter_free_variables :
   loc:Location.t ->

@@ -13,6 +13,7 @@ Inductive ml_type :=
   | ml_color
   | ml_tree (_ : ml_type) (_ : ml_type)
   | ml_point
+  | ml_ref_vals (_ : ml_type)
   | ml_endo (_ : ml_type)
   | ml_ref (_ : ml_type)
   | ml_arrow (_ : ml_type) (_ : ml_type).
@@ -41,12 +42,15 @@ Variable M : Type -> Type.
 Inductive color := | Red | Green | Blue.
 
 Inductive tree (a : Type) (b : Type) :=
-  | Leaf (_ : a) : tree a b
-  | Node (_ : tree a b) (_ : b) (_ : tree a b) : tree a b.
+  | Leaf (_ : a)
+  | Node (_ : tree a b) (_ : b) (_ : tree a b).
 
 Inductive point := Point (_ : loc ml_int) (_ : loc ml_int).
 
-Inductive endo (a_1 : Type) := Endo (_ : a_1 -> M a_1) : endo a_1.
+Inductive ref_vals (a : Type) (a_1 : ml_type) :=
+  RefVal (_ : loc a_1) (_ : list a).
+
+Inductive endo (a : Type) := Endo (_ : a -> M a).
 
 Local (* Generated type translation function *)
 Fixpoint coq_type (T : ml_type) : Type :=
@@ -61,6 +65,7 @@ Fixpoint coq_type (T : ml_type) : Type :=
   | ml_color => color
   | ml_tree T1 T2 => tree (coq_type T1) (coq_type T2)
   | ml_point => point
+  | ml_ref_vals T1 => ref_vals (coq_type T1) T1
   | ml_endo T1 => endo (coq_type T1)
   | ml_ref T1 => loc T1
   | ml_arrow T1 T2 => coq_type T1 -> M (coq_type T2)
@@ -116,6 +121,13 @@ Fixpoint compare_rec (T : ml_type) (h : nat) :=
         | Point x1 x2, Point y1 y2 =>
           lexi_compare (compare_rec (ml_ref ml_int) h x1 y1)
             (Delay (compare_rec (ml_ref ml_int) h x2 y2))
+        end
+    | ml_ref_vals T1 =>
+      fun x y =>
+        match x, y with
+        | RefVal x1 x2, RefVal y1 y2 =>
+          lexi_compare (compare_rec (ml_ref T1) h x1 y1)
+            (Delay (compare_rec (ml_list T1) h x2 y2))
         end
     | ml_endo T1 =>
       fun x y =>

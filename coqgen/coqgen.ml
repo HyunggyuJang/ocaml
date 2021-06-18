@@ -13,44 +13,37 @@
 (*                                                                        *)
 (**************************************************************************)
 
-open Types
 open Typedtree
 open Coqdef
 open Coqinit
-open Coqtypes
 open Coqcore
-
-let make_ml_type vars =
-  let cases =
-    List.map
-      (fun (_, ctd) ->
-        ctd.ct_name, List.map (fun _ -> "_", ml_tid) ctd.ct_args, ml_tid)
-      (Path.Map.bindings vars.type_map)
-  in
-  CTinductive { name = ml_type; args = []; kind = CTsort Set; cases }
 
 let rec iota m n = if n <= 0 then [] else m :: iota (m+1) (n-1)
 let iota_names m n t =
   List.map (fun i -> t ^ string_of_int i) (iota m n)
 
-let make_subst args names =
-  List.fold_right2 Vars.add args names Vars.empty
+let make_ml_type vars =
+  let cases =
+    List.map
+      (fun (_, ctd) ->
+        ctd.ct_name,
+        List.map (fun _ -> "_", ml_tid) (iota 0 ctd.ct_arity),
+        None)
+      (Path.Map.bindings vars.type_map)
+  in
+  CTinductive { name = ml_type; args = []; kind = CTsort Set; cases }
+
+let make_subst = Coqtypes.make_subst ~mkcoq:mkcoqty ~mkml:(fun x -> x)
 
 let make_coq_type vars =
   let make_case (_, ctd) =
     let constr = CTid ctd.ct_name in
-    let n = List.length ctd.ct_args in
-    let names = iota_names 1 n "T" in
-    let lhs = ctapp constr (List.map ctid names)
+    let names = iota_names 1 ctd.ct_arity "T" in
+    let types = List.map ctid names in
+    let lhs = ctapp constr types
     and rhs =
-      match ctd.ct_name with
-      | "ml_ref" -> ctapp (CTid "loc") [CTid "T1"]
-      | "ml_array" ->
-          ctapp (CTid "loc") [ctapp (CTid "ml_list") [CTid "T1"]]
-      | _ ->
-          let vars = List.map (fun v -> mkcoqty (CTid v)) names in
-          let subs = make_subst ctd.ct_args vars in
-          coq_term_subst subs ctd.ct_type
+      let subs = make_subst ctd types in
+      coq_term_subst subs ctd.ct_type
     in lhs, rhs
   in
   let cases = List.map make_case (Path.Map.bindings vars.type_map) in
@@ -63,16 +56,17 @@ let retEq = ctRet (CTid "Eq")
 let make_compare_rec vars =
   let make_case (_, ctd) =
     let constr = CTid ctd.ct_name in
-    let n = List.length ctd.ct_args in
-    let names = iota_names 1 n "T" in
-    let lhs = ctapp constr (List.map ctid names)
+    let names = iota_names 1 ctd.ct_arity "T" in
+    let types = List.map ctid names in
+    let lhs = ctapp constr types
     and rhs =
       let ret =
         match ctd.ct_compare, ctd.ct_def with
         | Some ct, _ -> ct
-        | None, Some [_,[]] -> retEq
-        | None, Some cases ->
-            let subs = make_subst ctd.ct_args (List.map ctid names) in
+        | None, Some (_, [_,[]]) -> retEq
+        | None, Some (ml_params, cases) ->
+            let subs =
+              Types.Vars.of_seq (List.to_seq (List.combine ml_params types)) in
             let eq_cases =
               List.map (fun (cname, ctl) ->
                 let len = List.length ctl in

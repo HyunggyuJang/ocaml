@@ -183,8 +183,9 @@ let emit_vernacular ppf = function
         (fun (s, args, ret) ->
           fprintf ppf "@ @[<2>%s%s" bar s;
           List.iter (print_arg_typed ppf) args;
-          if td.args = [] && ret = CTid td.name then fprintf ppf "@]"
-          else fprintf ppf "@ : %a@]" print_term ret)
+          match ret with
+          | None -> fprintf ppf "@]"
+          | Some ret -> fprintf ppf "@ : %a@]" print_term ret)
         td.cases;
       fprintf ppf ".@]@ "
 
