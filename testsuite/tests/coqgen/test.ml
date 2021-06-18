@@ -65,6 +65,8 @@ type 'a ref_vals = RefVal of 'a ref * 'a list ;;
 
 type 'a endo = Endo of ('a -> 'a);;
 
+type 'a option = Some of 'a | None;;
+
 (* Recursion *)
 
 let rec iter_int n f x =

@@ -15,6 +15,7 @@ Inductive ml_type :=
   | ml_point
   | ml_ref_vals (_ : ml_type)
   | ml_endo (_ : ml_type)
+  | ml_option (_ : ml_type)
   | ml_ref (_ : ml_type)
   | ml_arrow (_ : ml_type) (_ : ml_type).
 
@@ -52,6 +53,8 @@ Inductive ref_vals (a : Type) (a_1 : ml_type) :=
 
 Inductive endo (a : Type) := Endo (_ : a -> M a).
 
+Inductive option (a : Type) := | Some (_ : a) | None.
+
 Local (* Generated type translation function *)
 Fixpoint coq_type (T : ml_type) : Type :=
   match T with
@@ -67,6 +70,7 @@ Fixpoint coq_type (T : ml_type) : Type :=
   | ml_point => point
   | ml_ref_vals T1 => ref_vals (coq_type T1) T1
   | ml_endo T1 => endo (coq_type T1)
+  | ml_option T1 => option (coq_type T1)
   | ml_ref T1 => loc T1
   | ml_arrow T1 T2 => coq_type T1 -> M (coq_type T2)
   end.
@@ -132,6 +136,14 @@ Fixpoint compare_rec (h : nat) (T : ml_type) :=
       fun x y =>
         match x, y with
         | Endo x1, Endo y1 => compare_rec (ml_arrow T1 T1) x1 y1
+        end
+    | ml_option T1 =>
+      fun x y =>
+        match x, y with
+        | None, None => Ret Eq
+        | Some x1, Some y1 => compare_rec T1 x1 y1
+        | None, Some _ => Ret Lt
+        | _, _ => Ret Gt
         end
     | ml_ref T1 => fun x y => compare_ref compare_rec T1 x y
     | ml_arrow T1 T2 => fun x y => Fail

@@ -67,6 +67,9 @@ let make_compare_rec vars =
         | None, Some (ml_params, cases) ->
             let subs =
               Types.Vars.of_seq (List.to_seq (List.combine ml_params types)) in
+            let const_cases, nconst_cases =
+              List.partition (fun (_,args) -> args = []) cases in
+            let cases = const_cases @ nconst_cases in
             let eq_cases =
               List.map (fun (cname, ctl) ->
                 let len = List.length ctl in
