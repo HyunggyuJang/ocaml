@@ -178,9 +178,10 @@ let emit_vernacular ppf = function
       fprintf ppf "@[<hv2>@[<2>Inductive %s" td.name;
       List.iter (print_arg_typed ppf) td.args;
       fprintf ppf "@ :=@]";
+      let bar = if List.length td.cases = 1 then "" else "| " in
       List.iter
         (fun (s, args, ret) ->
-          fprintf ppf "@ @[<2>| %s" s;
+          fprintf ppf "@ @[<2>%s%s" bar s;
           List.iter (print_arg_typed ppf) args;
           if td.args = [] && ret = CTid td.name then fprintf ppf "@]"
           else fprintf ppf "@ : %a@]" print_term ret)

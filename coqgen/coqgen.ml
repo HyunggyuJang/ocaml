@@ -159,7 +159,7 @@ let transl_implementation _modname st =
 \nVariable M : Type -> Type.\
 \n\n(* Generated type definitions *)" ::
   typedefs @
-  CTverbatim "\nLocal (* Generated type translation function *)" ::
+  CTverbatim "Local (* Generated type translation function *)" ::
   make_coq_type vars ::
   CTverbatim "End with_monad.\
 \nEnd MLtypes.\

@@ -79,6 +79,7 @@ type coq_env = {
   type_map : coq_type_desc Path.Map.t;
   term_map : coq_term_desc Path.Map.t;
   tvar_map : string Btype.TypeMap.t;
+  ctvar_map : string Btype.TypeMap.t;
   top_exec : string list;
   coq_names : Names.t;
 }
@@ -88,6 +89,7 @@ val add_type : Path.t -> coq_type_desc -> coq_env -> coq_env
 val add_term :
   ?toplevel:bool -> Path.t -> coq_term_desc -> coq_env -> coq_env
 val add_tvar : Types.type_expr -> Names.elt -> coq_env -> coq_env
+val add_ctvar : Types.type_expr -> Names.elt -> coq_env -> coq_env
 val add_reserved : Names.elt -> coq_env -> coq_env
 val refresh_tvars : coq_env -> coq_env
 type tvar_map

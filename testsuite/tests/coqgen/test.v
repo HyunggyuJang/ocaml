@@ -44,10 +44,9 @@ Inductive tree (a : Type) (b : Type) :=
   | Leaf (_ : a) : tree a b
   | Node (_ : tree a b) (_ : b) (_ : tree a b) : tree a b.
 
-Inductive point := | Point (_ : loc ml_int) (_ : loc ml_int).
+Inductive point := Point (_ : loc ml_int) (_ : loc ml_int).
 
-Inductive endo (a_1 : Type) := | Endo (_ : a_1 -> M a_1) : endo a_1.
-
+Inductive endo (a_1 : Type) := Endo (_ : a_1 -> M a_1) : endo a_1.
 
 Local (* Generated type translation function *)
 Fixpoint coq_type (T : ml_type) : Type :=

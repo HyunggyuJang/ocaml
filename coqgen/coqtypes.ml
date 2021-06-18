@@ -45,8 +45,8 @@ let rec transl_type ~loc ~env ~vars ~def visited ty =
   let transl_rec = transl_type ~loc ~env ~vars ~def visited in
   match get_desc ty with
   | Tvar _ | Tunivar _ ->
-      let ct = CTid (TypeMap.find ty vars.tvar_map) in
-      (*if def then mkcoqty ct else*) ct
+      let tvars = (*if def then vars.ctvar_map else*) vars.tvar_map in
+      CTid (TypeMap.find ty tvars)
   | Tarrow (Nolabel, t1, t2, _) ->
       let ct1 = transl_rec t1 and ct2 = transl_rec t2 in
       if def then CTprod (None, ct1, ctapp (CTid"M") [ct2])
@@ -141,6 +141,64 @@ let enter_tvars ~loc ~vars tvl =
       ([],vars) tvl
   in
   (List.rev names, vars)
+
+let transl_typedecl ~loc ~env ~vars id td =
+  let ml_name = fresh_name ~vars ("ml_" ^ Ident.name id) in
+  let name = fresh_name ~vars (Ident.name id) in
+  let vars = add_reserved name vars in
+  let old_tvars = get_tvars vars in
+  let params, vars = enter_tvars ~loc ~vars td.type_params in
+  let ret_type = ctapp (CTid name) (List.map ctid params) in
+  let ctd =
+    { ct_name = ml_name; ct_args = params;
+      ct_def = CT_def (ret_type, None);
+      ct_compare = None; ct_constrs = [] } in
+  let vars = add_type (Path.Pident id) ctd vars in
+  if td.type_private <> Public then not_allowed ~loc "Private type";
+  begin match td.type_kind with
+  | Type_variant (cl, _) ->
+      let names_types, vars =
+        List.fold_left
+          (fun (ntl, vars) (cd : Types.constructor_declaration) ->
+            let cname = fresh_name ~vars (Ident.name cd.cd_id) in
+            let vars = add_reserved cname vars in
+            let args =
+              match cd.cd_args with
+              | Cstr_tuple tyl -> tyl
+              | Cstr_record _ ->
+                  not_allowed ~loc "Inline record"
+            in
+            if cd.cd_res <> None then not_allowed ~loc "GADT";
+            let ctl_def =
+              List.map (transl_type ~loc ~env ~vars ~def:true) args in
+            let ctl =
+              List.map (transl_type ~loc ~env ~vars) args in
+            (cname, List.map (fun ct -> "_",ct) ctl_def, ctl) :: ntl,
+            vars)
+          ([],vars) cl
+      in
+      let names_types = List.rev names_types in
+      let ctd =
+        let cmp_cases =
+          List.map (fun (cname, _, ctl) -> cname, ctl) names_types
+        and ct_constrs =
+          List.map2
+            (fun cd (cname, _, _) -> (Ident.name cd.Types.cd_id, cname))
+            cl names_types
+        in
+        { ctd with ct_constrs;
+          ct_def = CT_def (ret_type, Some cmp_cases) }
+      in
+      let vars = add_type (Path.Pident id) ctd vars in
+      CTinductive
+        { name; args = List.map (fun v -> v, CTsort Type) params;
+          kind = CTsort Type;
+          cases = List.map
+            (fun (cname, args, _) -> cname, args, ret_type)
+            names_types },
+      set_tvars vars old_tvars
+  | _ -> not_allowed ~loc "Non-inductive type definition"
+  end
 
 let enter_free_variables ~loc ~vars ty =
   (*close_type ty;*)

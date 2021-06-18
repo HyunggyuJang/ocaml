@@ -34,10 +34,13 @@ val ml_type : string
 val ml_tid : coq_term
 val mkcoqty : coq_term -> coq_term
 val close_type : type_expr -> unit
-val enter_tvars :
-  loc:Location.t ->
-  vars:coq_env ->
-  type_expr list -> Names.elt list * coq_env
+
+val transl_typedecl :
+    loc:Location.t ->
+    env:Env.t ->
+    vars:coq_env ->
+    Ident.t -> type_declaration -> vernacular * coq_env
+
 val enter_free_variables :
   loc:Location.t ->
   vars:coq_env ->

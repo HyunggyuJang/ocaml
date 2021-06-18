@@ -152,6 +152,7 @@ type coq_env =
     { type_map: coq_type_desc Path.Map.t;
       term_map: coq_term_desc Path.Map.t;
       tvar_map: string TypeMap.t;
+      ctvar_map: string TypeMap.t;
       top_exec: string list;
       coq_names: Names.t;
     }
@@ -160,6 +161,7 @@ let empty_vars =
   { type_map = Path.Map.empty;
     term_map = Path.Map.empty;
     tvar_map = TypeMap.empty;
+    ctvar_map = TypeMap.empty;
     top_exec = [];
     coq_names = Names.empty;
   }
@@ -185,17 +187,27 @@ let add_tvar tv name vars =
     tvar_map = TypeMap.add tv name vars.tvar_map;
     coq_names = Names.add name vars.coq_names }
 
+let add_ctvar tv name vars =
+  { vars with
+    ctvar_map = TypeMap.add tv name vars.ctvar_map;
+    coq_names = Names.add name vars.coq_names }
+
 let add_reserved name vars =
   { vars with coq_names = Names.add name vars.coq_names }
 
+let refresh tvars =
+  TypeMap.fold (fun ty -> TypeMap.add ty) tvars TypeMap.empty
+
 let refresh_tvars vars =
-  { vars with tvar_map =
-    TypeMap.fold (fun ty -> TypeMap.add ty) vars.tvar_map TypeMap.empty }
+  { vars with
+    tvar_map = refresh vars.tvar_map;
+    ctvar_map = refresh vars.ctvar_map }
 
-type tvar_map = string TypeMap.t
+type tvar_map = string TypeMap.t * string TypeMap.t
 
-let get_tvars vars = vars.tvar_map
-let set_tvars vars map = {vars with tvar_map = map}
+let get_tvars vars = (vars.tvar_map, vars.ctvar_map)
+let set_tvars vars (tvars, ctvars) =
+  { vars with tvar_map = tvars; ctvar_map = ctvars }
 
 let fresh_name ~vars name =
   if not (Names.mem name vars.coq_names) then name else
