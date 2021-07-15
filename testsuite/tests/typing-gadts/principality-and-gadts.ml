@@ -383,7 +383,7 @@ Error: This pattern matches values of type N.t foo
 Line 3, characters 26-31:
 3 |   | { x = (x : N.t); eq = Refl3 } -> x
                               ^^^^^
-Warning 18 [not-principal]: typing this pattern requires considering M.t and N.t as equal.
+Warning 18 [not-principal]: typing this pattern requires considering N.t and N.t as equal.
 But the knowledge of these types is not principal.
 Line 3, characters 4-33:
 3 |   | { x = (x : N.t); eq = Refl3 } -> x

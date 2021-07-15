@@ -2708,8 +2708,9 @@ let rec unify (env:Env.t ref) t1 t2 =
         update_level_for Unify !env (get_level t1) t2;
         update_scope_for Unify (get_scope t1) t2;
         link_type t1 t2
-    | (Tconstr _, Tconstr _) when Env.has_local_constraints !env ->
-        unify2_rec env t1 t1 t2 t2
+    | (Tconstr (_, tl1, _), Tconstr (_, tl2, _))
+      when Env.has_local_constraints !env ->
+        unify2_rec env (tl1=[]) t1 t1 (tl2=[]) t2 t2
     | _ ->
         unify2 env t1 t2
     end;
@@ -2720,20 +2721,24 @@ let rec unify (env:Env.t ref) t1 t2 =
 
 and unify2 env t1 t2 = unify2_expand env t1 t1 t2 t2
 
-and unify2_rec env t10 t1 t20 t2 =
+and unify2_rec env c1 t10 t1 c2 t20 t2 =
   if unify_eq t1 t2 then () else
   try match (get_desc t1, get_desc t2) with
   | (Tconstr (p1, tl1, a1), Tconstr (p2, tl2, a2)) ->
       if Path.same p1 p2 && tl1 = [] && tl2 = [] && is_public_type !env p1
       && not (has_cached_expansion p1 !a1 || has_cached_expansion p2 !a2)
       then begin
-        update_level_for Unify !env (get_level t1) t2;
-        update_scope_for Unify (get_scope t1) t2;
-        link_type t1 t2
+        let (t1, t20) =
+          if eq_type t10 t1 then (t1, t20) else (t2, t10) in
+        update_level_for Unify !env (get_level t1) t20;
+        update_scope_for Unify (get_scope t1) t20;
+        link_type t1 t20
       end else
+        let (c1,t10) = if c1 || tl1 <> [] then (c1,t10) else (true,t1) in
+        let (c2,t20) = if c2 || tl2 <> [] then (c2,t20) else (true,t2) in
         if find_expansion_scope !env p1 > find_expansion_scope !env p2
-        then unify2_rec env t10 t1 t20 (try_expand_safe !env t2)
-        else unify2_rec env t10 (try_expand_safe !env t1) t20 t2
+        then unify2_rec env c1 t10 t1 c2 t20 (try_expand_safe !env t2)
+        else unify2_rec env c1 t10 (try_expand_safe !env t1) c2 t20 t2
   | _ ->
       raise Cannot_expand
   with Cannot_expand ->

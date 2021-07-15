@@ -456,7 +456,8 @@ let test : type a. a t -> a = fun x ->
 Line 2, characters 30-42:
 2 |   let r = match x with Int -> ky 1 (1 : a)  (* fails *)
                                   ^^^^^^^^^^^^
-Error: This expression has type int but an expression was expected of type 'a
+Error: This expression has type a = int
+       but an expression was expected of type 'a
        This instance of int is ambiguous:
        it would escape the scope of its equation
 |}];;
@@ -569,7 +570,8 @@ val either : 'a -> 'a -> 'a = <fun>
 Line 3, characters 44-45:
 3 |   match v with Int -> let y = either 1 x in y
                                                 ^
-Error: This expression has type int but an expression was expected of type 'a
+Error: This expression has type a = int
+       but an expression was expected of type 'a
        This instance of int is ambiguous:
        it would escape the scope of its equation
 |}];;
