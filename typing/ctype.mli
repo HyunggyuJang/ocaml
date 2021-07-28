@@ -33,6 +33,7 @@ exception Matches_failure of Env.t * Errortrace.unification_error
 exception Incompatible
   (* Raised from [mcomp] *)
 
+val get_current_level: unit -> int
 val init_def: int -> unit
         (* Set the initial variable level *)
 val begin_def: unit -> unit
@@ -180,6 +181,8 @@ val apply:
         the parameters [pi] and returns the corresponding instance of
         [t]. Exception [Cannot_apply] is raised in case of failure. *)
 
+(** Type unfolding *)
+
 val try_expand_once_opt: Env.t -> type_expr -> type_expr
 val try_expand_safe_opt: Env.t -> type_expr -> type_expr
 
@@ -207,6 +210,8 @@ val unexpanded_diff :
 
 val full_expand: may_forget_scope:bool -> Env.t -> type_expr -> type_expr
 
+(** typedecl_extraction *)
+
 type typedecl_extraction_result =
   | Typedecl of Path.t * Path.t * type_declaration
     (* The original path of the types, and the first concrete
@@ -216,6 +221,8 @@ type typedecl_extraction_result =
 
 val extract_concrete_typedecl:
         Env.t -> type_expr -> typedecl_extraction_result
+
+(** Unification (equality constraint in inference mode) *)
 
 val unify: Env.t -> type_expr -> type_expr -> unit
         (* Unify the two types given. Raise [Unify] if not possible. *)
@@ -236,9 +243,21 @@ val filter_method: Env.t -> string -> type_expr -> type_expr
            [Filter_method_failed] instead of [Unify]. *)
 val occur_in: Env.t -> type_expr -> type_expr -> bool
 val deep_occur: type_expr -> type_expr -> bool
+val wrap_trace_gadt_instances: Env.t -> ('a -> 'b) -> 'a -> 'b
+        (* Check for the presence of the local constraints and locally switch
+           the expansion mode if needed *)
+val mcomp: Env.t -> type_expr -> type_expr -> unit
+        (* Conservative test of potential compatibility;
+           raises [Incompatible] *)
+
+(** Subsumption constraint in check and inference modes (bool) *)
+
 val moregeneral: Env.t -> bool -> type_expr -> type_expr -> unit
         (* Check if the first type scheme is more general than the second. *)
 val is_moregeneral: Env.t -> bool -> type_expr -> type_expr -> bool
+
+(** Subsumption constraint *)
+
 val rigidify: type_expr -> type_expr list
         (* "Rigidify" a type and return its type variable *)
 val all_distinct_vars: Env.t -> type_expr list -> bool
@@ -292,9 +311,8 @@ type class_match_failure =
   | CM_Private_method of string
   | CM_Virtual_method of string
 
-val match_class_types:
-    ?trace:bool -> Env.t -> class_type -> class_type -> class_match_failure list
-        (* Check if the first class type is more general than the second. *)
+(** Tests used in check mode *)
+
 val equal: Env.t -> bool -> type_expr list -> type_expr list -> unit
         (* [equal env [x1...xn] tau [y1...yn] sigma]
            checks whether the parameterized types
@@ -307,10 +325,19 @@ val equal_private :
    equals [t2::params2] but it is allowed to expand [t1] if it is a
    private abbreviations. *)
 
+(** Subsumption constraint *)
+
+val match_class_types:
+    ?trace:bool -> Env.t -> class_type -> class_type -> class_match_failure list
+        (* Check if the first class type is more general than the second. *)
+
 val match_class_declarations:
         Env.t -> type_expr list -> class_type -> type_expr list ->
         class_type -> class_match_failure list
         (* Check if the first class type is more general than the second. *)
+
+(** Subtyping constraint, [enlarge_type] for inference
+    and [subtype] for check and inference mixed *)
 
 val enlarge_type: Env.t -> type_expr -> type_expr * bool
         (* Make a type larger, flag is true if some pruning had to be done *)
@@ -360,6 +387,8 @@ val hide_private_methods : Env.t -> class_signature -> unit
 
 val close_class_signature : Env.t -> class_signature -> bool
 
+(** A sort of "constraint" for the module system *)
+
 exception Nondep_cannot_erase of Ident.t
 
 val nondep_type: Env.t -> Ident.t list -> type_expr -> type_expr
@@ -380,9 +409,8 @@ val nondep_class_declaration:
 val nondep_cltype_declaration:
   Env.t -> Ident.t list -> class_type_declaration -> class_type_declaration
         (* Same for class type declarations. *)
-(*val correct_abbrev: Env.t -> Path.t -> type_expr list -> type_expr -> unit*)
-val is_contractive: Env.t -> Path.t -> bool
-val normalize_type: type_expr -> unit
+
+(** Check pure type schemes *)
 
 val nongen_schema: Env.t -> type_expr -> bool
         (* Check whether the given type scheme contains no non-generic
@@ -401,16 +429,23 @@ val closed_class:
         (type_expr * bool * string * type_expr) option
         (* Check whether all type variables are bound *)
 
-val unalias: type_expr -> type_expr
+(** Wastebasket taxon *)
 
-val arity: type_expr -> int
-        (* Return the arity (as for curried functions) of the given type. *)
+val is_contractive: Env.t -> Path.t -> bool
+        (* Return whether the definition expands to a proper type constructor *)
+
+val normalize_type: type_expr -> unit
+        (* Remove redundancies from a type *)
 
 val collapse_conj_params: Env.t -> type_expr list -> unit
         (* Collapse conjunctive types in class parameters *)
 
-val get_current_level: unit -> int
-val wrap_trace_gadt_instances: Env.t -> ('a -> 'b) -> 'a -> 'b
+val unalias: type_expr -> type_expr
+        (* Prepare for reporting errors *)
+
+val arity: type_expr -> int
+        (* Return the arity (as for curried functions) of the given type. *)
+
 val reset_reified_var_counter: unit -> unit
 
 val immediacy : Env.t -> type_expr -> Type_immediacy.t
@@ -418,10 +453,12 @@ val immediacy : Env.t -> type_expr -> Type_immediacy.t
 val maybe_pointer_type : Env.t -> type_expr -> bool
        (* True if type is possibly pointer, false if definitely not a pointer *)
 
-(* Stubs *)
+(** Stubs *)
+
 val package_subtype :
     (Env.t -> Path.t -> (Longident.t * type_expr) list ->
       Path.t -> (Longident.t * type_expr) list -> bool) ref
 
-(* Raises [Incompatible] *)
-val mcomp : Env.t -> type_expr -> type_expr -> unit
+
+
+
