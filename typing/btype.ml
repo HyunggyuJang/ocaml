@@ -816,3 +816,8 @@ let cstr_type_path cstr =
   match get_desc cstr.cstr_res with
   | Tconstr (p, _, _) -> p
   | _ -> assert false
+
+let existential_name cstr ty =
+  match get_desc ty with
+  | Tvar (Some name) -> "$" ^ cstr.cstr_name ^ "_'" ^ name
+  | _ -> "$" ^ cstr.cstr_name

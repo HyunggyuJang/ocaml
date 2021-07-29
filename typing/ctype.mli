@@ -33,6 +33,8 @@ exception Matches_failure of Env.t * Errortrace.unification_error
 exception Incompatible
   (* Raised from [mcomp] *)
 
+(** Level handling *)
+
 val get_current_level: unit -> int
 val init_def: int -> unit
         (* Set the initial variable level *)
@@ -53,7 +55,13 @@ type levels =
 val save_levels: unit -> levels
 val set_levels: levels -> unit
 
-val create_scope : unit -> int
+val create_scope: unit -> int
+val check_scope_escape: Env.t -> int -> type_expr -> unit
+        (* [check_scope_escape env lvl ty] ensures that [ty] could be lowered
+           to the level [lvl] without any scope escape.
+           Raises [Escape] otherwise *)
+
+(** Type node creation *)
 
 val newty: type_desc -> type_expr
 val new_scoped_ty: int -> type_desc -> type_expr
@@ -67,6 +75,8 @@ val newobj: type_expr -> type_expr
 val newconstr: Path.t -> type_expr list -> type_expr
 val none: type_expr
         (* A dummy type expression *)
+
+(** Object type handling *)
 
 val object_fields: type_expr -> type_expr
 val flatten_fields:
@@ -101,6 +111,8 @@ val set_object_name:
 val remove_object_name: type_expr -> unit
 val find_cltype_for_path: Env.t -> Path.t -> type_declaration * type_expr
 
+(** Polymorphic variant handling *)
+
 val sort_row_fields: (label * row_field) list -> (label * row_field) list
 val merge_row_fields:
         (label * row_field) list -> (label * row_field) list ->
@@ -108,6 +120,8 @@ val merge_row_fields:
         (label * row_field * row_field) list
 val filter_row_fields:
         bool -> (label * row_field) list -> (label * row_field) list
+
+(** Infer maximally general type scheme (<-> instantiation) *)
 
 val generalize: type_expr -> unit
         (* Generalize in-place the given type *)
@@ -117,26 +131,19 @@ val lower_contravariant: Env.t -> type_expr -> unit
 val generalize_structure: type_expr -> unit
         (* Generalize the structure of a type, lowering variables
            to !current_level *)
-val generalize_class_type : class_type -> unit
+val generalize_class_type: class_type -> unit
         (* Generalize the components of a class type *)
-val generalize_class_type_structure : class_type -> unit
+val generalize_class_type_structure: class_type -> unit
        (* Generalize the structure of the components of a class type *)
-val generalize_class_signature_spine : Env.t -> class_signature -> unit
+val generalize_class_signature_spine: Env.t -> class_signature -> unit
        (* Special function to generalize methods during inference *)
-val correct_levels: type_expr -> type_expr
-        (* Returns a copy with decreasing levels *)
 val limited_generalize: type_expr -> type_expr -> unit
         (* Only generalize some part of the type
            Make the remaining of the type non-generalizable *)
 val limited_generalize_class_type: type_expr -> class_type -> unit
         (* Same, but for class types *)
 
-val fully_generic: type_expr -> bool
-
-val check_scope_escape : Env.t -> int -> type_expr -> unit
-        (* [check_scope_escape env lvl ty] ensures that [ty] could be raised
-           to the level [lvl] without any scope escape.
-           Raises [Escape] otherwise *)
+(** Instantiation *)
 
 val instance: ?partial:bool -> type_expr -> type_expr
         (* Take an instance of a type scheme *)
@@ -150,7 +157,6 @@ val instance_list: type_expr list -> type_expr list
 val new_local_type:
         ?loc:Location.t ->
         ?manifest_and_scope:(type_expr * int) -> unit -> type_declaration
-val existential_name: constructor_description -> type_expr -> string
 val instance_constructor:
         ?in_pattern:Env.t ref * int ->
         constructor_description -> type_expr list * type_expr * type_expr list
@@ -171,7 +177,6 @@ val instance_poly:
         ?keep_names:bool ->
         bool -> type_expr list -> type_expr -> type_expr list * type_expr
         (* Take an instance of a type scheme containing free univars *)
-val polyfy: Env.t -> type_expr -> type_expr list -> type_expr * bool
 val instance_label:
         bool -> label_description -> type_expr list * type_expr * type_expr
         (* Same, for a label *)
@@ -259,7 +264,8 @@ val is_moregeneral: Env.t -> bool -> type_expr -> type_expr -> bool
 (** Subsumption constraint *)
 
 val rigidify: type_expr -> type_expr list
-        (* "Rigidify" a type and return its type variable *)
+        (* Replace all type variables in a type by univars and
+           return their list *)
 val all_distinct_vars: Env.t -> type_expr list -> bool
         (* Check those types are all distinct type variables *)
 val matches: expand_error_trace:bool -> Env.t -> type_expr -> type_expr -> unit
@@ -270,8 +276,10 @@ val matches: expand_error_trace:bool -> Env.t -> type_expr -> type_expr -> unit
 val does_match: Env.t -> type_expr -> type_expr -> bool
         (* Same as [matches], but returns a [bool] *)
 
-val reify_univars : Env.t -> Types.type_expr -> Types.type_expr
-        (* Replaces all the variables of a type by a univar. *)
+val polyfy: Env.t -> type_expr -> type_expr list -> type_expr * bool
+        (* Replace the given variables in a type by univars. *)
+val reify_univars: Env.t -> Types.type_expr -> Types.type_expr
+        (* Functional version of [rigidify]; uses [polyfy] *)
 
 (* Exceptions for special cases of unify *)
 
@@ -429,16 +437,10 @@ val closed_class:
         (type_expr * bool * string * type_expr) option
         (* Check whether all type variables are bound *)
 
-(** Wastebasket taxon *)
+(** Miscellaneous properties of types *)
 
 val is_contractive: Env.t -> Path.t -> bool
         (* Return whether the definition expands to a proper type constructor *)
-
-val normalize_type: type_expr -> unit
-        (* Remove redundancies from a type *)
-
-val collapse_conj_params: Env.t -> type_expr list -> unit
-        (* Collapse conjunctive types in class parameters *)
 
 val unalias: type_expr -> type_expr
         (* Prepare for reporting errors *)
@@ -446,19 +448,29 @@ val unalias: type_expr -> type_expr
 val arity: type_expr -> int
         (* Return the arity (as for curried functions) of the given type. *)
 
-val reset_reified_var_counter: unit -> unit
-
 val immediacy : Env.t -> type_expr -> Type_immediacy.t
 
 val maybe_pointer_type : Env.t -> type_expr -> bool
        (* True if type is possibly pointer, false if definitely not a pointer *)
+
+val correct_levels: type_expr -> type_expr
+        (* Returns a copy with decreasing levels *)
+
+val fully_generic: type_expr -> bool
+
+(** Miscellaneous operations on types *)
+
+val collapse_conj_params: Env.t -> type_expr list -> unit
+        (* Collapse conjunctive types in class parameters *)
+
+val normalize_type: type_expr -> unit
+        (* Remove redundancies from a type *)
+
+val reset_reified_var_counter: unit -> unit
+
 
 (** Stubs *)
 
 val package_subtype :
     (Env.t -> Path.t -> (Longident.t * type_expr) list ->
       Path.t -> (Longident.t * type_expr) list -> bool) ref
-
-
-
-

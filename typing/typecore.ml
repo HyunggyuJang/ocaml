@@ -1777,7 +1777,7 @@ and type_pat_aux
       begin match no_existentials, constr.cstr_existentials with
       | None, _ | _, [] -> ()
       | Some r, (_ :: _ as exs)  ->
-          let exs = List.map (Ctype.existential_name constr) exs in
+          let exs = List.map (Btype.existential_name constr) exs in
           let name = constr.cstr_name in
           raise (Error (loc, !env, Unexpected_existential (r, name, exs)))
       end;

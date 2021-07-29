@@ -1192,11 +1192,6 @@ let new_local_type ?(loc = Location.none) ?manifest_and_scope () =
     type_uid = Uid.mk ~current_unit:(Env.get_unit_name ());
   }
 
-let existential_name cstr ty =
-  match get_desc ty with
-  | Tvar (Some name) -> "$" ^ cstr.cstr_name ^ "_'" ^ name
-  | _ -> "$" ^ cstr.cstr_name
-
 let instance_constructor ?in_pattern cstr =
   For_copy.with_scope (fun scope ->
     begin match in_pattern with

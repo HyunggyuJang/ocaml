@@ -328,3 +328,4 @@ val print_raw: (Format.formatter -> type_expr -> unit) ref
 (**** Type information getter ****)
 
 val cstr_type_path : constructor_description -> Path.t
+val existential_name: constructor_description -> type_expr -> string
