@@ -38,6 +38,10 @@ let rec map f l =
   | a :: l -> f a :: map f l
 ;;
 
+let rec map' f = function
+  | [] -> []
+  | a :: l -> f a :: map' f l
+;;
 map (fun x -> x + 1) [3;2;1] ;;
 
 (* Arrays *)

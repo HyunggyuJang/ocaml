@@ -234,6 +234,16 @@ Fixpoint map (h : nat) (T T_1 : ml_type) (f : coq_type (ml_arrow T_1 T))
     end
   else Fail.
 
+Fixpoint map' (h : nat) (T T_1 : ml_type) (f : coq_type (ml_arrow T_1 T))
+  param :=
+  if h is h.+1 then
+    match param with
+    | @nil _ => Ret (@nil (coq_type T))
+    | a :: l =>
+      do v <- map' h T T_1 f l; do v_1 <- f a; Ret (@cons (coq_type T) v_1 v)
+    end
+  else Fail.
+
 Definition it_4 :=
   (do cmp <- K cmp;
    map h ml_int ml_int

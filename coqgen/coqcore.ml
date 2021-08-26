@@ -115,17 +115,21 @@ let find_constructor ~loc ~vars cd =
     not_allowed ~loc
       ("The constructor " ^ cd.cstr_name ^ " of type " ^ Path.name path)
 
+let add_pat_variable ~vars id ty =
+  let name = fresh_name ~vars (Ident.name id) in
+  let desc =
+    { ce_name = name; ce_type = ty;
+      ce_vars = []; ce_rec = Nonrecursive; ce_purary = 1 } in
+  let vars = add_term (Path.Pident id) desc vars in
+  (name, vars)
+
 let rec transl_pat : type k. vars:_ -> k general_pattern -> _ =
   fun ~vars pat ->
   let loc = pat.pat_loc in
   match pat.pat_desc with
   | Tpat_any -> (CTid "_", vars)
   | Tpat_var (id, _) ->
-      let name = fresh_name ~vars (Ident.name id) in
-      let desc =
-        { ce_name = name; ce_type = pat.pat_type;
-          ce_vars = []; ce_rec = Nonrecursive; ce_purary = 1 } in
-      let vars = add_term (Path.Pident id) desc vars in
+      let (name, vars) = add_pat_variable ~vars id pat.pat_type in
       (CTid name, vars)
   | Tpat_constant cst ->
       (CTcstr (string_of_constant ~loc cst), vars)
@@ -352,31 +356,47 @@ let rec transl_exp ~vars e =
         {pterm = CTif (ct.pterm, ct1.pterm, ct2.pterm); prec; pary}
   | Texp_match (e, cases, partial) ->
       let ct = transl_exp ~vars e in
-      let ccases = List.map (transl_cases ~vars) cases in
-      let lhs, ctl = List.split ccases in
-      let prec =
-        if List.exists (fun ct -> ct.prec = Recursive) (ct :: ctl)
-        then Recursive else Nonrecursive
+      transl_match ~vars ct cases partial
+  | Texp_function {arg_label = Nolabel; param; cases; partial} ->
+      let pat =
+        match cases with
+        | [] -> not_allowed ~loc "Empty matching"
+        | c :: _ -> c.c_lhs
       in
-      let pary =
-        if partial = Partial then 0 else
-        List.fold_left (fun pary ct -> min pary ct.pary) ct.pary ctl in
-      let ctl =
-        List.map2 (fun (_, vars) ct -> (shrink_purary ~vars ct pary).pterm)
-          lhs ctl
-      in
-      let ccases = List.combine (List.map fst lhs) ctl in
-      let ccases =
-        if partial = Partial then ccases @ [CTid"_", CTid"Fail"] else ccases in
-      let pterm =
-        if ct.pary = 0 then
-          let v = fresh_name ~vars "v" in
-          ctBind ct.pterm (CTabs (v, None, CTmatch (CTid v, None, ccases)))
-        else CTmatch (ct.pterm, None, ccases)
-      in
-      {pterm; prec; pary}
+      let v, vars = add_pat_variable ~vars param pat.pat_type in
+      let ct = {pterm = CTid v; prec = Nonrecursive; pary = 1} in
+      let cases =
+        List.map (fun c -> {c with c_lhs = as_computation_pattern c.c_lhs})
+          cases in
+      let pt = transl_match ~vars ct cases partial in
+      {pterm = CTabs (v, None, pt.pterm); prec = pt.prec; pary = pt.pary + 1}
   | _ ->
       not_allowed ~loc "This kind of term"
+
+and transl_match ~vars ct cases partial =
+  let ccases = List.map (transl_cases ~vars) cases in
+  let lhs, ctl = List.split ccases in
+  let prec =
+    if List.exists (fun ct -> ct.prec = Recursive) (ct :: ctl)
+    then Recursive else Nonrecursive
+  in
+  let pary =
+    if partial = Partial then 0 else
+    List.fold_left (fun pary ct -> min pary ct.pary) ct.pary ctl in
+  let ctl =
+    List.map2 (fun (_, vars) ct -> (shrink_purary ~vars ct pary).pterm)
+      lhs ctl
+  in
+  let ccases = List.combine (List.map fst lhs) ctl in
+  let ccases =
+    if partial = Partial then ccases @ [CTid"_", CTid"Fail"] else ccases in
+  let pterm =
+    if ct.pary = 0 then
+      let v = fresh_name ~vars "v" in
+      ctBind ct.pterm (CTabs (v, None, CTmatch (CTid v, None, ccases)))
+    else CTmatch (ct.pterm, None, ccases)
+  in
+  {pterm; prec; pary}
 
 and transl_cases ~vars case =
   Option.iter (fun e -> not_allowed ~loc:e.exp_loc "This guard") case.c_guard;
