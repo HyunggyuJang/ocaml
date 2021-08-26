@@ -174,6 +174,9 @@ Definition setarray T (a : coq_type (ml_array T)) n (x : coq_type T) :=
   do n <- bounded_nat_of_int (seq.size s) n;
   setref (ml_list T) a (set_nth x s n x).
 
+(* Default amount of gas *)
+Definition h := 100000.
+
 (* Translated code *)
 
 Definition ref' (T : ml_type) := newref T.
@@ -197,7 +200,7 @@ Fixpoint fib (h : nat) (n : coq_type ml_int) : M (coq_type ml_int) :=
       do v_1 <- fib h (Int63.sub n 1%int63); Ret (Int63.add v_1 v)
   else Fail.
 
-Definition it_1 := (do it <- K it; fib 100000 10%int63) empty_env.
+Definition it_1 := (do it <- K it; fib h 10%int63) empty_env.
 Eval vm_compute in it_1.
 
 Fixpoint ack (h : nat) (m n : coq_type ml_int) : M (coq_type ml_int) :=
@@ -209,16 +212,16 @@ Fixpoint ack (h : nat) (m n : coq_type ml_int) : M (coq_type ml_int) :=
         do v <- ack h m (Int63.sub n 1%int63); ack h (Int63.sub m 1%int63) v
   else Fail.
 
-Definition it_2 := (do it_1 <- K it_1; ack 100000 3%int63 7%int63) empty_env.
+Definition it_2 := (do it_1 <- K it_1; ack h 3%int63 7%int63) empty_env.
 Eval vm_compute in it_2.
 
 Definition it_3 :=
-  (do it_2 <- K it_2; ml_lt 100000 ml_string "hellas"%string "hello"%string)
+  (do it_2 <- K it_2; ml_lt h ml_string "hellas"%string "hello"%string)
     empty_env.
 Eval vm_compute in it_3.
 
 Definition cmp :=
-  (do it_3 <- K it_3; ml_lt 100000 ml_char "a"%char "A"%char) empty_env.
+  (do it_3 <- K it_3; ml_lt h ml_char "a"%char "A"%char) empty_env.
 
 Fixpoint map (h : nat) (T T_1 : ml_type) (f : coq_type (ml_arrow T_1 T))
   (l : coq_type (ml_list T_1)) : M (coq_type (ml_list T)) :=
@@ -233,7 +236,7 @@ Fixpoint map (h : nat) (T T_1 : ml_type) (f : coq_type (ml_arrow T_1 T))
 
 Definition it_4 :=
   (do cmp <- K cmp;
-   map 100000 ml_int ml_int
+   map h ml_int ml_int
      (fun x : coq_type ml_int => Ret (Int63.add x 1%int63 : coq_type ml_int))
      (3%int63 :: 2%int63 :: 1%int63 :: @nil (coq_type ml_int)))
     empty_env.
@@ -247,7 +250,7 @@ Definition it_5 :=
 Eval vm_compute in it_5.
 
 Definition it_6 :=
-  (do it_5 <- K it_5; ml_ge 100000 ml_color Green Blue) empty_env.
+  (do it_5 <- K it_5; ml_ge h ml_color Green Blue) empty_env.
 Eval vm_compute in it_6.
 
 Definition mknode (T : ml_type) (t1 t2 : coq_type (ml_tree T ml_int))
@@ -256,7 +259,7 @@ Definition mknode (T : ml_type) (t1 t2 : coq_type (ml_tree T ml_int))
 
 Definition it_7 :=
   (do it_6 <- K it_6;
-   ml_lt 100000 (ml_tree ml_string ml_int)
+   ml_lt h (ml_tree ml_string ml_int)
      (mknode ml_string
         (Leaf (coq_type ml_string) (coq_type ml_int) "a"%string)
         (Leaf (coq_type ml_string) (coq_type ml_int) "b"%string))
@@ -287,7 +290,7 @@ Definition fib2 (h : nat) (n : coq_type ml_int) : M (coq_type ml_int) :=
     tt;
   getref ml_int l1.
 
-Definition it_8 := (do it_7 <- K it_7; fib2 100000 1000%int63) empty_env.
+Definition it_8 := (do it_7 <- K it_7; fib2 h 1000%int63) empty_env.
 Eval vm_compute in it_8.
 
 Fixpoint iota (h : nat) (m n : coq_type ml_int)
@@ -299,8 +302,7 @@ Fixpoint iota (h : nat) (m n : coq_type ml_int)
       Ret (@cons (coq_type ml_int) m v)
   else Fail.
 
-Definition it_9 :=
-  (do it_8 <- K it_8; iota 100000 1%int63 10%int63) empty_env.
+Definition it_9 := (do it_8 <- K it_8; iota h 1%int63 10%int63) empty_env.
 Eval vm_compute in it_9.
 
 Definition omega (T : ml_type) (n : coq_type T) : M (coq_type T) :=
@@ -319,11 +321,11 @@ Definition fixpt (h : nat) (T T_1 : ml_type)
 
 Definition fib_1 :=
   (do it_9 <- K it_9;
-   fixpt 100000 ml_int ml_int
+   fixpt h ml_int ml_int
      (fun fib_1 : coq_type (ml_arrow ml_int ml_int) =>
         Ret
           (fun n : coq_type ml_int =>
-             do v <- ml_le 100000 ml_int n 1%int63;
+             do v <- ml_le h ml_int n 1%int63;
              if v then Ret 1%int63 else
                do v <- fib_1 (Int63.sub n 2%int63);
                do v_1 <- fib_1 (Int63.sub n 1%int63); Ret (Int63.add v_1 v))))
@@ -390,8 +392,7 @@ Fixpoint mccarthy_m (h : nat) (n : coq_type ml_int) : M (coq_type ml_int) :=
       do v <- mccarthy_m h (Int63.add n 11%int63); mccarthy_m h v
   else Fail.
 
-Definition it_14 :=
-  (do it_13 <- K it_13; mccarthy_m 100000 10%int63) empty_env.
+Definition it_14 := (do it_13 <- K it_13; mccarthy_m h 10%int63) empty_env.
 Eval vm_compute in it_14.
 
 Fixpoint tarai (h : nat) (x y z_1 : coq_type ml_int) : M (coq_type ml_int) :=
@@ -405,7 +406,7 @@ Fixpoint tarai (h : nat) (x y z_1 : coq_type ml_int) : M (coq_type ml_int) :=
   else Fail.
 
 Definition it_15 :=
-  (do it_14 <- K it_14; tarai 100000 1%int63 2%int63 3%int63) empty_env.
+  (do it_14 <- K it_14; tarai h 1%int63 2%int63 3%int63) empty_env.
 Eval vm_compute in it_15.
 
 Definition it_16 := (do it_15 <- K it_15; omega ml_int 1%int63) empty_env.
@@ -414,7 +415,7 @@ Eval vm_compute in it_16.
 Definition it_17 :=
   (do it_16 <- K it_16;
    AppM
-     (fixpt 100000 ml_unit ml_int
+     (fixpt h ml_unit ml_int
         (fun f : coq_type (ml_arrow ml_int ml_unit) =>
            Ret (f : coq_type (ml_arrow ml_int ml_unit))))
      0%int63)

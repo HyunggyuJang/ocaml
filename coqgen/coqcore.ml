@@ -421,10 +421,11 @@ and transl_binding ~vars ~rec_flag vb =
     if rec_flag = Recursive then abstract_recursive ct else ct in
   ((id, desc), {pterm = ct; prec; pary = desc.ce_purary})
 
+(*
 let apply_recursive rec_flag ct =
   if rec_flag = Nonrecursive then ct else
   coq_term_subst (Vars.add "h" (CTid"100000") Vars.empty) ct
-  (* CTlet ("h", None, CTid"1000", ct) *)
+*)
 
 let is_pure ~vars ct =
   let fvars = coq_vars ct.pterm in
@@ -452,7 +453,6 @@ let rec transl_structure ~vars = function
         close_type e.exp_type;
         let pt = transl_exp ~vars e in
         let ct = close_top ~vars pt in
-        let ct = apply_recursive pt.prec ct in
         if pt.pary > 0 then
           let cmds, vars = transl_structure ~vars rem in
           (CTeval ct :: cmds, vars)
@@ -488,8 +488,8 @@ let rec transl_structure ~vars = function
           let ct = close_top ~vars pt in
           let ct =
             if ct = pt.pterm && pt.prec = Recursive
-            then abstract_recursive ct
-            else apply_recursive pt.prec ct in
+            then abstract_recursive ct else ct
+          in
           CTdefinition (name, ct) :: cmds, vars'
     | Tstr_type (Recursive, [td]) ->
         let def, vars =

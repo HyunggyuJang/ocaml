@@ -190,5 +190,7 @@ let transl_implementation _modname st =
 \n  do s <- getref (ml_list T) a;\
 \n  do n <- bounded_nat_of_int (seq.size s) n;\
 \n  setref (ml_list T) a (set_nth x s n x).\
+\n\n(* Default amount of gas *)\
+\nDefinition h := 100000.\
 \n\n(* Translated code *)\n"
   :: cmds
