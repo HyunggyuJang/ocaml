@@ -363,6 +363,27 @@ Definition it_12 :=
    getref (ml_list ml_int) r_1) empty_env.
 Eval vm_compute in it_12.
 
+Definition double_r :=
+  (do r <- K r;
+   do it_12 <- K it_12;
+   Ret
+     (fun v : coq_type ml_unit =>
+        match v with
+        | tt =>
+          (do v <-
+           (do v <- getref (ml_list ml_int) r;
+            Ret (@cons (coq_type ml_int) 4%int63 v));
+           setref (ml_list ml_int) r v : M (coq_type ml_unit))
+        end))
+    empty_env.
+
+Definition it_13 :=
+  (do r <- K r;
+   do double_r <- K double_r;
+   do it_12 <- K it_12; do _ <- double_r tt; getref (ml_list ml_int) r)
+    empty_env.
+Eval vm_compute in it_13.
+
 Fixpoint mccarthy_m (h : nat) (n : coq_type ml_int) : M (coq_type ml_int) :=
   if h is h.+1 then
     do v <- ml_gt h ml_int n 100%int63;
@@ -370,9 +391,9 @@ Fixpoint mccarthy_m (h : nat) (n : coq_type ml_int) : M (coq_type ml_int) :=
       do v <- mccarthy_m h (Int63.add n 11%int63); mccarthy_m h v
   else Fail.
 
-Definition it_13 :=
-  (do it_12 <- K it_12; mccarthy_m 100000 10%int63) empty_env.
-Eval vm_compute in it_13.
+Definition it_14 :=
+  (do it_13 <- K it_13; mccarthy_m 100000 10%int63) empty_env.
+Eval vm_compute in it_14.
 
 Fixpoint tarai (h : nat) (x y z_1 : coq_type ml_int) : M (coq_type ml_int) :=
   if h is h.+1 then
@@ -384,20 +405,20 @@ Fixpoint tarai (h : nat) (x y z_1 : coq_type ml_int) : M (coq_type ml_int) :=
     else Ret y
   else Fail.
 
-Definition it_14 :=
-  (do it_13 <- K it_13; tarai 100000 1%int63 2%int63 3%int63) empty_env.
-Eval vm_compute in it_14.
-
-Definition it_15 := (do it_14 <- K it_14; omega ml_int 1%int63) empty_env.
+Definition it_15 :=
+  (do it_14 <- K it_14; tarai 100000 1%int63 2%int63 3%int63) empty_env.
 Eval vm_compute in it_15.
 
-Definition it_16 :=
-  (do it_15 <- K it_15;
+Definition it_16 := (do it_15 <- K it_15; omega ml_int 1%int63) empty_env.
+Eval vm_compute in it_16.
+
+Definition it_17 :=
+  (do it_16 <- K it_16;
    AppM
      (fixpt 100000 ml_unit ml_int
         (fun f : coq_type (ml_arrow ml_int ml_unit) =>
            Ret (f : coq_type (ml_arrow ml_int ml_unit))))
      0%int63)
     empty_env.
-Eval vm_compute in it_16.
+Eval vm_compute in it_17.
 
