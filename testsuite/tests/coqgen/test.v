@@ -379,8 +379,7 @@ Definition double_r :=
 
 Definition it_13 :=
   (do r <- K r;
-   do double_r <- K double_r;
-   do it_12 <- K it_12; do _ <- double_r tt; getref (ml_list ml_int) r)
+   do double_r <- K double_r; do _ <- double_r tt; getref (ml_list ml_int) r)
     empty_env.
 Eval vm_compute in it_13.
 

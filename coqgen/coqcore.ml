@@ -426,11 +426,13 @@ let apply_recursive rec_flag ct =
   coq_term_subst (Vars.add "h" (CTid"100000") Vars.empty) ct
   (* CTlet ("h", None, CTid"1000", ct) *)
 
-let close_top ~vars ct =
+let is_pure ~vars ct =
   let fvars = coq_vars ct.pterm in
-  let is_pure =
-    ct.pary > 0 && Names.disjoint fvars (Names.of_list vars.top_exec) in
-  if is_pure then ct.pterm else
+  ct.pary > 0 && Names.disjoint fvars (Names.of_list vars.top_exec)
+
+let close_top ~vars ct =
+  if is_pure ~vars ct then ct.pterm else
+  let fvars = coq_vars ct.pterm in
   let ct = (nullary ~vars ct).pterm in
   let fvars =
     match vars.top_exec with [] -> fvars | v :: _ -> Names.add v fvars in
@@ -469,6 +471,8 @@ let rec transl_structure ~vars = function
         let name, vars' =
           match id with
           | Some id ->
+              let desc =
+                if is_pure ~vars pt then desc else {desc with ce_purary=0} in
               let prec = if pt.pary > 0 then pt.prec else Nonrecursive in
               let desc = {desc with ce_rec = or_rec desc.ce_rec prec} in
               desc.ce_name, add_term ~toplevel:true (Path.Pident id) desc vars
