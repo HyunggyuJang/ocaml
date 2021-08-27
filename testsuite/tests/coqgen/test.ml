@@ -122,6 +122,17 @@ let r = r in r := 1 :: !r; !r;;
 let double_r () = r := 4 :: !r;;
 double_r (); !r;;
 
+(*
+(* local recursion *)
+let rev xs =
+  let rec iter acc = function
+    | [] -> acc
+    | x::xs -> iter (x::acc) xs
+  in
+  iter [] xs;;
+r := rev !r;;
+*)
+
 (* McCarthy 91 *)
 let rec mccarthy_m n =
   if n > 100 then n - 10
