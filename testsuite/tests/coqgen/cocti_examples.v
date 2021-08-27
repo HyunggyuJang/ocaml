@@ -11,8 +11,6 @@ Inductive ml_type : Set :=
   | ml_empty.
 (* | ml_triple of ml_type & ml_type & ml_type. *)
 
-Inductive empty :=. 
-
 Module MLtypes.
 (* Scheme Equality for ml_type. *)
 Definition ml_type_eq_dec (T1 T2 : ml_type) : {T1=T2}+{T1<>T2}.
@@ -98,7 +96,7 @@ Fixpoint compare_rec (T : ml_type) (h : nat)
       fun l1 l2 =>
         do x <- getref T1 l1; do y <- getref T1 l2; compare_rec T1 h x y
     | ml_arrow _ _ => fun _ _ => Fail
-    | ml_empty => fun _ _ => Fail    
+    | ml_empty => fun _ _ => Fail
     end
   else fun _ _ => Fail.
 
@@ -166,6 +164,17 @@ Print incr.
 End Test.
 
 Section examples.
+
+Definition nil_1 :=
+  (fun T : ml_type =>
+     do x <- newref (ml_list T) (@nil (coq_type T)); getref (ml_list T) x)
+    ml_empty
+    empty_env.
+Eval vm_compute in nil_1.
+
+Definition onel :=
+  (do nil_1 <- K nil_1;
+   Ret (1%int63 :: cast_list (cast_empty ml_int) nil_1)) empty_env.
 
 Fixpoint fib (h : nat) (n : int) : M int :=
   if h is h.+1 then

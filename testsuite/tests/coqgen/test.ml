@@ -15,6 +15,11 @@ let incr r =
 
 let r = ref 1 in incr r;;
 
+(* relaxed value restriction? *)
+let x = ref [] in !x;;
+let nil = let x = ref [] in !x;;
+(* let onel = 1 :: nil;;  requires subtyping *)
+
 let rec loop h = loop h;;
 
 let rec fib n =

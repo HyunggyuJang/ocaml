@@ -451,8 +451,9 @@ let is_pure ~vars ct =
   let fvars = coq_vars ct.pterm in
   ct.pary > 0 && Names.disjoint fvars (Names.of_list vars.top_exec)
 
-let close_top ~vars ct =
-  if is_pure ~vars ct then ct.pterm else
+let close_top ~vars ?is_pure:isp ct =
+  let is_pure = match isp with None -> is_pure ~vars ct | Some b -> b in
+  if is_pure then ct.pterm else
   let fvars = coq_vars ct.pterm in
   let ct = (nullary ~vars ct).pterm in
   let fvars =
@@ -488,11 +489,11 @@ let rec transl_structure ~vars = function
           (CTdefinition (name, ct) :: CTeval (CTid name) :: cmds, vars)
     | Tstr_value (rec_flag, [vb]) ->
         let ((id, desc), pt) = transl_binding ~vars ~rec_flag vb in
+        let is_pure = is_pure ~vars pt in
         let name, vars' =
           match id with
           | Some id ->
-              let desc =
-                if is_pure ~vars pt then desc else {desc with ce_purary=0} in
+              let desc = if is_pure then desc else {desc with ce_purary=0} in
               let prec = if pt.pary > 0 then pt.prec else Nonrecursive in
               let desc = {desc with ce_rec = or_rec desc.ce_rec prec} in
               desc.ce_name, add_term ~toplevel:true (Path.Pident id) desc vars
@@ -500,12 +501,17 @@ let rec transl_structure ~vars = function
         in
         let cmds, vars' = transl_structure ~vars:vars' rem in
         if desc.ce_rec = Recursive then
-          if pt.pary = 0 then
+          if pt.pary = 0 || not is_pure then
             not_allowed ~loc:it.str_loc "This recursive definition"
           else
             CTfixpoint (name, pt.pterm) :: cmds, vars'
         else
-          let ct = close_top ~vars pt in
+          let pt =
+            if is_pure || desc.ce_vars = [] then pt else
+            {pt with pterm =
+             ctapp pt.pterm (List.map (fun _ -> CTid"ml_empty") desc.ce_vars)}
+          in
+          let ct = close_top ~vars ~is_pure pt in
           let ct =
             if ct = pt.pterm && pt.prec = Recursive
             then abstract_recursive ct else ct

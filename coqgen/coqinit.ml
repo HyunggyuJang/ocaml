@@ -23,6 +23,8 @@ let coqgen = Path.Pident (Ident.create_persistent "coqgen")
 let stdlib_ref = Path.Pdot (stdlib, "ref")
 let newgenconstr p tl = newgenty (Tconstr (p, tl, ref Mnil))
 let newgenarrow t1 t2 = newgenty (Tarrow (Nolabel, t1, t2, Cok))
+let ident_empty = Ident.create_predef "empty"
+let path_empty = Path.Pident ident_empty
 
 let xy = [CTid"x"; CTid"y"]
 
@@ -43,6 +45,8 @@ let init_type_map vars =
      ct_type = CTapp (CTid "loc", [CTid "a"]);
      ct_compare =
      Some (CTapp (CTid"compare_ref", CTid"compare_rec" :: CTid"T1" :: xy))});
+   (path_empty, [],
+    {ctd with ct_name = "ml_empty"; ct_type = CTid "empty"});
    (Predef.path_int, [],
     {ctd with ct_name = "ml_int";
      ct_type = CTid "Int63.int";
@@ -198,7 +202,8 @@ let init_term_map vars =
 
 let init_reserved =
   [ "fix"; "Definition"; "Fixpoint"; "Inductive"; "unit"; "bool"; "int63";
-    "M"; "Res"; "Fail"; "K"; "coq_type"; "S"; "Eq"; "Lt"; "Gt" ]
+    "M"; "Res"; "Fail"; "K"; "coq_type"; "S"; "Eq"; "Lt"; "Gt";
+    "nil"; "cons" ]
 
 let init_vars =
   init_type_map (

@@ -78,7 +78,7 @@ let rec transl_type ~loc ~env ~vars ~def visited ty =
               transl_type ~loc ~env ~vars ~def visited ty')
       end
   | Tnil ->
-      CTid (if def then "unit" else "ml_unit")
+      CTid (if def then "empty" else "ml_empty")
   | Tobject _ | Tfield _ ->
       not_allowed ~loc "object types"
   | Tvariant _ ->

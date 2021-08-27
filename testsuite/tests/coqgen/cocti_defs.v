@@ -1,6 +1,9 @@
 From mathcomp Require Import all_ssreflect.
 Require Import Int63 BinNums Ascii String ZArith.
 
+(* The empty type for the relaxed value restriction *)
+Inductive empty :=.
+
 (* failStateMonad *)
 Definition M0 Env T := Env -> option (Env * T).
 
@@ -153,6 +156,11 @@ Definition nat_of_int (n : int) : M nat :=
 Definition bounded_nat_of_int (m : nat) (n : int) : M nat :=
   do n <- nat_of_int n;
   if n < m then Ret n else Fail.
+
+Definition cast_empty T (v : empty) : coq_type T :=
+  match v with end.
+
+Definition cast_list {T1} {T2} := @map T1 T2.
 
 End monadic_operations.
 End REFmonad.
