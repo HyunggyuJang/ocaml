@@ -412,9 +412,14 @@ Definition it_14 :=
 Eval vm_compute in it_14.
 
 Definition f (v : coq_type ml_unit) :=
-  match v with
-  | tt => do z <- FromW z; Ret (z : coq_type (ml_list ml_int))
-  end.
+  do z <- FromW z;
+  Ret match v with | tt => (z : coq_type (ml_list ml_int)) end.
+
+Fixpoint g (h : nat) (x : coq_type ml_int) : M (coq_type (ml_list ml_int)) :=
+  do z <- FromW z;
+  if h is h.+1 then
+    do v <- ml_gt h ml_int x 0%int63; if v then Ret z else g h 1%int63
+  else FailGas.
 
 Definition double_r (v : coq_type ml_unit) :=
   do r <- FromW r;

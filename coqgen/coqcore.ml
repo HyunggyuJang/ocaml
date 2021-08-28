@@ -161,7 +161,7 @@ let is_primitive s =
 
 let transl_ident ~loc ~vars env desc ty =
   let f = CTid desc.ce_name in
-  if desc.ce_purary = 0 then
+  if desc.ce_purary = 0 then (* toplevel value; need to rebind it outside *)
     {pterm = f; prec = Nonrecursive; pary = 1}
   else
     let args = find_instantiation ~loc ~env ~vars desc ty in
@@ -469,12 +469,15 @@ let close_top ~vars ?is_pure:isp pt =
   else
     let rec push n = function
       | CTabs (id, t, ct) when n > 0 ->
-          CTabs (id, t, push (n-1) ct)
-      | CTmatch (ct1, tl, cases) when n > 0 ->
+          let n' =
+            if t = Some (CTid "nat") || t = Some (CTid "ml_type") then n
+            else n-1 in
+          CTabs (id, t, push n' ct)
+      (*| CTmatch (ct1, tl, cases) when n > 0 ->
           CTmatch (ct1, tl,
-                   List.map (fun (p, ct) -> (p, push n ct)) cases)
-      (*| CTann (ct1, ty) ->
-          CTann (push n ct1, ty)*)
+                   List.map (fun (p, ct) -> (p, push n ct)) cases) *)
+      | CTann (ct1, ty) when n = 0 ->
+          CTann (push n ct1, ty)
       | ct -> close
             (nullary ~vars {pterm = ct; prec= Nonrecursive; pary = n}).pterm
     in push pt.pary pt.pterm
@@ -516,7 +519,7 @@ let rec transl_structure ~vars = function
           if pt.pary = 0 then
             not_allowed ~loc:it.str_loc "This recursive definition"
           else
-            CTfixpoint (name, pt.pterm) :: cmds, vars'
+            CTfixpoint (name, close_top ~vars ~is_pure pt) :: cmds, vars'
         else
           let pt =
             if pt.pary > 0 || desc.ce_vars = [] then pt else
