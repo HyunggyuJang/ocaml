@@ -459,7 +459,7 @@ let close_top ~vars ?is_pure:isp pt =
     List.fold_left
       (fun ct v ->
         if not (Names.mem v fvars) then ct else
-        ctBind (CTapp (CTid"K",[CTid v])) (CTabs (v, None, ct)))
+        ctBind (CTapp (CTid"FromW",[CTid v])) (CTabs (v, None, ct)))
       pt vars.top_exec in
   if pt.pary = 0 then
     let it = List.hd vars.top_exec in

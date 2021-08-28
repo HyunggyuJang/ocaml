@@ -296,7 +296,7 @@ Eval vm_compute in it_6.
 Definition arr := Restart it_6 (newarray ml_int 3%int63 5%int63).
 
 Definition it_7 :=
-  Restart arr (do arr <- K arr; setarray ml_int arr 1%int63 6%int63).
+  Restart arr (do arr <- FromW arr; setarray ml_int arr 1%int63 6%int63).
 Eval vm_compute in it_7.
 
 Definition it_8 := Restart it_7 (ml_ge h ml_color Green Blue).
@@ -378,7 +378,7 @@ Definition fib_1 :=
                  do v <- fib_1 (Int63.sub n 2%int63);
                  do v_1 <- fib_1 (Int63.sub n 1%int63); Ret (Int63.add v_1 v)))).
 
-Definition it_12 := Restart fib_1 (do fib_1 <- K fib_1; fib_1 10%int63).
+Definition it_12 := Restart fib_1 (do fib_1 <- FromW fib_1; fib_1 10%int63).
 Eval vm_compute in it_12.
 
 Definition r :=
@@ -386,7 +386,7 @@ Definition r :=
 
 Definition z :=
   Restart r
-    (do r <- K r;
+    (do r <- FromW r;
      do _ <-
      (do v <-
       (do v <- getref (ml_list ml_int) r;
@@ -394,14 +394,14 @@ Definition z :=
       setref (ml_list ml_int) r v);
      getref (ml_list ml_int) r).
 
-Definition it_13 := Restart z (do r <- K r; getref (ml_list ml_int) r).
+Definition it_13 := Restart z (do r <- FromW r; getref (ml_list ml_int) r).
 Eval vm_compute in it_13.
 
-Eval vm_compute in do z <- K z; z.
+Eval vm_compute in do z <- FromW z; z.
 
 Definition it_14 :=
   Restart it_13
-    (do r <- K r;
+    (do r <- FromW r;
      let r_1 := r in
      do _ <-
      (do v <-
@@ -412,7 +412,7 @@ Definition it_14 :=
 Eval vm_compute in it_14.
 
 Definition double_r (v : coq_type ml_unit) :=
-  do r <- K r;
+  do r <- FromW r;
   match v with
   | tt =>
     (do v <-
@@ -422,7 +422,8 @@ Definition double_r (v : coq_type ml_unit) :=
   end.
 
 Definition it_15 :=
-  Restart it_14 (do r <- K r; do _ <- double_r tt; getref (ml_list ml_int) r).
+  Restart it_14
+    (do r <- FromW r; do _ <- double_r tt; getref (ml_list ml_int) r).
 Eval vm_compute in it_15.
 
 Fixpoint mccarthy_m (h : nat) (n : coq_type ml_int) : M (coq_type ml_int) :=
