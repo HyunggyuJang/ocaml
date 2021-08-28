@@ -172,6 +172,7 @@ let transl_implementation _modname st =
 \n\
 \nDefinition coq_type := MLtypes.coq_type M.\
 \nDefinition empty_env := mkEnv 0%int63 nil.\
+\nDefinition it : W unit := (empty_env, inl tt).\
 \n\n(* Generated comparison function *)" ::
   make_compare_rec vars ::
   CTverbatim "Definition ml_compare := compare_rec.\

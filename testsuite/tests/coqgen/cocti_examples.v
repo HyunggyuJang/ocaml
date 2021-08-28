@@ -138,6 +138,8 @@ Eval compute[ml_eq wrap_compare Bind] in ml_eq.
 
 Definition empty_env := mkEnv 0%int63 nil.
 
+Definition it0 : W unit := (empty_env, inl tt).
+
 (*
 #[bypass_check(positivity)]
 Inductive Envi := mkEnvi : (Envi -> Envi) -> Envi.
@@ -185,16 +187,20 @@ End Test.
 
 Section examples.
 
-Definition nil_1 :=
-  (fun T : ml_type =>
-     do x <- newref (ml_list T) (@nil (coq_type T)); getref (ml_list T) x)
-    ml_empty
-    empty_env.
-Eval vm_compute in nil_1.
+Definition nil_1 := Eval vm_compute in
+  Restart it0
+          ((fun T : ml_type =>
+             do x <- newref (ml_list T) (@nil (coq_type T));
+             getref (ml_list T) x)
+             ml_empty).
+Print nil_1.
 
-Definition onel :=
-  (do nil_1 <- K nil_1;
-   Ret (1%int63 :: cast_list (cast_empty ml_int) nil_1)) empty_env.
+Definition onel := Eval vm_compute in
+  Restart nil_1
+          (do nil_1 <- FromW nil_1;
+           Ret (1%int63 :: cast_list (cast_empty ml_int) nil_1)).
+
+Print onel.
 
 Fixpoint fib (h : nat) (n : int) : M int :=
   if h is h.+1 then

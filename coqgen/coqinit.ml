@@ -210,9 +210,11 @@ let init_term_map vars =
 let init_reserved =
   [ "fix"; "Definition"; "Fixpoint"; "Inductive"; "unit"; "bool"; "int63";
     "M"; "Res"; "Fail"; "K"; "coq_type"; "S"; "Eq"; "Lt"; "Gt";
-    "nil"; "cons" ]
+    "nil"; "cons"; "it" ]
 
 let init_vars =
   init_type_map (
-  init_term_map {empty_vars with coq_names = Names.of_list init_reserved}
+  init_term_map {empty_vars with
+                 coq_names = Names.of_list init_reserved;
+                 top_exec = ["it"]}
 )

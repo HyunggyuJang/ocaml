@@ -5,8 +5,8 @@ Require Import Int63 BinNums Ascii String ZArith.
 Inductive empty :=.
 
 (* ErrorStateMonad *)
-Definition Res0 Env Exn T : Type := Env * (T + Exn).
-Definition M0 Env Exn T := Env -> Res0 Env Exn T.
+Definition W0 Env Exn T : Type := Env * (T + Exn).
+Definition M0 Env Exn T := Env -> W0 Env Exn T.
 
 Module Type ENV.
 Parameter Env : Type.
@@ -16,8 +16,8 @@ End ENV.
 Module EFmonad (Env : ENV).
 Import Env.
 
-Definition Res T := Res0 Env Exn T.
-Definition M T := Env -> Res T.
+Definition W T := W0 Env Exn T.
+Definition M T := Env -> W T.
 
 Definition Fail {A} (e : Exn) : M A := fun env => (env, inr e).
 
@@ -29,7 +29,15 @@ Definition Bind {A B} (x : M A) (f : A -> M B) : M B := fun env =>
   | (env', inr e) => (env', inr e)
   end.
 
-Definition GetRes {A} (x : Res A) : M A := fun env => (env, snd x).
+Definition BindW {A B} (x : W A) (f : A -> M B) : W B :=
+  Bind (fun _ => x) f (fst x).  (* (fst x) could be anything *)
+
+Definition Restart {A B} (x : W A) (f : M B) : W B :=
+  BindW x (fun _ => f).
+
+Definition RunW {A} (x : W A) : A + Exn := snd x.
+
+Definition FromW {A} (x : W A) : M A := fun env => (env, RunW x).
 
 Declare Scope do_notation.
 Declare Scope monae_scope.
@@ -183,6 +191,7 @@ Definition bounded_nat_of_int (m : nat) (n : int) : M nat :=
   do n <- nat_of_int n;
   if n < m then Ret n else Fail BoundedNat.
 
+(* Subtyping for encoding the relaxed value restriction *)
 Definition cast_empty T (v : empty) : coq_type T :=
   match v with end.
 
