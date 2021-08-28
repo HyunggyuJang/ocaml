@@ -86,26 +86,19 @@ let make_compare_rec vars =
                        [xy; ctapp (CTid"Delay") [ct]])
                    ctl (List.combine xs ys) (ctRet (CTid "Eq"))))
                 cases in
-            let rec mk_lt_cases = function
-                [] -> []
+            let rec mk_neq_cases = function
+                [] | [_] -> [] (* last constructor already covered *)
               | (cname, ctl) :: cases ->
-                  List.map (fun (cname', ctl') ->
-                    let mkcstr cname ctl =
-                      ctcstr cname (List.map (fun _ -> CTid"_") ctl) in
-                    ctpair (mkcstr cname ctl) (mkcstr cname' ctl'))
-                    cases @
-                  mk_lt_cases cases
+                  let cstr =
+                    ctcstr cname (List.map (fun _ -> CTid "_") ctl) in
+                  [ctpair cstr (CTid "_"), ctRet (CTid "Lt");
+                   ctpair (CTid "_") cstr, ctRet (CTid "Gt")]
+                  @ mk_neq_cases cases
             in
-            let neq_cases =
-              match mk_lt_cases cases with
-                [] -> []
-              | pat :: patl ->
-                  [List.fold_left (fun pat1 pat2 -> ctcstr "|" [pat1; pat2])
-                     pat patl, ctRet (CTid "Lt");
-                   ctpair (CTid "_") (CTid "_"), ctRet (CTid "Gt")]
-            in
+            let neq_cases = mk_neq_cases cases in
             CTmatch (ctpair (CTid"x") (CTid"y"), None, eq_cases @ neq_cases)
-        | None, _ -> CTid "Fail"
+        | None, _ -> ctapp (CTid "raise") [ctapp (CTid"Invalid_argument")
+                                             [CTcstr"\"compare\"%string"]]
       in
       CTabs ("x", None, CTabs ("y", None, ret))
     in
@@ -123,13 +116,30 @@ let make_compare_rec vars =
                                None, mkcoqty (CTid "T"),
                                CTapp (CTid"M", [CTid "comparison"])))),
                List.map make_case (Path.Map.bindings vars.type_map)));
-               CTid "_", CTabs ("_", None, CTabs ("_", None, CTid "Fail"))]
+               CTid "_", CTabs ("_", None, CTabs ("_", None, CTid "FailGas"))]
              ))))
 
 let transl_implementation _modname st =
   let cmds, vars = transl_structure ~vars:init_vars st.str_items in
   let typedefs, cmds = 
     List.partition (function CTinductive _ -> true | _ -> false) cmds in
+  let typedefs =
+    List.map (* re-export ml_exns *)
+      (fun path ->
+        let desc = Path.Map.find path vars.type_map in
+        let name, args, cases =
+          match desc.ct_type, desc.ct_def with
+          | CTid name, Some (args, l) ->
+              name,
+              List.map (fun v -> v, CTid"ml_type") args,
+              List.map (fun (cn, args) ->
+                (cn, List.map (fun _t -> "_", CTid"string") args, None)) l
+          | _ -> not_allowed "Type without constructor information"
+        in
+        CTinductive {name; args; kind = CTsort Type; cases})
+      [Predef.path_exn]
+    @ typedefs
+  in
   CTverbatim "From mathcomp Require Import ssreflect ssrnat seq.\
 \nRequire Import Int63 Ascii String cocti_defs.\
 \n\n(* Generated representation of all ML types *)" ::

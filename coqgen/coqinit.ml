@@ -85,6 +85,13 @@ let init_type_map vars =
      ct_compare = Some
        (CTapp (CTid"compare_ref",
                CTid"compare_rec" :: ctapp (CTid"ml_list") [CTid "T1"] :: xy))});
+   (Predef.path_exn, [],
+    {ctd with ct_name = "ml_exn";
+     ct_type = CTid "ml_exns";
+     ct_constrs = List.map (fun x -> (x,x))
+       ["Invalid_argument"; "Failure"; "Not_found"];
+     ct_def = Some ([], ["Invalid_argument", [CTid"ml_string"];
+                         "Failure", [CTid"ml_string"]; "Not_found", []])});
    (coqgen, ["arrow"],
     {ctd with ct_name = "ml_arrow";
      ct_arity = 2; ct_args = [0, "a"; 1, "b"];

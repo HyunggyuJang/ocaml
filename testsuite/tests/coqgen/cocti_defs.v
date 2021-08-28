@@ -4,29 +4,32 @@ Require Import Int63 BinNums Ascii String ZArith.
 (* The empty type for the relaxed value restriction *)
 Inductive empty :=.
 
-(* failStateMonad *)
-Definition M0 Env T := Env -> option (Env * T).
+(* ErrorStateMonad *)
+Definition Res0 Env Exn T : Type := Env * (T + Exn).
+Definition M0 Env Exn T := Env -> Res0 Env Exn T.
 
 Module Type ENV.
 Parameter Env : Type.
+Parameter Exn : Type.
 End ENV.
 
 Module EFmonad (Env : ENV).
 Import Env.
 
-Definition M := M0 Env.
-Definition Res T := option (Env * T).
+Definition Res T := Res0 Env Exn T.
+Definition M T := Env -> Res T.
 
-Definition Fail {A} : M A := fun _ => None.
+Definition Fail {A} (e : Exn) : M A := fun env => (env, inr e).
 
-Definition Ret {A} (x : A) : M A :=
-  fun env => Some (env, x).
+Definition Ret {A} (x : A) : M A := fun env => (env, inl x).
 
 Definition Bind {A B} (x : M A) (f : A -> M B) : M B := fun env =>
   match x env with
-  | None => None
-  | Some (env, a) => f a env
+  | (env', inl a) => f a env'
+  | (env', inr e) => (env', inr e)
   end.
+
+Definition GetRes {A} (x : Res A) : M A := fun env => (env, snd x).
 
 Declare Scope do_notation.
 Declare Scope monae_scope.
@@ -54,21 +57,30 @@ Record key := mkkey {key_id : int; key_type : ml_type}.
 Variant loc : ml_type -> Type :=
   mkloc : forall k : key, loc (key_type k).
 Parameter coq_type : forall M : Type -> Type, ml_type -> Type.
+Parameter ml_exns : Type.
 End MLTY.
 
 Module REFmonad(MLtypes : MLTY).
 Import MLtypes.
+
+Inductive Exn :=
+  | GasExhausted
+  | RefLookup
+  | BoundedNat
+  | Catchable of ml_exns.
 
 Record binding (M : Type -> Type) :=
   mkbind { bind_key : key; bind_val : coq_type M (key_type bind_key) }.
 Arguments mkbind {M}.
 
 #[bypass_check(positivity)]
-Inductive Env := mkEnv : int -> seq (binding (M0 Env)) -> Env.
+Inductive Env := mkEnv : int -> seq (binding (M0 Env Exn)) -> Env.
 
-Module Env. Definition Env := Env. End Env.
+Module Env. Definition Env := Env. Definition Exn := Exn. End Env.
 Module EFmonadEnv := EFmonad(Env).
 Export EFmonadEnv.
+
+Definition FailGas {A} : M A := fun env => (env, inr GasExhausted).
 
 Section monadic_operations.
 Let coq_type := coq_type M.
@@ -78,7 +90,7 @@ Definition newref (T : ml_type) (val : coq_type T) : M (loc T) :=
   fun env =>
     let: mkEnv c refs := env in
     let key := mkkey c T in
-    Some (mkEnv (succ c) (mkbind key val :: refs), mkloc key).
+    Ret (mkloc key) (mkEnv (succ c) (mkbind key val :: refs)).
 
 Definition coerce (T1 T2 : ml_type) (v : coq_type T1) : option (coq_type T2) :=
   match ml_type_eq_dec T1 T2 with
@@ -99,8 +111,8 @@ Definition getref T (l : loc T) : M (coq_type T) := fun env =>
   let: mkloc key := l in
   let: mkEnv _ refs := env in
   match lookup key refs with
-  | None => None
-  | Some x => Some (env, x)
+  | None => Fail RefLookup env
+  | Some x => Ret x env
   end.
 
 Fixpoint update b (env : seq binding) :=
@@ -122,8 +134,22 @@ Definition setref T (l : loc T) (val : coq_type T) : M unit := fun env =>
       match l in loc T return coq_type T -> binding with
         mkloc key => mkbind key
       end val
-  in Option.bind (fun refs' => Some (mkEnv c refs', tt))
-                 (update b refs).
+  in
+  match update b refs with
+  | None => Fail RefLookup env
+  | Some refs' => Ret tt (mkEnv c refs')
+  end.
+
+Definition raise T (e : ml_exns) : M (coq_type T) :=
+  Fail (Catchable e).
+
+Definition handle T (c : M (coq_type T))
+           (h : ml_exns -> M (coq_type T)) : M (coq_type T) :=
+  fun env =>
+    match c env with
+    | (env', inr (Catchable e)) => h e env'
+    | (env', r) => (env', r)
+    end.
 
 Section Comparison.
 Definition lexi_compare (cmp1 cmp2 : M comparison) :=
@@ -150,12 +176,12 @@ Definition nat_of_int (n : int) : M nat :=
   match to_Z n with
   | Z0 => Ret 0
   | Zpos pos => Ret (Pos.to_nat pos)
-  | Zneg _ => Fail
+  | Zneg _ => Fail BoundedNat
   end.
 
 Definition bounded_nat_of_int (m : nat) (n : int) : M nat :=
   do n <- nat_of_int n;
-  if n < m then Ret n else Fail.
+  if n < m then Ret n else Fail BoundedNat.
 
 Definition cast_empty T (v : empty) : coq_type T :=
   match v with end.

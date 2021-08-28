@@ -7,6 +7,7 @@ Inductive ml_type :=
   | ml_char
   | ml_bool
   | ml_unit
+  | ml_exn
   | ml_array (_ : ml_type)
   | ml_list (_ : ml_type)
   | ml_string
@@ -41,6 +42,13 @@ Section with_monad.
 Variable M : Type -> Type.
 
 (* Generated type definitions *)
+Inductive ml_exns0 :=
+  | Invalid_argument (_ : string)
+  | Failure (_ : string)
+  | Not_found.
+
+Definition ml_exns := ml_exns0.
+
 Inductive color := | Red | Green | Blue.
 
 Inductive tree (a : Type) (b : Type) :=
@@ -63,6 +71,7 @@ Fixpoint coq_type (T : ml_type) : Type :=
   | ml_char => Ascii.ascii
   | ml_bool => bool
   | ml_unit => unit
+  | ml_exn => ml_exns
   | ml_array T1 => loc (ml_list T1)
   | ml_list T1 => list (coq_type T1)
   | ml_string => String.string
@@ -88,7 +97,7 @@ Definition coq_type := MLtypes.coq_type M.
 Definition empty_env := mkEnv 0%int63 nil.
 
 (* Generated comparison function *)
-Fixpoint compare_rec (h : nat) (T : ml_type) :=
+Fixpoint compare_rec (h : nat) (T : ml_type) : coq_type T -> coq_type T -> M comparison :=
   if h is h.+1 then
     let compare_rec := compare_rec h in
     match T as T return coq_type T -> coq_type T -> M comparison with
@@ -96,18 +105,32 @@ Fixpoint compare_rec (h : nat) (T : ml_type) :=
     | ml_char => fun x y => Ret (compare_ascii x y)
     | ml_bool => fun x y => Ret (Bool.compare x y)
     | ml_unit => fun x y => Ret Eq
+    | ml_exn =>
+      fun x y =>
+        match x, y with
+        | Not_found, Not_found => Ret Eq
+        | Invalid_argument x1, Invalid_argument y1 =>
+          compare_rec ml_string x1 y1
+        | Failure x1, Failure y1 => compare_rec ml_string x1 y1
+        | Not_found, _ => Ret Lt
+        | _, Not_found => Ret Gt
+        | Invalid_argument _, _ => Ret Lt
+        | _, Invalid_argument _ => Ret Gt
+        end
     | ml_array T1 => fun x y => compare_ref compare_rec (ml_list T1) x y
     | ml_list T1 => fun x y => compare_list compare_rec T1 x y
     | ml_string => fun x y => Ret (compare_string x y)
-    | ml_empty => fun x y => Fail
+    | ml_empty => fun x y => Fail (Catchable (Invalid_argument "compare"%string))
     | ml_color =>
       fun x y =>
         match x, y with
         | Red, Red => Ret Eq
         | Green, Green => Ret Eq
         | Blue, Blue => Ret Eq
-        | Red, Green | Red, Blue | Green, Blue => Ret Lt
-        | _, _ => Ret Gt
+        | Red, _ => Ret Lt
+        | _, Red => Ret Gt
+        | Green, _ => Ret Lt
+        | _, Green => Ret Gt
         end
     | ml_tree T1 T2 =>
       fun x y =>
@@ -118,8 +141,8 @@ Fixpoint compare_rec (h : nat) (T : ml_type) :=
             (Delay
                (lexi_compare (compare_rec T2 x2 y2)
                   (Delay (compare_rec (ml_tree T1 T2) x3 y3))))
-        | Leaf _, Node _ _ _ => Ret Lt
-        | _, _ => Ret Gt
+        | Leaf _, _ => Ret Lt
+        | _, Leaf _ => Ret Gt
         end
     | ml_point =>
       fun x y =>
@@ -145,13 +168,13 @@ Fixpoint compare_rec (h : nat) (T : ml_type) :=
         match x, y with
         | None, None => Ret Eq
         | Some x1, Some y1 => compare_rec T1 x1 y1
-        | None, Some _ => Ret Lt
-        | _, _ => Ret Gt
+        | None, _ => Ret Lt
+        | _, None => Ret Gt
         end
     | ml_ref T1 => fun x y => compare_ref compare_rec T1 x y
-    | ml_arrow T1 T2 => fun x y => Fail
+    | ml_arrow T1 T2 => fun x y => Fail (Catchable (Invalid_argument "compare"%string))
     end
-  else fun _ _ => Fail.
+  else fun _ _ => FailGas.
 
 Definition ml_compare := compare_rec.
 
@@ -171,7 +194,7 @@ Definition newarray T len (x : coq_type T) :=
 Definition getarray T (a : coq_type (ml_array T)) n : M (coq_type T) :=
   do s <- getref (ml_list T) a;
   do n <- bounded_nat_of_int (seq.size s) n;
-  if s is x :: _ then Ret (nth x s n) else Fail.
+  if s is x :: _ then Ret (nth x s n) else raise _ (Invalid_argument "getarray").
 Definition setarray T (a : coq_type (ml_array T)) n (x : coq_type T) :=
   do s <- getref (ml_list T) a;
   do n <- bounded_nat_of_int (seq.size s) n;
@@ -206,7 +229,7 @@ Definition nil_1 :=
     empty_env.
 
 Fixpoint loop (h : nat) (T T_1 : ml_type) (h_1 : coq_type T_1)
-  : M (coq_type T) := if h is h.+1 then loop h T T_1 h_1 else Fail.
+  : M (coq_type T) := if h is h.+1 then loop h T T_1 h_1 else FailGas.
 
 Fixpoint fib (h : nat) (n : coq_type ml_int) : M (coq_type ml_int) :=
   if h is h.+1 then
@@ -214,7 +237,7 @@ Fixpoint fib (h : nat) (n : coq_type ml_int) : M (coq_type ml_int) :=
     if v then Ret 1%int63 else
       do v <- fib h (Int63.sub n 2%int63);
       do v_1 <- fib h (Int63.sub n 1%int63); Ret (Int63.add v_1 v)
-  else Fail.
+  else FailGas.
 
 Definition it_2 := (do nil_1 <- K nil_1; fib h 10%int63) empty_env.
 Eval vm_compute in it_2.
@@ -226,7 +249,7 @@ Fixpoint ack (h : nat) (m n : coq_type ml_int) : M (coq_type ml_int) :=
       do v <- ml_le h ml_int n 0%int63;
       if v then ack h (Int63.sub m 1%int63) 1%int63 else
         do v <- ack h m (Int63.sub n 1%int63); ack h (Int63.sub m 1%int63) v
-  else Fail.
+  else FailGas.
 
 Definition it_3 := (do it_2 <- K it_2; ack h 3%int63 7%int63) empty_env.
 Eval vm_compute in it_3.
@@ -248,7 +271,7 @@ Fixpoint map (h : nat) (T T_1 : ml_type) (f : coq_type (ml_arrow T_1 T))
       do v <- map h T T_1 f l_1;
       do v_1 <- f a; Ret (@cons (coq_type T) v_1 v)
     end
-  else Fail.
+  else FailGas.
 
 Fixpoint map' (h : nat) (T T_1 : ml_type) (f : coq_type (ml_arrow T_1 T))
   param :=
@@ -258,7 +281,7 @@ Fixpoint map' (h : nat) (T T_1 : ml_type) (f : coq_type (ml_arrow T_1 T))
     | a :: l =>
       do v <- map' h T T_1 f l; do v_1 <- f a; Ret (@cons (coq_type T) v_1 v)
     end
-  else Fail.
+  else FailGas.
 
 Definition it_5 :=
   (do cmp <- K cmp;
@@ -302,7 +325,7 @@ Fixpoint iter_int (h : nat) (T : ml_type) (n : coq_type ml_int)
   if h is h.+1 then
     do v <- ml_lt h ml_int n 1%int63;
     if v then Ret x else do v <- f x; iter_int h T (Int63.sub n 1%int63) f v
-  else Fail.
+  else FailGas.
 
 Definition fib2 (h : nat) (n : coq_type ml_int) : M (coq_type ml_int) :=
   do l1 <- newref ml_int 1%int63;
@@ -326,7 +349,7 @@ Fixpoint iota (h : nat) (m n : coq_type ml_int)
     if v then Ret (@nil (coq_type ml_int)) else
       do v <- iota h (Int63.add m 1%int63) (Int63.sub n 1%int63);
       Ret (@cons (coq_type ml_int) m v)
-  else Fail.
+  else FailGas.
 
 Definition it_10 := (do it_9 <- K it_9; iota h 1%int63 10%int63) empty_env.
 Eval vm_compute in it_10.
@@ -391,23 +414,19 @@ Definition it_13 :=
    getref (ml_list ml_int) r_1) empty_env.
 Eval vm_compute in it_13.
 
-Definition double_r :=
-  (do r <- K r;
-   do it_13 <- K it_13;
-   Ret
-     (fun v : coq_type ml_unit =>
-        match v with
-        | tt =>
-          (do v <-
-           (do v <- getref (ml_list ml_int) r;
-            Ret (@cons (coq_type ml_int) 4%int63 v));
-           setref (ml_list ml_int) r v : M (coq_type ml_unit))
-        end))
-    empty_env.
+Definition double_r v :=
+  match v with
+  | tt =>
+    (do r <- GetRes r;
+     do v <-
+        (do v <- getref (ml_list ml_int) r;
+         Ret (@cons (coq_type ml_int) 4%int63 v));
+     setref (ml_list ml_int) r v : M (coq_type ml_unit))
+  end.
 
 Definition it_14 :=
   (do r <- K r;
-   do double_r <- K double_r; do _ <- double_r tt; getref (ml_list ml_int) r)
+   do _ <- double_r tt; getref (ml_list ml_int) r)
     empty_env.
 Eval vm_compute in it_14.
 
@@ -416,7 +435,7 @@ Fixpoint mccarthy_m (h : nat) (n : coq_type ml_int) : M (coq_type ml_int) :=
     do v <- ml_gt h ml_int n 100%int63;
     if v then Ret (Int63.sub n 10%int63) else
       do v <- mccarthy_m h (Int63.add n 11%int63); mccarthy_m h v
-  else Fail.
+  else FailGas.
 
 Definition it_15 := (do it_14 <- K it_14; mccarthy_m h 10%int63) empty_env.
 Eval vm_compute in it_15.
@@ -429,7 +448,7 @@ Fixpoint tarai (h : nat) (x y z_1 : coq_type ml_int) : M (coq_type ml_int) :=
       do v_1 <- tarai h (Int63.sub y 1%int63) z_1 x;
       do v_2 <- tarai h (Int63.sub x 1%int63) y z_1; tarai h v_2 v_1 v
     else Ret y
-  else Fail.
+  else FailGas.
 
 Definition it_16 :=
   (do it_15 <- K it_15; tarai h 1%int63 2%int63 3%int63) empty_env.
