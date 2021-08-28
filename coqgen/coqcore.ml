@@ -85,7 +85,7 @@ let rec insert_guard ct =
       CTann (insert_guard ct, cty)
   | _ ->
       CTmatch (CTid "h", None,
-               [(CTapp(CTid"S",[CTid"h"]),ct); (CTid"_", CTid"Fail")])
+               [(CTapp(CTid"S",[CTid"h"]),ct); (CTid"_", CTid"FailGas")])
 
 let string_of_constant ~loc = function
   | Const_int x ->
@@ -389,7 +389,7 @@ and transl_match ~vars ct cases partial =
   in
   let ccases = List.combine (List.map fst lhs) ctl in
   let ccases =
-    if partial = Partial then ccases @ [CTid"_", CTid"Fail"] else ccases in
+    if partial = Partial then ccases @ [CTid"_", CTid"FailGas"] else ccases in
   let pterm =
     if ct.pary = 0 then
       let v = fresh_name ~vars "v" in

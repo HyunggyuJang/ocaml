@@ -21,6 +21,12 @@ Inductive ml_type :=
   | ml_ref (_ : ml_type)
   | ml_arrow (_ : ml_type) (_ : ml_type).
 
+
+Inductive ml_exns :=
+  | Invalid_argument (_ : string)
+  | Failure (_ : string)
+  | Not_found.
+
 (* Module argument for monadic functor *)
 Module MLtypes.
 Definition ml_type_eq_dec (T1 T2 : ml_type) : {T1=T2}+{T1<>T2}.
@@ -35,6 +41,7 @@ revert T2; induction T1; destruct T2;
 Defined.
 
 Local Definition ml_type := ml_type.
+Local Definition ml_exns := ml_exns.
 Record key := mkkey {key_id : int; key_type : ml_type}.
 Variant loc : ml_type -> Type := mkloc : forall k : key, loc (key_type k).
 
@@ -42,13 +49,6 @@ Section with_monad.
 Variable M : Type -> Type.
 
 (* Generated type definitions *)
-Inductive ml_exns0 :=
-  | Invalid_argument (_ : string)
-  | Failure (_ : string)
-  | Not_found.
-
-Definition ml_exns := ml_exns0.
-
 Inductive color := | Red | Green | Blue.
 
 Inductive tree (a : Type) (b : Type) :=
@@ -97,7 +97,8 @@ Definition coq_type := MLtypes.coq_type M.
 Definition empty_env := mkEnv 0%int63 nil.
 
 (* Generated comparison function *)
-Fixpoint compare_rec (h : nat) (T : ml_type) : coq_type T -> coq_type T -> M comparison :=
+Fixpoint compare_rec (h : nat) (T : ml_type)
+  : coq_type T -> coq_type T -> M comparison :=
   if h is h.+1 then
     let compare_rec := compare_rec h in
     match T as T return coq_type T -> coq_type T -> M comparison with
@@ -120,7 +121,8 @@ Fixpoint compare_rec (h : nat) (T : ml_type) : coq_type T -> coq_type T -> M com
     | ml_array T1 => fun x y => compare_ref compare_rec (ml_list T1) x y
     | ml_list T1 => fun x y => compare_list compare_rec T1 x y
     | ml_string => fun x y => Ret (compare_string x y)
-    | ml_empty => fun x y => Fail (Catchable (Invalid_argument "compare"%string))
+    | ml_empty =>
+      fun x y => Fail (Catchable (Invalid_argument "compare"%string))
     | ml_color =>
       fun x y =>
         match x, y with
@@ -172,7 +174,8 @@ Fixpoint compare_rec (h : nat) (T : ml_type) : coq_type T -> coq_type T -> M com
         | _, None => Ret Gt
         end
     | ml_ref T1 => fun x y => compare_ref compare_rec T1 x y
-    | ml_arrow T1 T2 => fun x y => Fail (Catchable (Invalid_argument "compare"%string))
+    | ml_arrow T1 T2 =>
+      fun x y => Fail (Catchable (Invalid_argument "compare"%string))
     end
   else fun _ _ => FailGas.
 
@@ -194,7 +197,8 @@ Definition newarray T len (x : coq_type T) :=
 Definition getarray T (a : coq_type (ml_array T)) n : M (coq_type T) :=
   do s <- getref (ml_list T) a;
   do n <- bounded_nat_of_int (seq.size s) n;
-  if s is x :: _ then Ret (nth x s n) else raise _ (Invalid_argument "getarray").
+  if s is x :: _ then Ret (nth x s n) else
+  raise _ (Invalid_argument "getarray").
 Definition setarray T (a : coq_type (ml_array T)) n (x : coq_type T) :=
   do s <- getref (ml_list T) a;
   do n <- bounded_nat_of_int (seq.size s) n;
@@ -414,19 +418,23 @@ Definition it_13 :=
    getref (ml_list ml_int) r_1) empty_env.
 Eval vm_compute in it_13.
 
-Definition double_r v :=
-  match v with
-  | tt =>
-    (do r <- GetRes r;
-     do v <-
-        (do v <- getref (ml_list ml_int) r;
-         Ret (@cons (coq_type ml_int) 4%int63 v));
-     setref (ml_list ml_int) r v : M (coq_type ml_unit))
-  end.
+Definition double_r :=
+  (do r <- K r;
+   do it_13 <- K it_13;
+   Ret
+     (fun v : coq_type ml_unit =>
+        match v with
+        | tt =>
+          (do v <-
+           (do v <- getref (ml_list ml_int) r;
+            Ret (@cons (coq_type ml_int) 4%int63 v));
+           setref (ml_list ml_int) r v : M (coq_type ml_unit))
+        end))
+    empty_env.
 
 Definition it_14 :=
   (do r <- K r;
-   do _ <- double_r tt; getref (ml_list ml_int) r)
+   do double_r <- K double_r; do _ <- double_r tt; getref (ml_list ml_int) r)
     empty_env.
 Eval vm_compute in it_14.
 

@@ -97,8 +97,10 @@ let make_compare_rec vars =
             in
             let neq_cases = mk_neq_cases cases in
             CTmatch (ctpair (CTid"x") (CTid"y"), None, eq_cases @ neq_cases)
-        | None, _ -> ctapp (CTid "raise") [ctapp (CTid"Invalid_argument")
-                                             [CTcstr"\"compare\"%string"]]
+        | None, _ -> ctapp (CTid "Fail")
+              [ctapp (CTid "Catchable")
+                 [ctapp (CTid"Invalid_argument")
+                    [CTcstr"\"compare\"%string"]]]
       in
       CTabs ("x", None, CTabs ("y", None, ret))
     in
@@ -106,7 +108,8 @@ let make_compare_rec vars =
   in
   CTfixpoint ("compare_rec", CTabs (
               "h", Some (CTid "nat"), CTabs (
-              "T", Some ml_tid, CTmatch (
+              "T", Some ml_tid,
+              CTann (CTmatch (
               CTid "h", None,
               [CTapp (CTid "S", [CTid "h"]), CTlet (
                "compare_rec", None, ctapp (CTid"compare_rec") [CTid"h"],
@@ -117,33 +120,26 @@ let make_compare_rec vars =
                                CTapp (CTid"M", [CTid "comparison"])))),
                List.map make_case (Path.Map.bindings vars.type_map)));
                CTid "_", CTabs ("_", None, CTabs ("_", None, CTid "FailGas"))]
-             ))))
+             ), CTprod (
+                     None, mkcoqty (CTid "T"), CTprod (
+                     None, mkcoqty (CTid "T"),
+                     CTapp (CTid"M", [CTid "comparison"]))))
+             )))
 
 let transl_implementation _modname st =
   let cmds, vars = transl_structure ~vars:init_vars st.str_items in
   let typedefs, cmds = 
-    List.partition (function CTinductive _ -> true | _ -> false) cmds in
-  let typedefs =
-    List.map (* re-export ml_exns *)
-      (fun path ->
-        let desc = Path.Map.find path vars.type_map in
-        let name, args, cases =
-          match desc.ct_type, desc.ct_def with
-          | CTid name, Some (args, l) ->
-              name,
-              List.map (fun v -> v, CTid"ml_type") args,
-              List.map (fun (cn, args) ->
-                (cn, List.map (fun _t -> "_", CTid"string") args, None)) l
-          | _ -> not_allowed "Type without constructor information"
-        in
-        CTinductive {name; args; kind = CTsort Type; cases})
-      [Predef.path_exn]
-    @ typedefs
+    List.partition (function CTinductive _ -> true | _ -> false) cmds
   in
   CTverbatim "From mathcomp Require Import ssreflect ssrnat seq.\
 \nRequire Import Int63 Ascii String cocti_defs.\
 \n\n(* Generated representation of all ML types *)" ::
   make_ml_type vars ::
+  CTverbatim "\
+\nInductive ml_exns :=\
+\n  | Invalid_argument (_ : string)\
+\n  | Failure (_ : string)\
+\n  | Not_found.\n" ::
   CTverbatim "(* Module argument for monadic functor *)\
 \nModule MLtypes.\
 \nDefinition ml_type_eq_dec (T1 T2 : ml_type) : {T1=T2}+{T1<>T2}.\
@@ -157,6 +153,7 @@ let transl_implementation _modname st =
 \n    right; injection; intros; contradiction.\
 \nDefined.\n\
 \nLocal Definition ml_type := ml_type.\
+\nLocal Definition ml_exns := ml_exns.\
 \nRecord key := mkkey {key_id : int; key_type : ml_type}.\
 \nVariant loc : ml_type -> Type := mkloc : forall k : key, loc (key_type k).\
 \n\
@@ -195,7 +192,8 @@ let transl_implementation _modname st =
 \nDefinition getarray T (a : coq_type (ml_array T)) n : M (coq_type T) :=\
 \n  do s <- getref (ml_list T) a;\
 \n  do n <- bounded_nat_of_int (seq.size s) n;\
-\n  if s is x :: _ then Ret (nth x s n) else Fail.\
+\n  if s is x :: _ then Ret (nth x s n) else\
+\n  raise _ (Invalid_argument \"getarray\").\
 \nDefinition setarray T (a : coq_type (ml_array T)) n (x : coq_type T) :=\
 \n  do s <- getref (ml_list T) a;\
 \n  do n <- bounded_nat_of_int (seq.size s) n;\
