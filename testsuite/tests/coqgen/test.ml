@@ -122,6 +122,7 @@ let z = r := 1 :: !r; !r;;
 !r;;
 z;;
 let r = r in r := 1 :: !r; !r;;
+let f () = z;;
 
 (* use toplevel value *)
 let double_r () = r := 4 :: !r;;

@@ -451,6 +451,8 @@ let is_pure ~vars pt =
   let fvars = coq_vars pt.pterm in
   pt.pary > 0 && Names.disjoint fvars (Names.of_list vars.top_exec)
 
+let is_abs = function CTabs _ -> true | _ -> false
+
 let close_top ~vars ?is_pure:isp pt =
   let is_pure = match isp with None -> is_pure ~vars pt | Some b -> b in
   if is_pure then pt.pterm else
@@ -461,9 +463,9 @@ let close_top ~vars ?is_pure:isp pt =
         if not (Names.mem v fvars) then ct else
         ctBind (CTapp (CTid"FromW",[CTid v])) (CTabs (v, None, ct)))
       pt vars.top_exec in
-  if pt.pary = 0 then
+  if pt.pary = 0 || not (is_abs pt.pterm) then
     let it = List.hd vars.top_exec in
-    ctapp (CTid "Restart") [CTid it; close pt.pterm]
+    ctapp (CTid "Restart") [CTid it; close (nullary ~vars pt).pterm]
   else
     let rec push n = function
       | CTabs (id, t, ct) when n > 0 ->
@@ -471,9 +473,10 @@ let close_top ~vars ?is_pure:isp pt =
       | CTmatch (ct1, tl, cases) when n > 0 ->
           CTmatch (ct1, tl,
                    List.map (fun (p, ct) -> (p, push n ct)) cases)
-      | CTann (ct1, ty) ->
-          CTann (ct1, push n ty)
-      | ct -> close ct
+      (*| CTann (ct1, ty) ->
+          CTann (push n ct1, ty)*)
+      | ct -> close
+            (nullary ~vars {pterm = ct; prec= Nonrecursive; pary = n}).pterm
     in push pt.pary pt.pterm
 
 let rec transl_structure ~vars = function

@@ -397,7 +397,7 @@ Definition z :=
 Definition it_13 := Restart z (do r <- FromW r; getref (ml_list ml_int) r).
 Eval vm_compute in it_13.
 
-Eval vm_compute in do z <- FromW z; z.
+Eval vm_compute in Restart it_13 (do z <- FromW z; Ret z).
 
 Definition it_14 :=
   Restart it_13
@@ -410,6 +410,11 @@ Definition it_14 :=
       setref (ml_list ml_int) r_1 v);
      getref (ml_list ml_int) r_1).
 Eval vm_compute in it_14.
+
+Definition f (v : coq_type ml_unit) :=
+  match v with
+  | tt => do z <- FromW z; Ret (z : coq_type (ml_list ml_int))
+  end.
 
 Definition double_r (v : coq_type ml_unit) :=
   do r <- FromW r;
@@ -456,8 +461,8 @@ Definition it_19 :=
   Restart it_18
     (AppM
        (fixpt h ml_empty ml_int
-          (fun f : coq_type (ml_arrow ml_int ml_empty) =>
-             Ret (f : coq_type (ml_arrow ml_int ml_empty))))
+          (fun f_1 : coq_type (ml_arrow ml_int ml_empty) =>
+             Ret (f_1 : coq_type (ml_arrow ml_int ml_empty))))
        0%int63).
 Eval vm_compute in it_19.
 
