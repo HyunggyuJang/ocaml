@@ -447,40 +447,45 @@ let apply_recursive rec_flag ct =
   coq_term_subst (Vars.add "h" (CTid"100000") Vars.empty) ct
 *)
 
-let is_pure ~vars pt =
+let close_top ~vars ~ce_vars pt =
   let fvars = coq_vars pt.pterm in
-  pt.pary > 0 && Names.disjoint fvars (Names.of_list vars.top_exec)
-
-let is_abs = function CTabs _ -> true | _ -> false
-
-let close_top ~vars ?is_pure:isp pt =
-  let is_pure = match isp with None -> is_pure ~vars pt | Some b -> b in
-  if is_pure then pt.pterm else
+  let is_pure =
+    pt.pary > 0 && Names.disjoint fvars (Names.of_list vars.top_exec) in
+  if is_pure then pt else
   let fvars = coq_vars pt.pterm in
   let close pt =
     List.fold_left
-      (fun ct v ->
-        if not (Names.mem v fvars) then ct else
-        ctBind (CTapp (CTid"FromW",[CTid v])) (CTabs (v, None, ct)))
+      (fun pt v ->
+        if not (Names.mem v fvars) then pt else
+        {pt with pterm =
+         ctBind (CTapp (CTid"FromW",[CTid v])) (CTabs (v, None, pt.pterm))})
       pt vars.top_exec in
-  if pt.pary = 0 || not (is_abs pt.pterm) then
-    let it = List.hd vars.top_exec in
-    ctapp (CTid "Restart") [CTid it; close (nullary ~vars pt).pterm]
-  else
-    let rec push n = function
-      | CTabs (id, t, ct) when n > 0 ->
-          let n' =
-            if t = Some (CTid "nat") || t = Some (CTid "ml_type") then n
-            else n-1 in
-          CTabs (id, t, push n' ct)
-      (*| CTmatch (ct1, tl, cases) when n > 0 ->
-          CTmatch (ct1, tl,
-                   List.map (fun (p, ct) -> (p, push n ct)) cases) *)
-      | CTann (ct1, ty) when n = 0 ->
-          CTann (push n ct1, ty)
-      | ct -> close
-            (nullary ~vars {pterm = ct; prec= Nonrecursive; pary = n}).pterm
-    in push pt.pary pt.pterm
+  let rec push pt =
+    let n = pt.pary in
+    match pt.pterm with
+    | CTabs (id, t, ct) when n > 0 ->
+        let n' =
+          if t = Some (CTid "nat") || t = Some (CTid "ml_type") then n
+          else n-1 in
+        let pt = push {pt with pterm = ct; pary = n'} in
+        {pt with pterm = CTabs (id, t, pt.pterm);
+         pary = pt.pary + n - n'}
+    | CTann (ct1, ty) when n = 0 ->
+        let pt = push {pt with pterm = ct1} in
+        {pt with pterm = CTann (pt.pterm, ty)}
+    | _ ->
+        close (nullary ~vars pt)
+  in
+  let pt = push pt in
+  if pt.pary > 0 then pt else
+  (* need to execute *)
+  let pt =
+    if ce_vars = [] then pt else
+    {pt with pterm =
+     ctapp pt.pterm (List.map (fun _ -> CTid "ml_empty") ce_vars)}
+  in
+  let it = List.hd vars.top_exec in
+  {pt with pterm = ctapp (CTid "Restart") [CTid it; pt.pterm]}
 
 let rec transl_structure ~vars = function
     [] -> ([], vars)
@@ -489,10 +494,10 @@ let rec transl_structure ~vars = function
         Ctype.unify_var e.exp_env (Ctype.newvar ()) e.exp_type;
         close_type e.exp_type;
         let pt = transl_exp ~vars e in
-        let ct = close_top ~vars pt in
+        let pt = close_top ~vars ~ce_vars:[] pt in
         if pt.pary > 0 then
           let cmds, vars = transl_structure ~vars rem in
-          (CTeval ct :: cmds, vars)
+          (CTeval pt.pterm :: cmds, vars)
         else
           let name = fresh_name ~vars "it" in
           let id = Ident.create_local name in
@@ -502,10 +507,10 @@ let rec transl_structure ~vars = function
              ce_type = e.exp_type; ce_vars = []} in
           let vars = add_term ~toplevel:true (Path.Pident id) desc vars in
           let cmds, vars = transl_structure ~vars rem in
-          (CTdefinition (name, ct) :: CTeval (CTid name) :: cmds, vars)
+          (CTdefinition (name, pt.pterm) :: CTeval (CTid name) :: cmds, vars)
     | Tstr_value (rec_flag, [vb]) ->
         let ((id, desc), pt) = transl_binding ~vars ~rec_flag vb in
-        let is_pure = is_pure ~vars pt in
+        let pt = close_top ~vars ~ce_vars:desc.ce_vars pt in
         let name, vars' =
           match id with
           | Some id ->
@@ -519,17 +524,12 @@ let rec transl_structure ~vars = function
           if pt.pary = 0 then
             not_allowed ~loc:it.str_loc "This recursive definition"
           else
-            CTfixpoint (name, close_top ~vars ~is_pure pt) :: cmds, vars'
+            CTfixpoint (name, pt.pterm) :: cmds, vars'
         else
-          let pt =
-            if pt.pary > 0 || desc.ce_vars = [] then pt else
-            {pt with pterm =
-             ctapp pt.pterm (List.map (fun _ -> CTid"ml_empty") desc.ce_vars)}
-          in
-          let ct = close_top ~vars ~is_pure pt in
           let ct =
-            if ct = pt.pterm && pt.prec = Recursive
-            then abstract_recursive ct else ct
+            if pt.prec = Recursive && pt.pary > 0
+            then abstract_recursive pt.pterm
+            else pt.pterm
           in
           CTdefinition (name, ct) :: cmds, vars'
     | Tstr_type (Recursive, [td]) ->

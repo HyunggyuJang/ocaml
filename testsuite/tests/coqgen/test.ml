@@ -49,6 +49,13 @@ let rec map' f = function
 ;;
 map (fun x -> x + 1) [3;2;1] ;;
 
+let one = let r = ref 1 in !r;;
+let rec map3 f = function
+  | [] -> []
+  | a :: l -> one + f a :: map3 f l
+;;
+map3 (fun x -> x + 1) [3;2;1] ;;
+
 (* Arrays *)
 
 let arr = Array.make 3 5;;
