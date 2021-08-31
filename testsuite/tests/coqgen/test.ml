@@ -56,6 +56,12 @@ let rec map3 f = function
 ;;
 map3 (fun x -> x + 1) [3;2;1] ;;
 
+let rec append l1 l2 =
+  match l1 with
+  | [] -> l2
+  | a :: l -> a :: append l l2
+;;
+
 (* Arrays *)
 
 let arr = Array.make 3 5;;
@@ -130,6 +136,7 @@ let z = r := 1 :: !r; !r;;
 let z' = z;;
 let r = r in r := 1 :: !r; !r;;
 let f () = z';;
+let f2 () = append (f()) (f());;
 
 let rec g x = if x > 0 then z else g 1;;
 

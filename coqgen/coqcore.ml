@@ -115,6 +115,15 @@ let find_constructor ~loc ~vars cd =
     not_allowed ~loc
       ("The constructor " ^ cd.cstr_name ^ " of type " ^ Path.name path)
 
+let transl_pat_type ~vars pat =
+  transl_coq_type ~loc:pat.pat_loc ~env:pat.pat_env ~vars pat.pat_type
+
+let transl_exp_type ~vars pt exp =
+  let cty =
+    transl_coq_type ~loc:exp.exp_loc ~env:exp.exp_env ~vars exp.exp_type in
+  let cty = if pt.pary = 0 then CTapp (CTid"M", [cty]) else cty in
+  {pt with pterm = CTann (pt.pterm, cty)}
+
 let add_pat_variable ~vars id ty =
   let name = fresh_name ~vars (Ident.name id) in
   let desc =
@@ -250,30 +259,25 @@ let rec transl_exp ~vars e =
        prec = or_rec ct1.prec ct2.prec; pary = 0}
   | Texp_function
       {arg_label = Nolabel; param = _;
-       cases = [{c_lhs = {pat_type; pat_loc} as pat;
+       cases = [{c_lhs = pat;
                  c_rhs; c_guard = None}]} ->
       let (arg, vars) = transl_pat ~vars pat in
-      let cty = transl_coq_type ~loc:pat_loc ~env:pat.pat_env ~vars pat_type in
+      let cty = transl_pat_type ~vars pat in
       let ct = transl_exp ~vars c_rhs in
+      let v, ct =
+        match arg with
+          CTid v -> v, ct
+        | pat ->
+            let v = fresh_name ~vars "v" in
+            v, {ct with pterm = CTmatch (CTid v, None, [pat, ct.pterm])}
+      in
       let ct =
         match ct.pterm with
           CTabs _ | CTann _ -> ct
-        | pt ->
-            if ct.pary >= 2 then ct else
-            let cty =
-              transl_coq_type ~loc:c_rhs.exp_loc ~env:c_rhs.exp_env
-                ~vars c_rhs.exp_type in
-            let cty = if ct.pary = 0 then CTapp (CTid"M", [cty]) else cty in
-            {ct with pterm = CTann (pt, cty)}
+        | _ -> if ct.pary >= 2 then ct else transl_exp_type ~vars ct c_rhs
       in
-      let pterm =
-        match arg with
-          CTid v -> CTabs (v, Some cty, ct.pterm)
-        | pat ->
-            let v = fresh_name ~vars "v" in
-            CTabs (v, Some cty, CTmatch (CTid v, None, [pat, ct.pterm]))
-      in
-      {pterm; prec  = ct.prec; pary  = ct.pary + 1}
+      {pterm = CTabs (v, Some cty, ct.pterm);
+       prec  = ct.prec; pary  = ct.pary + 1}
   | Texp_apply (f, args)
     when List.for_all (function (Nolabel,Some _) -> true | _ -> false) args ->
       let args =
@@ -358,10 +362,10 @@ let rec transl_exp ~vars e =
       let ct = transl_exp ~vars e in
       transl_match ~vars ct cases partial
   | Texp_function {arg_label = Nolabel; param; cases; partial} ->
-      let pat =
+      let pat, exp =
         match cases with
         | [] -> not_allowed ~loc "Empty matching"
-        | c :: _ -> c.c_lhs
+        | c :: _ -> c.c_lhs, c.c_rhs
       in
       let v, vars = add_pat_variable ~vars param pat.pat_type in
       let ct = {pterm = CTid v; prec = Nonrecursive; pary = 1} in
@@ -369,7 +373,10 @@ let rec transl_exp ~vars e =
         List.map (fun c -> {c with c_lhs = as_computation_pattern c.c_lhs})
           cases in
       let pt = transl_match ~vars ct cases partial in
-      {pterm = CTabs (v, None, pt.pterm); prec = pt.prec; pary = pt.pary + 1}
+      let pt = transl_exp_type ~vars pt exp in
+      let cty = transl_pat_type ~vars pat in
+      {pterm = CTabs (v, Some cty, pt.pterm);
+       prec = pt.prec; pary = pt.pary + 1}
   | _ ->
       not_allowed ~loc "This kind of term"
 

@@ -276,7 +276,7 @@ Fixpoint map (h : nat) (T T_1 : ml_type) (f : coq_type (ml_arrow T_1 T))
   else FailGas.
 
 Fixpoint map' (h : nat) (T T_1 : ml_type) (f : coq_type (ml_arrow T_1 T))
-  param :=
+  (param : coq_type (ml_list T_1)) : M (coq_type (ml_list T)) :=
   if h is h.+1 then
     match param with
     | @nil _ => Ret (@nil (coq_type T))
@@ -297,7 +297,7 @@ Definition one :=
   Restart it_6 (do r <- newref ml_int 1%int63; getref ml_int r).
 
 Fixpoint map3 (h : nat) (T : ml_type) (f : coq_type (ml_arrow T ml_int))
-  param :=
+  (param : coq_type (ml_list T)) : M (coq_type (ml_list ml_int)) :=
   do one <- FromW one;
   if h is h.+1 then
     match param with
@@ -316,6 +316,15 @@ Definition it_7 :=
           Ret (Int63.add x 1%int63 : coq_type ml_int))
        (3%int63 :: 2%int63 :: 1%int63 :: @nil (coq_type ml_int))).
 Eval vm_compute in it_7.
+
+Fixpoint append (h : nat) (T : ml_type) (l1 l2 : coq_type (ml_list T))
+  : M (coq_type (ml_list T)) :=
+  if h is h.+1 then
+    match l1 with
+    | @nil _ => Ret l2
+    | a :: l => do v <- append h T l l2; Ret (@cons (coq_type T) a v)
+    end
+  else FailGas.
 
 Definition arr := Restart it_7 (newarray ml_int 3%int63 5%int63).
 
@@ -437,7 +446,13 @@ Eval vm_compute in it_15.
 
 Definition f (v : coq_type ml_unit) :=
   do z' <- FromW z';
-  Ret match v with | tt => (z' : coq_type (ml_list ml_int)) end.
+  Ret (match v with | tt => z' end : coq_type (ml_list ml_int)).
+
+Definition f2 (h : nat) (v : coq_type ml_unit)
+  : M (coq_type (ml_list ml_int)) :=
+  match v with
+  | tt => do v <- f tt; do v_1 <- f tt; append h ml_int v_1 v
+  end.
 
 Fixpoint g (h : nat) (x : coq_type ml_int) : M (coq_type (ml_list ml_int)) :=
   do z <- FromW z;
@@ -445,14 +460,14 @@ Fixpoint g (h : nat) (x : coq_type ml_int) : M (coq_type (ml_list ml_int)) :=
     do v <- ml_gt h ml_int x 0%int63; if v then Ret z else g h 1%int63
   else FailGas.
 
-Definition double_r (v : coq_type ml_unit) :=
+Definition double_r (v : coq_type ml_unit) : M (coq_type ml_unit) :=
   do r <- FromW r;
   match v with
   | tt =>
-    (do v <-
-     (do v <- getref (ml_list ml_int) r;
-      Ret (@cons (coq_type ml_int) 4%int63 v));
-     setref (ml_list ml_int) r v : M (coq_type ml_unit))
+    do v <-
+    (do v <- getref (ml_list ml_int) r;
+     Ret (@cons (coq_type ml_int) 4%int63 v));
+    setref (ml_list ml_int) r v
   end.
 
 Definition it_16 :=
