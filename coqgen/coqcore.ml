@@ -511,6 +511,7 @@ let rec transl_structure ~vars = function
     | Tstr_value (rec_flag, [vb]) ->
         let ((id, desc), pt) = transl_binding ~vars ~rec_flag vb in
         let pt = close_top ~vars ~ce_vars:desc.ce_vars pt in
+        let desc = {desc with ce_purary = pt.pary} in
         let name, vars' =
           match id with
           | Some id ->

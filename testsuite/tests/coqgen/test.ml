@@ -127,9 +127,9 @@ fib 10;;
 let r = ref [3] ;;
 let z = r := 1 :: !r; !r;;
 !r;;
-z;;
+let z' = z;;
 let r = r in r := 1 :: !r; !r;;
-let f () = z;;
+let f () = z';;
 
 let rec g x = if x > 0 then z else g 1;;
 

@@ -421,11 +421,10 @@ Definition z :=
 Definition it_14 := Restart z (do r <- FromW r; getref (ml_list ml_int) r).
 Eval vm_compute in it_14.
 
-Definition it_15 := Restart it_14 (do z <- FromW z; Ret z).
-Eval vm_compute in it_15.
+Definition z' := Restart it_14 (do z <- FromW z; Ret z).
 
-Definition it_16 :=
-  Restart it_15
+Definition it_15 :=
+  Restart z'
     (do r <- FromW r;
      let r_1 := r in
      do _ <-
@@ -434,11 +433,11 @@ Definition it_16 :=
        Ret (@cons (coq_type ml_int) 1%int63 v));
       setref (ml_list ml_int) r_1 v);
      getref (ml_list ml_int) r_1).
-Eval vm_compute in it_16.
+Eval vm_compute in it_15.
 
 Definition f (v : coq_type ml_unit) :=
-  do z <- FromW z;
-  Ret match v with | tt => (z : coq_type (ml_list ml_int)) end.
+  do z' <- FromW z';
+  Ret match v with | tt => (z' : coq_type (ml_list ml_int)) end.
 
 Fixpoint g (h : nat) (x : coq_type ml_int) : M (coq_type (ml_list ml_int)) :=
   do z <- FromW z;
@@ -456,10 +455,10 @@ Definition double_r (v : coq_type ml_unit) :=
      setref (ml_list ml_int) r v : M (coq_type ml_unit))
   end.
 
-Definition it_17 :=
-  Restart it_16
+Definition it_16 :=
+  Restart it_15
     (do r <- FromW r; do _ <- double_r tt; getref (ml_list ml_int) r).
-Eval vm_compute in it_17.
+Eval vm_compute in it_16.
 
 Fixpoint mccarthy_m (h : nat) (n : coq_type ml_int) : M (coq_type ml_int) :=
   if h is h.+1 then
@@ -468,8 +467,8 @@ Fixpoint mccarthy_m (h : nat) (n : coq_type ml_int) : M (coq_type ml_int) :=
       do v <- mccarthy_m h (Int63.add n 11%int63); mccarthy_m h v
   else FailGas.
 
-Definition it_18 := Restart it_17 (mccarthy_m h 10%int63).
-Eval vm_compute in it_18.
+Definition it_17 := Restart it_16 (mccarthy_m h 10%int63).
+Eval vm_compute in it_17.
 
 Fixpoint tarai (h : nat) (x y z_1 : coq_type ml_int) : M (coq_type ml_int) :=
   if h is h.+1 then
@@ -481,18 +480,18 @@ Fixpoint tarai (h : nat) (x y z_1 : coq_type ml_int) : M (coq_type ml_int) :=
     else Ret y
   else FailGas.
 
-Definition it_19 := Restart it_18 (tarai h 1%int63 2%int63 3%int63).
+Definition it_18 := Restart it_17 (tarai h 1%int63 2%int63 3%int63).
+Eval vm_compute in it_18.
+
+Definition it_19 := Restart it_18 (omega ml_int 1%int63).
 Eval vm_compute in it_19.
 
-Definition it_20 := Restart it_19 (omega ml_int 1%int63).
-Eval vm_compute in it_20.
-
-Definition it_21 :=
-  Restart it_20
+Definition it_20 :=
+  Restart it_19
     (AppM
        (fixpt h ml_empty ml_int
           (fun f_1 : coq_type (ml_arrow ml_int ml_empty) =>
              Ret (f_1 : coq_type (ml_arrow ml_int ml_empty))))
        0%int63).
-Eval vm_compute in it_21.
+Eval vm_compute in it_20.
 
