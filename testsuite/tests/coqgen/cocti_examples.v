@@ -7,6 +7,8 @@ Inductive ml_type : Set :=
   | ml_pair of ml_type & ml_type
   | ml_list of ml_type
   | ml_ref of ml_type
+  | ml_expr of ml_type
+  | ml_eqw of ml_type & ml_type
   | ml_int
   | ml_bool
   | ml_empty.
@@ -43,6 +45,15 @@ Variant loc : ml_type -> Type :=
 
 Section with_monad.
 Variable M : Type -> Type.
+
+Inductive eq_ty (T1 T2 : ml_type) :=
+  | Refl of T1 = T2.
+
+Inductive expr (T : ml_type) :=
+  | Int of T = ml_int & int
+  | Add of T = ml_arrow ml_int (ml_arrow ml_int ml_int)
+  | App (T2 : ml_type) (_ : expr (ml_arrow T2 T)) (_ : expr T2).
+
 Local Fixpoint coq_type_rec (p : nat) (T : ml_type) : Type :=
   match T with
   | ml_exn => ml_exns
@@ -53,6 +64,8 @@ Local Fixpoint coq_type_rec (p : nat) (T : ml_type) : Type :=
   | ml_pair T1 T2 => coq_type_rec 0 T1 * coq_type_rec 0 T2
   | ml_list T1 => list (coq_type_rec 0 T1)
   | ml_ref T1 => loc T1
+  | ml_eqw T1 T2 => eq_ty T1 T2
+  | ml_expr T1 => expr T1
   | ml_int => Int63.int
   | ml_bool => bool
   | ml_empty => empty
@@ -99,6 +112,28 @@ Fixpoint compare_rec (T : ml_type) (h : nat)
         | x::xs, y::ys =>
           lexi_compare (compare_rec T1 h x y)
                        (Delay (compare_rec (ml_list T1) h xs ys))
+        end
+    | ml_eqw _ _ => fun _ _ => Ret Eq
+    | ml_expr T =>
+      fun x y =>
+        match x, y with
+        | Add _, Add _ => Ret Eq
+        | Int _ n1, Int _ n2 =>
+          compare_rec ml_int h n1 n2
+        | MLtypes.App T1 f1 x1, MLtypes.App T2 f2 x2 =>
+          match ml_type_eq_dec T1 T2 with
+          | left H =>
+            lexi_compare
+              (compare_rec (ml_expr (ml_arrow T2 T)) h
+                           (eq_rect _ (fun T2 => expr (ml_arrow T2 T)) f1 _ H)
+                           f2)
+              (Delay (compare_rec (ml_expr T2) h (eq_rect _ expr x1 _ H) x2))
+          | right _ => FailGas
+          end
+        | Add _, _ => Ret Lt
+        | _, Add _ => Ret Gt
+        | MLtypes.App _ _ _, _ => Ret Lt
+        | _, MLtypes.App _ _ _ => Ret Gt
         end
     | ml_ref T1 =>
       fun l1 l2 =>
@@ -207,6 +242,30 @@ Fixpoint fib (h : nat) (n : int) : M int :=
     if leb n 1%int63 then Ret 1%int63 else
     (do x <- fib h (n-1); do y <- fib h (n-2); Ret (x + y))%int63
   else FailGas.
+
+(* GADTs *)
+
+(*
+let rec eval : type a. a expr -> a = function
+  | Int n -> n
+  | Add -> (+)
+  | App (f, x) -> eval f (eval x)
+*)
+
+Fixpoint eval (T : ml_type) h (e : coq_type (ml_expr T)) : M (coq_type T) :=
+  if h is h.+1 then
+    match e with
+    | Int H n => Ret (eq_rect _ _ n _ (esym H))
+    | Add H =>
+      Ret (eq_rect (ml_arrow ml_int (ml_arrow ml_int ml_int)) coq_type
+                   (fun x => Ret (fun y => Ret (Int63.add x y))) _ (esym H))
+    | MLtypes.App T2 f x => App (eval _ h f) (eval _ h x)
+    end
+  else FailGas.
+
+Eval compute in
+    eval _ 10 (MLtypes.App _ _ (MLtypes.App _ _ (Add _ erefl) (Int _ erefl 2))
+               (Int _ erefl 3)).
 
 (*
 let rec ack m n =
