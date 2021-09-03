@@ -46,7 +46,7 @@ Variant loc : ml_type -> Type :=
 Section with_monad.
 Variable M : Type -> Type.
 
-Inductive eq_ty (T1 T2 : ml_type) :=
+Inductive eqw (T1 T2 : ml_type) :=
   | Refl of T1 = T2.
 
 Inductive expr (T : ml_type) :=
@@ -64,7 +64,7 @@ Local Fixpoint coq_type_rec (p : nat) (T : ml_type) : Type :=
   | ml_pair T1 T2 => coq_type_rec 0 T1 * coq_type_rec 0 T2
   | ml_list T1 => list (coq_type_rec 0 T1)
   | ml_ref T1 => loc T1
-  | ml_eqw T1 T2 => eq_ty T1 T2
+  | ml_eqw T1 T2 => eqw T1 T2
   | ml_expr T1 => expr T1
   | ml_int => Int63.int
   | ml_bool => bool
@@ -266,6 +266,9 @@ Fixpoint eval (T : ml_type) h (e : coq_type (ml_expr T)) : M (coq_type T) :=
 Eval compute in
     eval _ 10 (MLtypes.App _ _ (MLtypes.App _ _ (Add _ erefl) (Int _ erefl 2))
                (Int _ erefl 3)).
+
+Definition cast (T1 T2 : ml_type) (w : eqw T1 T2) (x : coq_type T1) :
+  coq_type T2 := match w with Refl H => eq_rect _ coq_type x _ H end.
 
 (*
 let rec ack m n =
