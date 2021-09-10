@@ -1,6 +1,7 @@
 From mathcomp Require Import all_ssreflect.
 Require Import Int63 Ascii String cocti_defs.
 
+Axiom abstr : Set.
 Inductive ml_type : Set :=
   | ml_exn
   | ml_arrow of ml_type & ml_type
@@ -9,10 +10,16 @@ Inductive ml_type : Set :=
   | ml_ref of ml_type
   | ml_expr of ml_type
   | ml_eqw of ml_type & ml_type
+(*  | ml_abstr of abstr*)
   | ml_int
   | ml_bool
   | ml_empty.
 (* | ml_triple of ml_type & ml_type & ml_type. *)
+
+(*
+Axiom a : abstr.
+Axiom t : ml_type -> ml_type -> abstr.
+*)
 
 Inductive ml_exns :=
   | Failure of string
@@ -48,6 +55,13 @@ Variable M : Type -> Type.
 
 Inductive eqw (T1 T2 : ml_type) :=
   | Refl of T1 = T2.
+
+(*
+type _ expr =
+     | Int : int -> int expr
+     | Add : (int -> int -> int) expr
+     | App : (’a -> ’b) expr * ’a expr -> ’b expr
+*)
 
 Inductive expr (T : ml_type) :=
   | Int of T = ml_int & int
@@ -263,12 +277,20 @@ Fixpoint eval (T : ml_type) h (e : coq_type (ml_expr T)) : M (coq_type T) :=
     end
   else FailGas.
 
+(* App (App (Add, Int 2), Int 3) *)
+
 Eval compute in
     eval _ 10 (MLtypes.App _ _ (MLtypes.App _ _ (Add _ erefl) (Int _ erefl 2))
                (Int _ erefl 3)).
 
 Definition cast (T1 T2 : ml_type) (w : eqw T1 T2) (x : coq_type T1) :
   coq_type T2 := match w with Refl H => eq_rect _ coq_type x _ H end.
+
+Definition int_not_empty (x : eqw ml_int ml_empty) : empty.
+  refine (match x with Refl H => _ end).
+  discriminate.
+  Show Proof.
+Defined.
 
 (*
 let rec ack m n =

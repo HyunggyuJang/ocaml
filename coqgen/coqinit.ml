@@ -81,10 +81,17 @@ let init_type_map vars =
    (Predef.path_array, [],
     {ctd with ct_name = "ml_array";
      ct_arity = 1; ct_mlargs = [0, "a"];
-     ct_type = CTapp (CTid"loc", [CTapp (CTid"ml_list", [CTid"a"])]);
+     ct_type = CTapp (CTid"loc", [CTapp (CTid"ml_array_t", [CTid"a"])]);
      ct_compare = Some
        (CTapp (CTid"compare_ref",
-               CTid"compare_rec" :: ctapp (CTid"ml_list") [CTid "T1"] :: xy))});
+               CTid"compare_rec" ::
+               ctapp (CTid"ml_array_t") [CTid "T1"] :: xy))});
+   (Path.Pident (Ident.create_predef "array_t"), [],
+    {ctd with ct_name = "ml_array_t";
+     ct_arity = 1; ct_args = [0, "a"];
+     ct_constrs = [("ArrayVal", "ArrayVal")];
+     ct_type = CTapp (CTid"array_t", [CTid"a"]);
+     ct_def = Some (["a"], ["ArrayVal", [CTapp(CTid"ml_list", [CTid "a"])]])});
    (Predef.path_exn, [],
     {ctd with ct_name = "ml_exn";
      ct_type = CTid "ml_exns";

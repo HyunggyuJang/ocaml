@@ -1,8 +1,9 @@
 From mathcomp Require Import all_ssreflect.
 Require Import Int63 BinNums Ascii String ZArith.
 
-(* The empty type for the relaxed value restriction *)
-Inductive empty :=.
+(* Extra predefined types *)
+Inductive empty :=. (* for the value restriction *)
+Inductive array_t T := ArrayVal (_ : list T). (* array contents *)
 
 (* ErrorStateMonad *)
 Definition W0 Env Exn T : Type := Env * (T + Exn).

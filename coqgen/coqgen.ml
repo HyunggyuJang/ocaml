@@ -189,16 +189,18 @@ let transl_implementation _modname st =
 \n" ::
   CTverbatim "(* Array operations *)\
 \nDefinition newarray T len (x : coq_type T) :=\
-\n  do len <- nat_of_int len; newref (ml_list T) (nseq len x).\
+\n  do len <- nat_of_int len; newref (ml_array_t T) (ArrayVal _ (nseq len x)).\
 \nDefinition getarray T (a : coq_type (ml_array T)) n : M (coq_type T) :=\
-\n  do s <- getref (ml_list T) a;\
+\n  do s <- getref (ml_array_t T) a;\
+\n  let: ArrayVal s := s in\
 \n  do n <- bounded_nat_of_int (seq.size s) n;\
 \n  if s is x :: _ then Ret (nth x s n) else\
 \n  raise _ (Invalid_argument \"getarray\").\
 \nDefinition setarray T (a : coq_type (ml_array T)) n (x : coq_type T) :=\
-\n  do s <- getref (ml_list T) a;\
+\n  do s <- getref (ml_array_t T) a;\
+\n  let: ArrayVal s := s in\
 \n  do n <- bounded_nat_of_int (seq.size s) n;\
-\n  setref (ml_list T) a (set_nth x s n x).\
+\n  setref (ml_array_t T) a (ArrayVal _ (set_nth x s n x)).\
 \n\n(* Default amount of gas *)\
 \nDefinition h := 100000.\
 \n\n(* Translated code *)\n"

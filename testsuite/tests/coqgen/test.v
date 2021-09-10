@@ -12,6 +12,7 @@ Inductive ml_type :=
   | ml_list (_ : ml_type)
   | ml_string
   | ml_empty
+  | ml_array_t (_ : ml_type)
   | ml_color
   | ml_tree (_ : ml_type) (_ : ml_type)
   | ml_point
@@ -72,10 +73,11 @@ Fixpoint coq_type (T : ml_type) : Type :=
   | ml_bool => bool
   | ml_unit => unit
   | ml_exn => ml_exns
-  | ml_array T1 => loc (ml_list T1)
+  | ml_array T1 => loc (ml_array_t T1)
   | ml_list T1 => list (coq_type T1)
   | ml_string => String.string
   | ml_empty => empty
+  | ml_array_t T1 => array_t (coq_type T1)
   | ml_color => color
   | ml_tree T1 T2 => tree (coq_type T1) (coq_type T2)
   | ml_point => point
@@ -119,11 +121,16 @@ Fixpoint compare_rec (h : nat) (T : ml_type)
         | Invalid_argument _, _ => Ret Lt
         | _, Invalid_argument _ => Ret Gt
         end
-    | ml_array T1 => fun x y => compare_ref compare_rec (ml_list T1) x y
+    | ml_array T1 => fun x y => compare_ref compare_rec (ml_array_t T1) x y
     | ml_list T1 => fun x y => compare_list compare_rec T1 x y
     | ml_string => fun x y => Ret (compare_string x y)
     | ml_empty =>
       fun x y => Fail (Catchable (Invalid_argument "compare"%string))
+    | ml_array_t T1 =>
+      fun x y =>
+        match x, y with
+        | ArrayVal x1, ArrayVal y1 => compare_rec (ml_list T1) x1 y1
+        end
     | ml_color =>
       fun x y =>
         match x, y with
@@ -194,16 +201,18 @@ Definition ml_le := wrap_compare (fun c => if c is Gt then false else true).
 
 (* Array operations *)
 Definition newarray T len (x : coq_type T) :=
-  do len <- nat_of_int len; newref (ml_list T) (nseq len x).
+  do len <- nat_of_int len; newref (ml_array_t T) (ArrayVal _ (nseq len x)).
 Definition getarray T (a : coq_type (ml_array T)) n : M (coq_type T) :=
-  do s <- getref (ml_list T) a;
+  do s <- getref (ml_array_t T) a;
+  let: ArrayVal s := s in
   do n <- bounded_nat_of_int (seq.size s) n;
   if s is x :: _ then Ret (nth x s n) else
   raise _ (Invalid_argument "getarray").
 Definition setarray T (a : coq_type (ml_array T)) n (x : coq_type T) :=
-  do s <- getref (ml_list T) a;
+  do s <- getref (ml_array_t T) a;
+  let: ArrayVal s := s in
   do n <- bounded_nat_of_int (seq.size s) n;
-  setref (ml_list T) a (set_nth x s n x).
+  setref (ml_array_t T) a (ArrayVal _ (set_nth x s n x)).
 
 (* Default amount of gas *)
 Definition h := 100000.
