@@ -53,7 +53,7 @@ and fixed_explanation =
 and row_field =
     RFpresent of type_expr option
   | RFeither of
-      { const: bool;
+      { no_arg: bool;
         arg_type: type_expr list;
         fixed: bool;
         ext: row_field ref}
@@ -618,10 +618,7 @@ let row_repr row =
 
 type row_field_view =
     Rpresent of type_expr option
-  | Reither of bool * type_expr list * bool
-        (* 1st true denotes a constant constructor *)
-        (* 2nd true denotes a tag in a pattern matching, and
-           is erased later *)
+  | Reither of {no_arg: bool; arg_type: type_expr list; fixed: bool}
   | Rabsent
 
 let rec row_field_repr_aux tl = function
@@ -635,7 +632,7 @@ let rec row_field_repr_aux tl = function
 
 let row_field_repr fi =
   match row_field_repr_aux [] fi with
-  | RFeither {const; arg_type; fixed} -> Reither (const, arg_type, fixed)
+  | RFeither {no_arg; arg_type; fixed} -> Reither {no_arg; arg_type; fixed}
   | RFpresent t -> Rpresent t
   | RFabsent -> Rabsent
   | RFnone -> assert false
@@ -646,17 +643,15 @@ let rec row_field_ext fi =
       if !ext = RFnone then ext else row_field_ext !ext
   | _ -> Misc.fatal_error "Types.row_field_ext "
 
-let create_row_field ?use_ext_of view =
-  match view with
-  | Rabsent -> RFabsent
-  | Rpresent t -> RFpresent t
-  | Reither (const, arg_type, fixed) ->
-      let ext =
-        match use_ext_of with
-          Some rf -> row_field_ext rf
-        | None -> ref RFnone
-      in
-      RFeither {const; arg_type; fixed; ext}
+let rf_present oty = RFpresent oty
+let rf_absent = RFabsent
+let rf_either ?use_ext_of ~no_arg ~fixed arg_type =
+  let ext =
+    match use_ext_of with
+      Some rf -> row_field_ext rf
+    | None -> ref RFnone
+  in
+  RFeither {no_arg; arg_type; fixed; ext}
 
 let eq_row_field_ext rf1 rf2 =
   row_field_ext rf1 == row_field_ext rf2
@@ -666,9 +661,9 @@ let match_row_field ~present ~absent ~either f =
   | RFnone -> Misc.fatal_error "Types.match_row_field"
   | RFabsent -> absent ()
   | RFpresent t -> present t
-  | RFeither {const; arg_type; fixed; ext} ->
+  | RFeither {no_arg; arg_type; fixed; ext} ->
       let e = if !ext = RFnone then None else Some !ext in
-      either const arg_type fixed e
+      either no_arg arg_type fixed e
 
 
 (**** Some type creators ****)

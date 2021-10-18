@@ -801,7 +801,7 @@ let nameable_row row =
   List.for_all
     (fun (_, f) ->
        match row_field_repr f with
-       | Reither(c, l, _) ->
+       | Reither {no_arg = c; arg_type = l} ->
            row_closed row && if c then l = [] else List.length l = 1
        | _ -> true)
     (row_fields row)
@@ -1204,10 +1204,10 @@ let rec tree_of_typexp mode ty =
 
 and tree_of_row_field mode (l, f) =
   match row_field_repr f with
-  | Rpresent None | Reither(true, [], _) -> (l, false, [])
+  | Rpresent None | Reither {no_arg = true; arg_type = []} -> (l, false, [])
   | Rpresent(Some ty) -> (l, false, [tree_of_typexp mode ty])
-  | Reither(c, tyl, _) ->
-      if c (* contradiction: constant constructor with an argument *)
+  | Reither {no_arg; arg_type = tyl} ->
+      if no_arg (* contradiction: constant constructor with an argument *)
       then (l, true, tree_of_typlist mode tyl)
       else (l, false, tree_of_typlist mode tyl)
   | Rabsent -> (l, false, [] (* actually, an error *))

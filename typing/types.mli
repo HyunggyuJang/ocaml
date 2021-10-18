@@ -312,14 +312,17 @@ val row_repr: row_desc -> row_desc_repr
 (** Current contents of a row field *)
 type row_field_view =
     Rpresent of type_expr option
-  | Reither of bool * type_expr list * bool
-        (* 1st true denotes a constant constructor *)
-        (* 2nd true denotes a tag in a pattern matching, and
-           is erased later *)
+  | Reither of {no_arg: bool; arg_type: type_expr list; fixed: bool}
+        (* no_arg denotes a constant constructor *)
+        (* fixed denotes a tag in a pattern matching, and is erased later *)
   | Rabsent
 
-val create_row_field: ?use_ext_of:row_field -> row_field_view -> row_field
 val row_field_repr: row_field -> row_field_view
+val rf_present: type_expr option -> row_field
+val rf_absent: row_field
+val rf_either:
+    ?use_ext_of:row_field ->
+    no_arg:bool -> fixed:bool -> type_expr list -> row_field
 
 val eq_row_field_ext: row_field -> row_field -> bool
 val match_row_field:
