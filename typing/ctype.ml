@@ -1407,10 +1407,12 @@ let instance_label fixed lbl =
 let unify_var' = (* Forward declaration *)
   ref (fun _env _ty1 _ty2 -> assert false)
 
+let forward_match_rec = ref (fun _env _lev _patt _subj -> assert false)
+
 let subst env level priv abbrev oty params args body =
   if List.length params <> List.length args then raise Cannot_subst;
   let old_level = !current_level in
-  current_level := level;
+  current_level := level + 1;
   let body0 = newvar () in          (* Stub *)
   let undo_abbrev =
     match oty with
@@ -1427,9 +1429,11 @@ let subst env level priv abbrev oty params args body =
   let (params', body') = instance_parameterized_type params body in
   abbreviations := ref Mnil;
   try
-    !unify_var' env body0 body';
-    List.iter2 (!unify_var' env) params' args;
+    assert (is_Tvar body0);
+    link_type body0 body';
+    List.iter2 (!forward_match_rec env (level+1)) params' args;
     current_level := old_level;
+    update_level env level body';
     body'
   with Unify _ ->
     current_level := old_level;
@@ -1828,6 +1832,88 @@ let local_non_recursive_abbrev env p ty =
   with Occur -> false
 
 
+(**** Unification of package (first class module) types ****)
+
+let eq_package_path env p1 p2 =
+  Path.same p1 p2 ||
+  Path.same (normalize_package_path env p1) (normalize_package_path env p2)
+
+let nondep_type' = ref (fun _ _ _ -> assert false)
+let package_subtype = ref (fun _ _ _ _ _ -> assert false)
+
+exception Nondep_cannot_erase of Ident.t
+
+let rec concat_longident lid1 =
+  let open Longident in
+  function
+    Lident s -> Ldot (lid1, s)
+  | Ldot (lid2, s) -> Ldot (concat_longident lid1 lid2, s)
+  | Lapply (lid2, lid) -> Lapply (concat_longident lid1 lid2, lid)
+
+let nondep_instance env level id ty =
+  let ty = !nondep_type' env [id] ty in
+  if level = generic_level then duplicate_type ty else
+  let old = !current_level in
+  current_level := level;
+  let ty = instance ty in
+  current_level := old;
+  ty
+
+(* Find the type paths nl1 in the module type mty2, and add them to the
+   list (nl2, tl2). raise Not_found if impossible *)
+let complete_type_list ?(allow_absent=false) env fl1 lv2 mty2 fl2 =
+  (* This is morally WRONG: we're adding a (dummy) module without a scope in the
+     environment. However no operation which cares about levels/scopes is going
+     to happen while this module exists.
+     The only operations that happen are:
+     - Env.find_type_by_name
+     - nondep_instance
+     None of which check the scope.
+
+     It'd be nice if we avoided creating such temporary dummy modules and broken
+     environments though. *)
+  let id2 = Ident.create_local "Pkg" in
+  let env' = Env.add_module id2 Mp_present mty2 env in
+  let rec complete fl1 fl2 =
+    match fl1, fl2 with
+      [], _ -> fl2
+    | (n, _) :: nl, (n2, _ as nt2) :: ntl' when n >= n2 ->
+        nt2 :: complete (if n = n2 then nl else fl1) ntl'
+    | (n, _) :: nl, _ ->
+        let lid = concat_longident (Longident.Lident "Pkg") n in
+        match Env.find_type_by_name lid env' with
+        | (_, {type_arity = 0; type_kind = Type_abstract;
+               type_private = Public; type_manifest = Some t2}) ->
+            begin match nondep_instance env' lv2 id2 t2 with
+            | t -> (n, t) :: complete nl fl2
+            | exception Nondep_cannot_erase _ ->
+                if allow_absent then
+                  complete nl fl2
+                else
+                  raise Exit
+            end
+        | (_, {type_arity = 0; type_kind = Type_abstract;
+               type_private = Public; type_manifest = None})
+          when allow_absent ->
+            complete nl fl2
+        | _ -> raise Exit
+        | exception Not_found when allow_absent->
+            complete nl fl2
+  in
+  match complete fl1 fl2 with
+  | res -> res
+  | exception Exit -> raise Not_found
+
+(* raise Not_found rather than Unify if the module types are incompatible *)
+let unify_package env unify_list lv1 p1 fl1 lv2 p2 fl2 =
+  let ntl2 = complete_type_list env fl1 lv2 (Mty_ident p2) fl2
+  and ntl1 = complete_type_list env fl2 lv1 (Mty_ident p1) fl1 in
+  unify_list (List.map snd ntl1) (List.map snd ntl2);
+  if eq_package_path env p1 p2
+  || !package_subtype env p1 fl1 p2 fl2
+  && !package_subtype env p2 fl2 p1 fl1 then () else raise Not_found
+
+
                    (*****************************)
                    (*  Polymorphic Unification  *)
                    (*****************************)
@@ -1860,6 +1946,101 @@ let rec unify_univar t1 t2 = function
 let unify_univar_for tr_exn t1 t2 univar_pairs =
   try unify_univar t1 t2 univar_pairs
   with Cannot_unify_universal_variables -> raise_unexplained_for tr_exn
+
+let enter_poly_unsafe univar_pairs t1 tl1 t2 tl2 f =
+  let old_univars = !univar_pairs in
+  let cl1 = List.map (fun t -> t, ref None) tl1
+  and cl2 = List.map (fun t -> t, ref None) tl2 in
+  univar_pairs := (cl1,cl2) :: (cl2,cl1) :: old_univars;
+  Misc.try_finally (fun () -> f t1 t2)
+    ~always:(fun () -> univar_pairs := old_univars)
+
+(**** Matching on an instance ****)
+let univar_pairs_match = ref []
+
+let rec match_rec env lev patt subj =
+  if get_level patt < lev then () else
+  let patt' = expand_head env patt in
+  if get_level patt' < lev then link_type patt patt' else
+  match get_desc patt', get_desc subj with
+  | Tvar _, _ -> link_type patt subj
+  | Tarrow (_, ty1, ty2, com), Tarrow (_, ty1', ty2', com') ->
+      link_type patt subj;
+      if not (is_commu_ok com) then link_commu ~inside:com com';
+      match_rec env lev ty1 ty1';
+      match_rec env lev ty2 ty2'
+  | Ttuple tyl1, Ttuple tyl2 ->
+      assert (List.length tyl1 = List.length tyl2);
+      link_type patt subj;
+      List.iter2 (match_rec env lev) tyl1 tyl2
+  | Tconstr (p1, tyl1, _m1), Tconstr (p2, tyl2, _m2) when Path.same p1 p2 ->
+      assert (List.length tyl1 = List.length tyl2);
+      link_type patt subj;
+      List.iter2 (match_rec env lev) tyl1 tyl2
+  | _, Tconstr _ ->
+      match_rec env lev patt (try_expand_safe env subj)
+  | Tobject (ty1, _), Tobject (ty2, _) ->
+      link_type patt subj;
+      match_object env lev ty1 ty2
+  | Tnil, Tnil -> ()
+  | Tvariant row1, Tvariant row2 ->
+      link_type patt subj;
+      match_row env lev row1 row2
+  | Tunivar _, Tunivar _ ->
+      link_type patt subj
+  | Tpoly (ty1, tvl1), Tpoly (ty2, tvl2) ->
+      link_type patt subj;
+      enter_poly_unsafe univar_pairs_match ty1 tvl1 ty2 tvl2 (match_rec env lev)
+  | Tpackage (p1, tl1), Tpackage (p2, tl2) ->
+      let lev1 = get_level patt and lev2 = get_level subj in
+      link_type patt subj;
+      begin try
+        unify_package env
+          (List.iter2 (match_rec env lev)) lev1 p1 tl1 lev2 p2 tl2
+      with Not_found -> assert false
+      end
+  | _ -> assert false
+
+and match_object env lev ty1 ty2 =
+  let (fields1, rest1) = flatten_fields ty1
+  and (fields2, rest2) = flatten_fields ty2 in
+  let (pairs, miss1, miss2) = associate_fields fields1 fields2 in
+  assert (miss1 = []);
+  match_rec env lev rest1 (build_fields (get_level ty2) miss2 rest2);
+  List.iter (fun (_name, _k1, t1, _k2, t2) -> match_rec env lev t1 t2)  pairs
+
+and match_row env lev row1 row2 =
+  let Row {fields = row1_fields; more = rm1; closed = row1_closed;
+           fixed = row1_fixed} = row_repr row1 in
+  let Row {fields = row2_fields; more = rm2; closed = row2_closed;
+           fixed = row2_fixed} = row_repr row2 in
+  if eq_type rm1 rm2 then () else
+  let r1, r2, pairs = merge_row_fields row1_fields row2_fields in
+  assert (r1 = []);
+  if (r2 <> [] || row1_closed <> row2_closed || row1_fixed <> row2_fixed)
+  then begin
+    let ext =
+      newty3 ~level:(get_level rm1) ~scope:(get_scope rm1)
+        (Tvariant (create_row ~fields:r2 ~more:rm2 ~name:None
+                     ~fixed:row2_fixed ~closed:row2_closed))
+    in match_rec env lev rm1 ext
+  end;
+  List.iter
+    (fun (_l,f1,f2) ->
+      if f1 == f2 then () else
+      match row_field_repr f1, row_field_repr f2 with
+        (* Both matching [Rpresent]s *)
+      | Rpresent(Some t1), Rpresent(Some t2) -> match_rec env lev t1 t2
+      | Reither(_c1, tl1, _m1),
+        (Reither(false, [t2], true) | Rpresent(Some t2)) ->
+          link_row_field_ext ~inside:f1 f2;
+          List.iter (fun t1 -> match_rec env lev t1 t2) tl1
+      | Reither _, _ ->
+          link_row_field_ext ~inside:f1 f2      
+      | _ -> ())
+    pairs
+
+let () = forward_match_rec := match_rec
 
 (* Test the occurrence of free univars in a type *)
 (* That's way too expensive. Must do some kind of caching *)
@@ -1979,11 +2160,7 @@ let enter_poly env univar_pairs t1 tl1 t2 tl2 f =
      univars_escape env old_univars tl1 (newty(Tpoly(t2,tl2)));
   if List.exists (fun t -> TypeSet.mem t known_univars) tl2 then
     univars_escape env old_univars tl2 (newty(Tpoly(t1,tl1)));
-  let cl1 = List.map (fun t -> t, ref None) tl1
-  and cl2 = List.map (fun t -> t, ref None) tl2 in
-  univar_pairs := (cl1,cl2) :: (cl2,cl1) :: old_univars;
-  Misc.try_finally (fun () -> f t1 t2)
-    ~always:(fun () -> univar_pairs := old_univars)
+  enter_poly_unsafe univar_pairs t1 tl1 t2 tl2 f
 
 let enter_poly_for tr_exn env univar_pairs t1 tl1 t2 tl2 f =
   try
@@ -2441,86 +2618,6 @@ let order_type_pair t1 t2 =
 
 let add_type_equality t1 t2 =
   TypePairs.add unify_eq_set (order_type_pair t1 t2)
-
-let eq_package_path env p1 p2 =
-  Path.same p1 p2 ||
-  Path.same (normalize_package_path env p1) (normalize_package_path env p2)
-
-let nondep_type' = ref (fun _ _ _ -> assert false)
-let package_subtype = ref (fun _ _ _ _ _ -> assert false)
-
-exception Nondep_cannot_erase of Ident.t
-
-let rec concat_longident lid1 =
-  let open Longident in
-  function
-    Lident s -> Ldot (lid1, s)
-  | Ldot (lid2, s) -> Ldot (concat_longident lid1 lid2, s)
-  | Lapply (lid2, lid) -> Lapply (concat_longident lid1 lid2, lid)
-
-let nondep_instance env level id ty =
-  let ty = !nondep_type' env [id] ty in
-  if level = generic_level then duplicate_type ty else
-  let old = !current_level in
-  current_level := level;
-  let ty = instance ty in
-  current_level := old;
-  ty
-
-(* Find the type paths nl1 in the module type mty2, and add them to the
-   list (nl2, tl2). raise Not_found if impossible *)
-let complete_type_list ?(allow_absent=false) env fl1 lv2 mty2 fl2 =
-  (* This is morally WRONG: we're adding a (dummy) module without a scope in the
-     environment. However no operation which cares about levels/scopes is going
-     to happen while this module exists.
-     The only operations that happen are:
-     - Env.find_type_by_name
-     - nondep_instance
-     None of which check the scope.
-
-     It'd be nice if we avoided creating such temporary dummy modules and broken
-     environments though. *)
-  let id2 = Ident.create_local "Pkg" in
-  let env' = Env.add_module id2 Mp_present mty2 env in
-  let rec complete fl1 fl2 =
-    match fl1, fl2 with
-      [], _ -> fl2
-    | (n, _) :: nl, (n2, _ as nt2) :: ntl' when n >= n2 ->
-        nt2 :: complete (if n = n2 then nl else fl1) ntl'
-    | (n, _) :: nl, _ ->
-        let lid = concat_longident (Longident.Lident "Pkg") n in
-        match Env.find_type_by_name lid env' with
-        | (_, {type_arity = 0; type_kind = Type_abstract;
-               type_private = Public; type_manifest = Some t2}) ->
-            begin match nondep_instance env' lv2 id2 t2 with
-            | t -> (n, t) :: complete nl fl2
-            | exception Nondep_cannot_erase _ ->
-                if allow_absent then
-                  complete nl fl2
-                else
-                  raise Exit
-            end
-        | (_, {type_arity = 0; type_kind = Type_abstract;
-               type_private = Public; type_manifest = None})
-          when allow_absent ->
-            complete nl fl2
-        | _ -> raise Exit
-        | exception Not_found when allow_absent->
-            complete nl fl2
-  in
-  match complete fl1 fl2 with
-  | res -> res
-  | exception Exit -> raise Not_found
-
-(* raise Not_found rather than Unify if the module types are incompatible *)
-let unify_package env unify_list lv1 p1 fl1 lv2 p2 fl2 =
-  let ntl2 = complete_type_list env fl1 lv2 (Mty_ident p2) fl2
-  and ntl1 = complete_type_list env fl2 lv1 (Mty_ident p1) fl1 in
-  unify_list (List.map snd ntl1) (List.map snd ntl2);
-  if eq_package_path env p1 p2
-  || !package_subtype env p1 fl1 p2 fl2
-  && !package_subtype env p2 fl2 p1 fl1 then () else raise Not_found
-
 
 (* force unification in Reither when one side has a non-conjunctive type *)
 let rigid_variants = ref false

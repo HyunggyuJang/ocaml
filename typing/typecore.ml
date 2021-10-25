@@ -795,9 +795,9 @@ let solve_Ppat_variant ~refine loc env tag no_arg expected_ty =
 (* Building the or-pattern corresponding to a polymorphic variant type *)
 let build_or_pat env loc lid =
   let path, decl = Env.lookup_type ~loc:lid.loc lid.txt env in
-  let tyl = List.map (fun _ -> newvar()) decl.type_params in
+  let tyl = instance_list decl.type_params in
   let row0 =
-    let ty = expand_head env (newty(Tconstr(path, tyl, ref Mnil))) in
+    let ty = expand_head env (newconstr path tyl) in
     match get_desc ty with
       Tvariant row when static_row row -> row
     | _ -> raise(Error(lid.loc, env, Not_a_polymorphic_variant_type lid.txt))
@@ -2428,8 +2428,14 @@ let rec approx_type env sty =
       let path, decl = Env.lookup_type ~use:false ~loc:lid.loc lid.txt env in
       if List.length ctl <> decl.type_arity then newvar ()
       else begin
+        let params = instance_list decl.type_params in
         let tyl = List.map (approx_type env) ctl in
-        newconstr path tyl
+        let snap = Btype.snapshot () in
+        begin
+          try List.iter2 (unify_var env) params tyl
+          with _ -> Btype.backtrack snap
+        end;
+        newconstr path params
       end
   | Ptyp_poly (_, sty) ->
       approx_type env sty
