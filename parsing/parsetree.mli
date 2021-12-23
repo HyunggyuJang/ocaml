@@ -190,15 +190,17 @@ and object_field_desc =
 
 (* Patterns *)
 
-and pattern =
+and pattern = Longident.t loc gen_pattern
+and 'a gen_pattern =
     {
-     ppat_desc: pattern_desc;
+     ppat_desc: 'a gen_pattern_desc;
      ppat_loc: Location.t;
      ppat_loc_stack: location_stack;
      ppat_attributes: attributes; (* ... [@id1] [@id2] *)
     }
 
-and pattern_desc =
+and pattern_desc = Longident.t loc gen_pattern_desc
+and 'a gen_pattern_desc =
   | Ppat_any
         (* _ *)
   | Ppat_var of string loc

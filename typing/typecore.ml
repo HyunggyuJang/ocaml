@@ -1342,10 +1342,11 @@ let check_scope_escape loc env level ty =
                  env,
                  Pattern_type_clash(Errortrace.unification_error ~trace, None)))
 
-type pattern_checking_mode =
-  | Normal
+type 'a pattern_checking_mode =
+  | Normal : Longident.t loc pattern_checking_mode
   (** We are checking user code. *)
-  | Counter_example of counter_example_checking_info
+  | Counter_example :
+    counter_example_checking_info -> Path.t pattern_checking_mode
   (** In [Counter_example] mode, we are checking a counter-example
       candidate produced by Parmatch. This is a syntactic pattern that
       represents a set of values by using or-patterns (p_1 | ... | p_n)
@@ -1577,9 +1578,9 @@ let as_comp_pattern
    In counter-example mode, [Empty_branch] is raised when the counter-example
    does not match any value.  *)
 let rec type_pat
-  : type k r . k pattern_category ->
+  : type k r p. k pattern_category ->
       no_existentials: existential_restriction option ->
-      mode: pattern_checking_mode -> env: Env.t ref -> Parsetree.pattern ->
+      mode: pattern_checking_mode -> env: Env.t ref -> p Parsetree.pattern ->
       type_expr -> (k general_pattern -> r) -> r
   = fun category ~no_existentials ~mode
         ~env sp expected_ty k ->
