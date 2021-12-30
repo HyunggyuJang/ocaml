@@ -199,8 +199,8 @@ and 'a gen_pattern =
      ppat_attributes: attributes; (* ... [@id1] [@id2] *)
     }
 
-and pattern_desc = Longident.t loc gen_pattern_desc
-and 'a gen_pattern_desc =
+and pattern_desc = (Longident.t loc, Longident.t loc) gen_pattern_desc
+and ('label,'constr) gen_pattern_desc =
   | Ppat_any
         (* _ *)
   | Ppat_var of string loc
@@ -220,7 +220,7 @@ and 'a gen_pattern_desc =
            Invariant: n >= 2
         *)
   | Ppat_construct of
-      Longident.t loc * (string loc list * pattern) option
+      'constr * (string loc list * pattern) option
         (* C                    None
            C P                  Some ([], P)
            C (P1, ..., Pn)      Some ([], Ppat_tuple [P1; ...; Pn])
@@ -230,7 +230,7 @@ and 'a gen_pattern_desc =
         (* `A             (None)
            `A P           (Some P)
          *)
-  | Ppat_record of (Longident.t loc * pattern) list * closed_flag
+  | Ppat_record of ('label * pattern) list * closed_flag
         (* { l1=P1; ...; ln=Pn }     (flag = Closed)
            { l1=P1; ...; ln=Pn; _}   (flag = Open)
 
