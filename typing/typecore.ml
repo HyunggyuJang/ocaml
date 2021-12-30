@@ -1752,29 +1752,27 @@ and type_pat_aux
         pat_type = newty (Ttuple(List.map (fun p -> p.pat_type) pl));
         pat_attributes = sp.ppat_attributes;
         pat_env = !env })
-  | Ppat_construct(lid, sarg) ->
-      let expected_type =
-        match extract_concrete_variant !env expected_ty with
-        | Variant_type(p0, p, _) ->
-            Some (p0, p, is_principal expected_ty)
-        | Maybe_a_variant_type -> None
-        | Not_a_variant_type ->
-            let srt = wrong_kind_sort_of_constructor lid.txt in
-            let error = Wrong_expected_kind(srt, Pattern, expected_ty) in
-            raise (Error (loc, !env, error))
-      in
+  | Ppat_construct(lid_or_constr, sarg) ->
       let constr =
-        match lid.txt, mode with
-        | Longident.Lident s, Counter_example {constrs; _} ->
-           (* assert: cf. {!counter_example_checking_info} documentation *)
-            assert (Hashtbl.mem constrs s);
-            Hashtbl.find constrs s
-        | _ ->
+        match mode with
+        | Counter_example _ -> lid_or_constr
+        | Normal ->
+        let lid = lid_or_constr in
+        let expected_ty_info =
+          match extract_concrete_variant !env expected_ty with
+          | Variant_type(p0, p, _) ->
+              Some (p0, p, is_principal expected_ty)
+          | Maybe_a_variant_type -> None
+          | Not_a_variant_type ->
+              let srt = wrong_kind_sort_of_constructor lid.txt in
+              let error = Wrong_expected_kind(srt, Pattern, expected_ty) in
+              raise (Error (loc, !env, error))
+        in
         let candidates =
           Env.lookup_all_constructors Env.Pattern ~loc:lid.loc lid.txt !env in
         wrap_disambiguate "This variant pattern is expected to have"
           (mk_expected expected_ty)
-          (Constructor.disambiguate Env.Pattern lid !env expected_type)
+          (Constructor.disambiguate Env.Pattern lid !env expected_ty_info)
           candidates
       in
       if constr.cstr_generalized && must_backtrack_on_gadt then
