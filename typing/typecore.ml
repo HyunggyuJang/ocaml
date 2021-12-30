@@ -1753,9 +1753,10 @@ and type_pat_aux
         pat_attributes = sp.ppat_attributes;
         pat_env = !env })
   | Ppat_construct(lid_or_constr, sarg) ->
-      let constr =
+      let lid, constr =
         match mode with
-        | Counter_example _ -> lid_or_constr
+        | Counter_example _ ->
+            Longident.Lident lid_or_constr.cstr_name, lid_or_constr
         | Normal ->
         let lid = lid_or_constr in
         let expected_ty_info =
@@ -1770,10 +1771,11 @@ and type_pat_aux
         in
         let candidates =
           Env.lookup_all_constructors Env.Pattern ~loc:lid.loc lid.txt !env in
-        wrap_disambiguate "This variant pattern is expected to have"
-          (mk_expected expected_ty)
-          (Constructor.disambiguate Env.Pattern lid !env expected_ty_info)
-          candidates
+        (lid,
+         wrap_disambiguate "This variant pattern is expected to have"
+           (mk_expected expected_ty)
+           (Constructor.disambiguate Env.Pattern lid !env expected_ty_info)
+           candidates)
       in
       if constr.cstr_generalized && must_backtrack_on_gadt then
         raise Need_backtrack;
