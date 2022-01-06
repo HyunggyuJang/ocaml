@@ -1202,34 +1202,28 @@ let rec find_record_qual = function
   | ({ txt = Longident.Ldot (modname, _) }, _) :: _ -> Some modname
   | _ :: rest -> find_record_qual rest
 
-let disambiguate_record ?labels loc closed env usage expected_type lid_a_list =
-  let lbl_a_list =
-    match lid_a_list, labels with
-      ({txt=Longident.Lident s}, _)::_, Some labels when Hashtbl.mem labels s ->
-        (* Special case for rebuilt syntax trees *)
-        List.map
-          (function lid, a -> match lid.txt with
-            Longident.Lident s -> lid, Hashtbl.find labels s, a
-          | _ -> assert false)
-          lid_a_list
-    | _ ->
-        let lid_a_list =
-          match find_record_qual lid_a_list with
-            None -> lid_a_list
-          | Some modname ->
-              List.map
-                (fun (lid, a as lid_a) ->
-                  match lid.txt with Longident.Lident s ->
-                    {lid with txt=Longident.Ldot (modname, s)}, a
-                  | _ -> lid_a)
-                lid_a_list
-        in
-        disambiguate_lid_a_list loc closed env usage expected_type lid_a_list
-  in
-  (* Invariant: records are sorted in the typed tree *)
+let sort_labels lbl_a_list =
   List.sort
     (fun (_,lbl1,_) (_,lbl2,_) -> compare lbl1.lbl_pos lbl2.lbl_pos)
     lbl_a_list
+
+let disambiguate_record loc closed env usage expected_type lid_a_list =
+  let lid_a_list =
+    match find_record_qual lid_a_list with
+      None -> lid_a_list
+    | Some modname ->
+        List.map
+          (fun (lid, a as lid_a) ->
+            match lid.txt with Longident.Lident s ->
+              {lid with txt=Longident.Ldot (modname, s)}, a
+            | _ -> lid_a)
+          lid_a_list
+  in
+  let lbl_a_list =
+    disambiguate_lid_a_list loc closed env usage expected_type lid_a_list
+  in
+  (* Invariant: records are sorted in the typed tree *)
+  sort_labels lbl_a_list
 
 let map_fold_cont f xs k =
   List.fold_right (fun x k ys -> f x (fun y -> k (y :: ys)))
@@ -1373,8 +1367,6 @@ type (_,_) pattern_checking_mode =
 and counter_example_checking_info = {
     explosion_fuel: int;
     splitting_mode: splitting_mode;
-    constrs: (string, Types.constructor_description) Hashtbl.t;
-    labels: (string, Types.label_description) Hashtbl.t;
   }
 (**
     [explosion_fuel] controls the checking of wildcard patterns.  We
@@ -1389,14 +1381,6 @@ and counter_example_checking_info = {
     leads to a well-typed pattern. Checking all branches is expensive,
     we use different search strategies (see {!splitting_mode}) to
     reduce the number of explored alternatives.
-
-    [constrs] and [labels] contain metadata produced by [Parmatch] to
-    type-check the given syntactic pattern. [Parmatch] produces
-    counter-examples by turning typed patterns into
-    [Parsetree.pattern]. In this process, constructor and label paths
-    are lost, and are replaced by generated strings. [constrs] and
-    [labels] map those synthetic names back to the typed descriptions
-    of the original names.
  *)
 
 (** Due to GADT constraints, an or-pattern produced within
@@ -1925,8 +1909,13 @@ and type_pat_aux
         | Counter_example _ ->
             let lid_sp_list : (label_description * (l, c) gen_pattern) list =
               lid_sp_list in
-            disambiguate_record loc false !env Env.Projection
-              expected_type lid_sp_list
+            let lbl_a_list =
+              List.map
+                (function ld, a -> 
+                  mknoloc (Longident.Lident ld.lbl_name), ld, a)
+                lid_sp_list
+            in
+            sort_labels lbl_a_list
       in
       k' (map_fold_cont type_label_pat lbl_a_list make_record_pat)
   | Ppat_array spl ->
@@ -2089,7 +2078,7 @@ and type_pat_aux
   | Ppat_extension ext ->
       raise (Error_forward (Builtin_attributes.error_of_extension ext))
 
-let type_pat category ?no_existentials ?(mode=Normal)
+let type_pat category ?no_existentials ~mode
     ?(lev=get_current_level()) env sp expected_ty =
   Misc.protect_refs [Misc.R (gadt_equations_level, Some lev)] (fun () ->
         type_pat category ~no_existentials ~mode
@@ -2098,15 +2087,13 @@ let type_pat category ?no_existentials ?(mode=Normal)
 
 (* this function is passed to Partial.parmatch
    to type check gadt nonexhaustiveness *)
-let partial_pred ~lev ~splitting_mode ?(explode=0)
-      env expected_ty constrs labels p =
+let partial_pred ~lev ~splitting_mode ?(explode=0) env expected_ty p =
   let env = ref env in
   let state = save_state env in
   let mode =
     Counter_example {
         splitting_mode;
         explosion_fuel = explode;
-        constrs; labels;
       } in
   try
     reset_pattern true;
@@ -2118,6 +2105,9 @@ let partial_pred ~lev ~splitting_mode ?(explode=0)
     set_state state env;
     None
 
+(* only Normal mode from here on *)
+let type_pat category = type_pat category ~mode:Normal
+
 let check_partial ?(lev=get_current_level ()) env expected_ty loc cases =
   let explode = match cases with [_] -> 5 | _ -> 0 in
   let splitting_mode = Refine_or {inside_nonsplit_or = false} in
@@ -2126,10 +2116,10 @@ let check_partial ?(lev=get_current_level ()) env expected_ty loc cases =
 
 let check_unused ?(lev=get_current_level ()) env expected_ty cases =
   Parmatch.check_unused
-    (fun refute constrs labels spat ->
+    (fun refute spat ->
       match
         partial_pred ~lev ~splitting_mode:Backtrack_or ~explode:5
-          env expected_ty constrs labels spat
+          env expected_ty spat
       with
         Some pat when refute ->
           raise (Error (spat.ppat_loc, env, Unrefuted_pattern pat))
