@@ -83,14 +83,12 @@ val complete_constrs :
       are GADT constructors ([PE_gadt_cases]).
  *)
 type pat_explosion = PE_single | PE_gadt_cases
+type typed_pattern =
+    (label_description, constructor_description) Parsetree.gen_pattern
 type ppat_of_type =
   | PT_empty
   | PT_any
-  | PT_pattern of
-      pat_explosion *
-      Parsetree.pattern *
-      (string, constructor_description) Hashtbl.t *
-      (string, label_description) Hashtbl.t
+  | PT_pattern of pat_explosion * typed_pattern
 
 val ppat_of_type: Env.t -> type_expr -> ppat_of_type
 
@@ -107,15 +105,10 @@ val pressure_variants_in_computation_pattern:
     [refute] indicates that [check_unused] was called on a refutation clause.
  *)
 val check_partial:
-    ((string, constructor_description) Hashtbl.t ->
-     (string, label_description) Hashtbl.t ->
-     Parsetree.pattern -> pattern option) ->
+    (typed_pattern -> pattern option) ->
     Location.t -> value case list -> partial
 val check_unused:
-    (bool ->
-     (string, constructor_description) Hashtbl.t ->
-     (string, label_description) Hashtbl.t ->
-     Parsetree.pattern -> pattern option) ->
+    (bool -> typed_pattern -> pattern option) ->
     value case list -> unit
 
 (* Irrefutability tests *)

@@ -145,19 +145,23 @@ module Pat = struct
      ppat_loc = loc;
      ppat_loc_stack = [];
      ppat_attributes = attrs}
+  let mk_gen = mk
   let attr d a = {d with ppat_attributes = d.ppat_attributes @ [a]}
 
   let any ?loc ?attrs () = mk ?loc ?attrs Ppat_any
   let var ?loc ?attrs a = mk ?loc ?attrs (Ppat_var a)
   let alias ?loc ?attrs a b = mk ?loc ?attrs (Ppat_alias (a, b))
   let constant ?loc ?attrs a = mk ?loc ?attrs (Ppat_constant a)
+  let constant_gen = constant
   let interval ?loc ?attrs a b = mk ?loc ?attrs (Ppat_interval (a, b))
   let tuple ?loc ?attrs a = mk ?loc ?attrs (Ppat_tuple a)
+  let tuple_gen = tuple
   let construct ?loc ?attrs a b = mk ?loc ?attrs (Ppat_construct (a, b))
   let variant ?loc ?attrs a b = mk ?loc ?attrs (Ppat_variant (a, b))
   let record ?loc ?attrs a b = mk ?loc ?attrs (Ppat_record (a, b))
   let array ?loc ?attrs a = mk ?loc ?attrs (Ppat_array a)
   let or_ ?loc ?attrs a b = mk ?loc ?attrs (Ppat_or (a, b))
+  let or_gen = or_
   let constraint_ ?loc ?attrs a b = mk ?loc ?attrs (Ppat_constraint (a, b))
   let type_ ?loc ?attrs a = mk ?loc ?attrs (Ppat_type a)
   let lazy_ ?loc ?attrs a = mk ?loc ?attrs (Ppat_lazy a)

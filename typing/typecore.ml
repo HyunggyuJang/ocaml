@@ -1342,7 +1342,7 @@ let check_scope_escape loc env level ty =
                  env,
                  Pattern_type_clash(Errortrace.unification_error ~trace, None)))
 
-type 'a pattern_checking_mode =
+type (_,_) pattern_checking_mode =
   | Normal : (Longident.t loc, Longident.t loc) pattern_checking_mode
   (** We are checking user code. *)
   | Counter_example :
@@ -1505,16 +1505,22 @@ let rec find_valid_alternative f pat =
       )
   | _ -> f pat
 
-let no_explosion = function
+let no_explosion
+  : type l c. (l,c) pattern_checking_mode -> (l,c) pattern_checking_mode
+  = function
   | Normal -> Normal
   | Counter_example info ->
      Counter_example { info with explosion_fuel = 0 }
 
-let get_splitting_mode = function
+let get_splitting_mode
+  : type l c. (l,c) pattern_checking_mode -> _
+  = function
   | Normal -> None
   | Counter_example {splitting_mode} -> Some splitting_mode
 
-let enter_nonsplit_or mode = match mode with
+let enter_nonsplit_or
+  : type l c. (l,c) pattern_checking_mode -> (l,c) pattern_checking_mode
+  = function
   | Normal -> Normal
   | Counter_example info ->
      let splitting_mode = match info.splitting_mode with
@@ -1582,7 +1588,7 @@ let rec type_pat
   : type k r l c. k pattern_category ->
       no_existentials: existential_restriction option ->
       mode: (l,c) pattern_checking_mode -> env: Env.t ref ->
-      (l,c) Parsetree.pattern -> type_expr -> (k general_pattern -> r) -> r
+      (l,c) Parsetree.gen_pattern -> type_expr -> (k general_pattern -> r) -> r
   = fun category ~no_existentials ~mode
         ~env sp expected_ty k ->
   Builtin_attributes.warning_scope sp.ppat_attributes
@@ -1592,14 +1598,18 @@ let rec type_pat
     )
 
 and type_pat_aux
-  : type k r . k pattern_category -> no_existentials:_ -> mode:_ ->
-         env:_ -> _ -> _ -> (k general_pattern -> r) -> r
+  : type k r l c. k pattern_category ->
+      no_existentials: existential_restriction option ->
+      mode: (l,c) pattern_checking_mode -> env: Env.t ref ->
+      (l,c) Parsetree.gen_pattern -> type_expr -> (k general_pattern -> r) -> r
   = fun category ~no_existentials ~mode
       ~env sp expected_ty k ->
   let type_pat category ?(mode=mode) ?(env=env) =
     type_pat category ~no_existentials ~mode ~env
   in
   let loc = sp.ppat_loc in
+  let construction_not_used_in_counterexamples =
+    match mode with Normal -> true | Counter_example _ -> false in
   let refine =
     match mode with Normal -> None | Counter_example _ -> Some true in
   let solve_expected (x : pattern) : pattern =
@@ -1611,11 +1621,10 @@ and type_pat_aux
       match category with
       | Value -> rp x
       | Computation -> rcp x in
-    if mode = Normal then crp x else x in
+    match mode with Normal -> crp x | Counter_example _ -> x in
   let rp k x = k (rp x)
   and rvp k x = k (rp (pure category x))
   and rcp k x = k (rp (only_impure category x)) in
-  let construction_not_used_in_counterexamples = (mode = Normal) in
   let must_backtrack_on_gadt = match get_splitting_mode mode with
     | None -> false
     | Some Backtrack_or -> false
@@ -1639,7 +1648,7 @@ and type_pat_aux
          begin match ppat_of_type !env expected_ty with
          | PT_empty -> raise Empty_branch
          | PT_any -> k' Tpat_any
-         | PT_pattern (explosion, sp, constrs, labels) ->
+         | PT_pattern (explosion, sp) ->
             let explosion_fuel =
               match explosion with
               | PE_single -> explosion_fuel - 1
@@ -1648,7 +1657,7 @@ and type_pat_aux
                   explosion_fuel - 5
             in
             let mode =
-              Counter_example { info with explosion_fuel; constrs; labels }
+              Counter_example { info with explosion_fuel }
             in
             type_pat category ~mode sp expected_ty k
          end
@@ -1726,13 +1735,12 @@ and type_pat_aux
         pat_attributes = sp.ppat_attributes;
         pat_env = !env }
   | Ppat_interval (Pconst_char c1, Pconst_char c2) ->
-      let open Ast_helper.Pat in
       let gloc = {loc with Location.loc_ghost=true} in
       let rec loop c1 c2 =
-        if c1 = c2 then constant ~loc:gloc (Pconst_char c1)
+        if c1 = c2 then Ast_helper.Pat.constant_gen ~loc:gloc (Pconst_char c1)
         else
-          or_ ~loc:gloc
-            (constant ~loc:gloc (Pconst_char c1))
+          Ast_helper.Pat.or_gen ~loc:gloc
+            (Ast_helper.Pat.constant_gen ~loc:gloc (Pconst_char c1))
             (loop (Char.chr(Char.code c1 + 1)) c2)
       in
       let p = if c1 <= c2 then loop c1 c2 else loop c2 c1 in
@@ -1756,9 +1764,10 @@ and type_pat_aux
       let lid, constr =
         match mode with
         | Counter_example _ ->
-            Longident.Lident lid_or_constr.cstr_name, lid_or_constr
+            mknoloc (Longident.Lident lid_or_constr.cstr_name) ,
+            (lid_or_constr : constructor_description)
         | Normal ->
-        let lid = lid_or_constr in
+        let lid : Longident.t loc = lid_or_constr in
         let expected_ty_info =
           match extract_concrete_variant !env expected_ty with
           | Variant_type(p0, p, _) ->
@@ -1906,13 +1915,17 @@ and type_pat_aux
       let lbl_a_list =
         match mode with
         | Normal ->
+            let lid_sp_list : (Longident.t loc * (l, c) gen_pattern) list =
+              lid_sp_list in
             wrap_disambiguate
               "This record pattern is expected to have"
               (mk_expected expected_ty)
               (disambiguate_record loc false !env Env.Projection expected_type)
               lid_sp_list
-        | Counter_example {labels; _} ->
-            disambiguate_record ~labels loc false !env Env.Projection
+        | Counter_example _ ->
+            let lid_sp_list : (label_description * (l, c) gen_pattern) list =
+              lid_sp_list in
+            disambiguate_record loc false !env Env.Projection
               expected_type lid_sp_list
       in
       k' (map_fold_cont type_label_pat lbl_a_list make_record_pat)

@@ -190,10 +190,10 @@ and object_field_desc =
 
 (* Patterns *)
 
-and pattern = Longident.t loc gen_pattern
-and 'a gen_pattern =
+and pattern = (Longident.t loc, Longident.t loc) gen_pattern
+and ('label,'constr) gen_pattern =
     {
-     ppat_desc: 'a gen_pattern_desc;
+     ppat_desc: ('label, 'constr) gen_pattern_desc;
      ppat_loc: Location.t;
      ppat_loc_stack: location_stack;
      ppat_attributes: attributes; (* ... [@id1] [@id2] *)
@@ -205,7 +205,7 @@ and ('label,'constr) gen_pattern_desc =
         (* _ *)
   | Ppat_var of string loc
         (* x *)
-  | Ppat_alias of pattern * string loc
+  | Ppat_alias of 'pattern * string loc
         (* P as 'a *)
   | Ppat_constant of constant
         (* 1, 'a', "true", 1.0, 1l, 1L, 1n *)
@@ -214,37 +214,37 @@ and ('label,'constr) gen_pattern_desc =
 
            Other forms of interval are recognized by the parser
            but rejected by the type-checker. *)
-  | Ppat_tuple of pattern list
+  | Ppat_tuple of 'pattern list
         (* (P1, ..., Pn)
 
            Invariant: n >= 2
         *)
   | Ppat_construct of
-      'constr * (string loc list * pattern) option
+      'constr * (string loc list * 'pattern) option
         (* C                    None
            C P                  Some ([], P)
            C (P1, ..., Pn)      Some ([], Ppat_tuple [P1; ...; Pn])
            C (type a b) P       Some ([a; b], P)
          *)
-  | Ppat_variant of label * pattern option
+  | Ppat_variant of label * 'pattern option
         (* `A             (None)
            `A P           (Some P)
          *)
-  | Ppat_record of ('label * pattern) list * closed_flag
+  | Ppat_record of ('label * 'pattern) list * closed_flag
         (* { l1=P1; ...; ln=Pn }     (flag = Closed)
            { l1=P1; ...; ln=Pn; _}   (flag = Open)
 
            Invariant: n > 0
          *)
-  | Ppat_array of pattern list
+  | Ppat_array of 'pattern list
         (* [| P1; ...; Pn |] *)
-  | Ppat_or of pattern * pattern
+  | Ppat_or of 'pattern * 'pattern
         (* P1 | P2 *)
-  | Ppat_constraint of pattern * core_type
+  | Ppat_constraint of 'pattern * core_type
         (* (P : T) *)
   | Ppat_type of Longident.t loc
         (* #tconst *)
-  | Ppat_lazy of pattern
+  | Ppat_lazy of 'pattern
         (* lazy P *)
   | Ppat_unpack of string option loc
         (* (module P)        Some "P"
@@ -253,12 +253,13 @@ and ('label,'constr) gen_pattern_desc =
            Note: (module P : S) is represented as
            Ppat_constraint(Ppat_unpack, Ptyp_package)
          *)
-  | Ppat_exception of pattern
+  | Ppat_exception of 'pattern
         (* exception P *)
   | Ppat_extension of extension
         (* [%id] *)
-  | Ppat_open of Longident.t loc * pattern
+  | Ppat_open of Longident.t loc * 'pattern
         (* M.(P) *)
+  constraint 'pattern = ('label,'constr) gen_pattern
 
 (* Value expressions *)
 

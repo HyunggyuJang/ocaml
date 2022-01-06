@@ -1846,62 +1846,43 @@ let rec initial_only_guarded = function
 (* conversion from Typedtree.pattern to Parsetree.pattern list *)
 module Conv = struct
   open Parsetree
-  let mkpat desc = Ast_helper.Pat.mk desc
+  let mkpat desc = Ast_helper.Pat.mk_gen desc
 
-  let name_counter = ref 0
-  let fresh name =
-    let current = !name_counter in
-    name_counter := !name_counter + 1;
-    "#$" ^ name ^ Int.to_string current
-
-  let conv typed =
-    let constrs = Hashtbl.create 7 in
-    let labels = Hashtbl.create 7 in
-    let rec loop pat =
-      match pat.pat_desc with
-        Tpat_or (pa,pb,_) ->
-          mkpat (Ppat_or (loop pa, loop pb))
-      | Tpat_var (_, ({txt="*extension*"} as nm)) -> (* PR#7330 *)
-          mkpat (Ppat_var nm)
-      | Tpat_any
-      | Tpat_var _ ->
-          mkpat Ppat_any
-      | Tpat_constant c ->
-          mkpat (Ppat_constant (Untypeast.constant c))
-      | Tpat_alias (p,_,_) -> loop p
-      | Tpat_tuple lst ->
-          mkpat (Ppat_tuple (List.map loop lst))
-      | Tpat_construct (cstr_lid, cstr, lst, _) ->
-          let id = fresh cstr.cstr_name in
-          let lid = { cstr_lid with txt = Longident.Lident id } in
-          Hashtbl.add constrs id cstr;
-          let arg =
-            match List.map loop lst with
-            | []  -> None
-            | [p] -> Some ([], p)
-            | lst -> Some ([], mkpat (Ppat_tuple lst))
-          in
-          mkpat (Ppat_construct(lid, arg))
-      | Tpat_variant(label,p_opt,_row_desc) ->
-          let arg = Option.map loop p_opt in
-          mkpat (Ppat_variant(label, arg))
-      | Tpat_record (subpatterns, _closed_flag) ->
-          let fields =
-            List.map
-              (fun (_, lbl, p) ->
-                let id = fresh lbl.lbl_name in
-                Hashtbl.add labels id lbl;
-                (mknoloc (Longident.Lident id), loop p))
-              subpatterns
-          in
-          mkpat (Ppat_record (fields, Open))
-      | Tpat_array lst ->
-          mkpat (Ppat_array (List.map loop lst))
-      | Tpat_lazy p ->
-          mkpat (Ppat_lazy (loop p))
-    in
-    let ps = loop typed in
-    (ps, constrs, labels)
+  let rec conv typed
+      : (label_description, constructor_description) gen_pattern =
+    match typed.pat_desc with
+      Tpat_or (pa,pb,_) ->
+        mkpat (Ppat_or (conv pa, conv pb))
+    | Tpat_var (_, ({txt="*extension*"} as nm)) -> (* PR#7330 *)
+        mkpat (Ppat_var nm)
+    | Tpat_any
+    | Tpat_var _ ->
+        mkpat Ppat_any
+    | Tpat_constant c ->
+        mkpat (Ppat_constant (Untypeast.constant c))
+    | Tpat_alias (p,_,_) -> conv p
+    | Tpat_tuple lst ->
+        mkpat (Ppat_tuple (List.map conv lst))
+    | Tpat_construct (_, cstr, lst, _) ->
+        let arg =
+          match List.map conv lst with
+          | []  -> None
+          | [p] -> Some ([], p)
+          | lst -> Some ([], mkpat (Ppat_tuple lst))
+        in
+        mkpat (Ppat_construct(cstr, arg))
+    | Tpat_variant(label,p_opt,_row_desc) ->
+        let arg = Option.map conv p_opt in
+        mkpat (Ppat_variant(label, arg))
+    | Tpat_record (subpatterns, _closed_flag) ->
+        let fields =
+          List.map (fun (_, lbl, p) -> lbl, conv p) subpatterns
+        in
+        mkpat (Ppat_record (fields, Open))
+    | Tpat_array lst ->
+        mkpat (Ppat_array (List.map conv lst))
+    | Tpat_lazy p ->
+        mkpat (Ppat_lazy (conv p))
 end
 
 
@@ -1915,29 +1896,23 @@ let contains_extension pat =
 
 (* Build a pattern from its expected type *)
 type pat_explosion = PE_single | PE_gadt_cases
+type typed_pattern =
+    (label_description, constructor_description) Parsetree.gen_pattern
 type ppat_of_type =
   | PT_empty
   | PT_any
-  | PT_pattern of
-      pat_explosion *
-      Parsetree.pattern *
-      (string, constructor_description) Hashtbl.t *
-      (string, label_description) Hashtbl.t
+  | PT_pattern of pat_explosion * typed_pattern
 
 let ppat_of_type env ty =
   match pats_of_type env ty with
   | [] -> PT_empty
   | [{pat_desc = Tpat_any}] -> PT_any
   | [pat] ->
-      let (ppat, constrs, labels) = Conv.conv pat in
-      PT_pattern (PE_single, ppat, constrs, labels)
+      PT_pattern (PE_single, Conv.conv pat)
   | pats ->
-      let (ppat, constrs, labels) = Conv.conv (orify_many pats) in
-      PT_pattern (PE_gadt_cases, ppat, constrs, labels)
+      PT_pattern (PE_gadt_cases, Conv.conv (orify_many pats))
 
-let typecheck ~pred p =
-  let (pattern,constrs,labels) = Conv.conv p in
-  pred constrs labels pattern
+let typecheck ~pred p = pred (Conv.conv p)
 
 let do_check_partial ~pred loc casel pss = match pss with
 | [] ->
@@ -2102,9 +2077,9 @@ let check_unused pred casel =
                   List.map (function [u] -> u | _ -> assert false) sfs in
                 let u = orify_many sfs in
                 (*Format.eprintf "%a@." pretty_val u;*)
-                let (pattern,constrs,labels) = Conv.conv u in
+                let pattern = Conv.conv u in
                 let pattern = {pattern with Parsetree.ppat_loc = q.pat_loc} in
-                match pred refute constrs labels pattern with
+                match pred refute pattern with
                   None when not refute ->
                     Location.prerr_warning q.pat_loc Warnings.Unreachable_case;
                     Used

@@ -101,14 +101,20 @@ module Typ :
 module Pat:
   sig
     val mk: ?loc:loc -> ?attrs:attrs -> pattern_desc -> pattern
+    val mk_gen: ?loc:loc -> ?attrs:attrs ->
+      ('l,'c) gen_pattern_desc -> ('l,'c) gen_pattern
     val attr:pattern -> attribute -> pattern
 
     val any: ?loc:loc -> ?attrs:attrs -> unit -> pattern
     val var: ?loc:loc -> ?attrs:attrs -> str -> pattern
     val alias: ?loc:loc -> ?attrs:attrs -> pattern -> str -> pattern
     val constant: ?loc:loc -> ?attrs:attrs -> constant -> pattern
+    val constant_gen: ?loc:loc -> ?attrs:attrs -> constant ->
+      ('l,'c) gen_pattern
     val interval: ?loc:loc -> ?attrs:attrs -> constant -> constant -> pattern
     val tuple: ?loc:loc -> ?attrs:attrs -> pattern list -> pattern
+    val tuple_gen: ?loc:loc -> ?attrs:attrs ->
+      ('l,'c) gen_pattern list -> ('l,'c) gen_pattern
     val construct: ?loc:loc -> ?attrs:attrs ->
       lid -> (str list * pattern) option -> pattern
     val variant: ?loc:loc -> ?attrs:attrs -> label -> pattern option -> pattern
@@ -116,6 +122,8 @@ module Pat:
                 -> pattern
     val array: ?loc:loc -> ?attrs:attrs -> pattern list -> pattern
     val or_: ?loc:loc -> ?attrs:attrs -> pattern -> pattern -> pattern
+    val or_gen: ?loc:loc -> ?attrs:attrs ->
+      ('l,'c) gen_pattern -> ('l,'c) gen_pattern -> ('l,'c) gen_pattern
     val constraint_: ?loc:loc -> ?attrs:attrs -> pattern -> core_type -> pattern
     val type_: ?loc:loc -> ?attrs:attrs -> lid -> pattern
     val lazy_: ?loc:loc -> ?attrs:attrs -> pattern -> pattern
