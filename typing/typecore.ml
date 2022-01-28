@@ -1586,8 +1586,8 @@ let as_comp_pattern
    does not match any value.  *)
 let rec type_pat
   : type k r . k pattern_category ->
-      no_existentials: existential_restriction option ->
-      mode: pattern_checking_mode -> env: Env.t ref -> Parsetree.pattern ->
+      no_existentials: existential_restriction option -> mode:_ ->
+      env: Env.t ref -> Parsetree.pattern ->
       type_expr -> (k general_pattern -> r) -> r
   = fun category ~no_existentials ~mode
         ~env sp expected_ty k ->
@@ -1596,6 +1596,21 @@ let rec type_pat
        type_pat_aux category ~no_existentials ~mode
          ~env sp expected_ty k
     )
+
+(*
+let retype_pat
+  : type k r . k pattern_category ->
+      no_existentials: existential_restriction option ->
+      env: Env.t ref -> Parsetree.pattern ->
+      type_expr -> (k general_pattern -> r) -> r
+  = fun category ~no_existentials ~mode
+        ~env sp expected_ty k ->
+  Builtin_attributes.warning_scope sp.ppat_attributes
+    (fun () ->
+       type_pat_aux category ~no_existentials ~mode:Counter_example
+         ~env sp expected_ty k
+    )
+*)
 
 and type_pat_aux
   : type k r . k pattern_category -> no_existentials:_ -> mode:_ ->
@@ -2081,10 +2096,18 @@ and type_pat_aux
   | Ppat_extension ext ->
       raise (Error_forward (Builtin_attributes.error_of_extension ext))
 
-let type_pat category ?no_existentials ?(mode=Normal)
+let retype_pat category ?no_existentials ~counter_example_args
     ?(lev=get_current_level()) env sp expected_ty =
   Misc.protect_refs [Misc.R (gadt_equations_level, Some lev)] (fun () ->
-        type_pat category ~no_existentials ~mode
+        type_pat category ~no_existentials
+      ~mode:(Counter_example counter_example_args)
+          ~env sp expected_ty (fun x -> x)
+    )
+
+let type_pat category ?no_existentials
+    ?(lev=get_current_level()) env sp expected_ty =
+  Misc.protect_refs [Misc.R (gadt_equations_level, Some lev)] (fun () ->
+        type_pat category ~no_existentials ~mode:Normal
           ~env sp expected_ty (fun x -> x)
     )
 
@@ -2094,15 +2117,15 @@ let partial_pred ~lev ~splitting_mode ?(explode=0)
       env expected_ty constrs labels p =
   let env = ref env in
   let state = save_state env in
-  let mode =
-    Counter_example {
+  let counter_example_args =
+      {
         splitting_mode;
         explosion_fuel = explode;
         constrs; labels;
       } in
   try
     reset_pattern true;
-    let typed_p = type_pat Value ~lev ~mode env p expected_ty in
+    let typed_p = retype_pat Value ~lev ~counter_example_args env p expected_ty in
     set_state state env;
     (* types are invalidated but we don't need them here *)
     Some typed_p
