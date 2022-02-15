@@ -159,7 +159,7 @@ let transl_typedecl ~loc ~env ~vars id td =
     { ct_name = ml_name; ct_arity = td.type_arity;
       ct_args = params; ct_mlargs = ml_params0;
       ct_type = ret_type params ml_params0; ct_def = None;
-      ct_compare = None; ct_constrs = [] } in
+      ct_compare = None; ct_constrs = []; ct_maps = [] } in
   let vars = add_type (Path.Pident id) ctd vars in
   if td.type_private <> Public then not_allowed ~loc "Private type";
   begin match td.type_kind with

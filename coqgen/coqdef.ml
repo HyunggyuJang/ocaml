@@ -151,6 +151,7 @@ type coq_type_desc = {
        (* cases for comparison *)
     ct_constrs: (string * string) list;
     ct_compare: coq_term option;
+    ct_maps: (int * string) list;
   }
 
 type coq_term_desc =

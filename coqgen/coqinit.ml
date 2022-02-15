@@ -30,7 +30,7 @@ let xy = [CTid"x"; CTid"y"]
 
 let ctd = { ct_name = ""; ct_arity = 0; ct_args = []; ct_mlargs = [];
             ct_type = CTid ""; ct_def = None; ct_constrs = [];
-            ct_compare = None }
+            ct_compare = None; ct_maps = [] }
 
 let init_type_map vars =
   List.fold_left
@@ -75,6 +75,7 @@ let init_type_map vars =
      ct_arity = 1; ct_args = [0, "a"];
      ct_constrs = [("[]", "@nil"); ("::", "@cons")];
      ct_type = CTapp (CTid "list", [CTid "a"]); ct_def = None;
+     ct_maps = [1, "cast_list"];
      ct_compare = Some
        (CTapp (CTid"compare_list",
                CTid"compare_rec" :: CTid "T1" :: xy))});
