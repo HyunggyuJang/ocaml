@@ -278,7 +278,7 @@ let compute_variance_decl env ~check decl (required, _ as rloc) =
       None -> []
     | Some ty -> [false, ty]
   in
-  match decl.type_kind with
+  let vari = match decl.type_kind with
     Type_abstract | Type_open ->
       compute_variance_type env ~check rloc decl mn
   | Type_variant (tll,_rep) ->
@@ -300,6 +300,10 @@ let compute_variance_decl env ~check decl (required, _ as rloc) =
       compute_variance_type env ~check rloc decl
         (mn @ List.map (fun {Types.ld_mutable; ld_type} ->
              (ld_mutable = Mutable, ld_type)) ftl)
+  in
+  if mn = [] || decl.type_kind <> Type_abstract then
+    List.map Variance.strengthen vari
+  else vari
 
 let is_hash id =
   let s = Ident.name id in

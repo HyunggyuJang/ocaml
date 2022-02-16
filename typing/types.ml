@@ -195,6 +195,8 @@ module Variance = struct
     List.fold_right (fun (b,f) v -> set_if b f v)
       [mp, May_pos; mn, May_neg; mw, May_weak; inj, Inj; pos, Pos; neg, Neg]
       null
+  let strengthen v =
+    if mem May_neg v then v else v land (full - single May_weak)
   let get_upper v = (mem May_pos v, mem May_neg v)
   let get_lower v = (mem Pos v, mem Neg v, mem Inv v, mem Inj v)
   let unknown_signature ~injective ~arity =
