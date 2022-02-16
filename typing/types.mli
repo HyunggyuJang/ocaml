@@ -418,9 +418,11 @@ module Variance : sig
   val inter  : t -> t -> t
   val subset : t -> t -> bool
   val eq : t -> t -> bool
-  val set : f -> bool -> t -> t
+  val set : f -> t -> t
+  val set_if : bool -> f -> t -> t
   val mem : f -> t -> bool
   val conjugate : t -> t                (* exchange positive and negative *)
+  val compose : t -> t -> t
   val get_upper : t -> bool * bool                  (* may_pos, may_neg   *)
   val get_lower : t -> bool * bool * bool * bool    (* pos, neg, inv, inj *)
   val unknown_signature : injective:bool -> arity:int -> t list
