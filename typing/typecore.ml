@@ -2084,8 +2084,7 @@ let type_pat category ?no_existentials
 
 (* this function is passed to Partial.parmatch
    to type check gadt nonexhaustiveness *)
-let partial_pred ~lev ~splitting_mode ?(explode=0)
-      env expected_ty p =
+let partial_pred ~lev ~splitting_mode ?(explode=0) env expected_ty p =
   let env = ref env in
   let state = save_state env in
   let counter_example_args =
@@ -2095,8 +2094,7 @@ let partial_pred ~lev ~splitting_mode ?(explode=0)
       } in
   try
     reset_pattern true;
-    let typed_p =
-      retype_pat ~lev ~counter_example_args env p expected_ty in
+    let typed_p = retype_pat ~lev ~counter_example_args env p expected_ty in
     set_state state env;
     (* types are invalidated but we don't need them here *)
     Some typed_p
