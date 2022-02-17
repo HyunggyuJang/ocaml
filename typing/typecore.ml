@@ -1210,29 +1210,20 @@ let map_fold_cont f xs k =
     xs (fun ys -> k (List.rev ys)) []
 
 let type_label_a_list
-      ?labels loc closed env usage type_lbl_a expected_type lid_a_list k =
+    loc closed env usage type_lbl_a expected_type lid_a_list k =
   let lbl_a_list =
-    match lid_a_list, labels with
-      ({txt=Longident.Lident s}, _)::_, Some labels when Hashtbl.mem labels s ->
-        (* Special case for rebuilt syntax trees *)
-        List.map
-          (function lid, a -> match lid.txt with
-            Longident.Lident s -> lid, Hashtbl.find labels s, a
-          | _ -> assert false)
-          lid_a_list
-    | _ ->
-        let lid_a_list =
-          match find_record_qual lid_a_list with
-            None -> lid_a_list
-          | Some modname ->
-              List.map
-                (fun (lid, a as lid_a) ->
-                  match lid.txt with Longident.Lident s ->
-                    {lid with txt=Longident.Ldot (modname, s)}, a
-                  | _ -> lid_a)
-                lid_a_list
-        in
-        disambiguate_lid_a_list loc closed env usage expected_type lid_a_list
+    let lid_a_list =
+      match find_record_qual lid_a_list with
+        None -> lid_a_list
+      | Some modname ->
+          List.map
+            (fun (lid, a as lid_a) ->
+              match lid.txt with Longident.Lident s ->
+                {lid with txt=Longident.Ldot (modname, s)}, a
+              | _ -> lid_a)
+            lid_a_list
+    in
+    disambiguate_lid_a_list loc closed env usage expected_type lid_a_list
   in
   (* Invariant: records are sorted in the typed tree *)
   let lbl_a_list =
