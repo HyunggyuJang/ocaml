@@ -1616,12 +1616,7 @@ and type_pat_aux
         pat_env = !env }
   | Ppat_var name ->
       let ty = instance expected_ty in
-      let id = (* PR#7330 *)
-        if name.txt = "*extension*" then
-          Ident.create_local name.txt
-        else
-          enter_variable loc name ty sp.ppat_attributes
-      in
+      let id = enter_variable loc name ty sp.ppat_attributes in
       rvp k {
         pat_desc = Tpat_var (id, name);
         pat_loc = loc; pat_extra=[];
