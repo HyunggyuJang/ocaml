@@ -189,7 +189,7 @@ let compute_variance_type env ~check (required, loc) decl tyl =
              if Ctype.is_equal env false [ty] [t] then union vt v else v)
           !tvl2 null in
       Btype.backtrack snap;
-      let (c1,n1) = get_upper v1 and (c2,n2,_,i2) = get_lower v2 in
+      let (c1,n1) = get_upper v1 and (c2,n2,i2) = get_lower v2 in
       if c1 && not c2 || n1 && not n2 then
         if List.exists (eq_type ty) fvl then
           let code = if not i2 then No_variable

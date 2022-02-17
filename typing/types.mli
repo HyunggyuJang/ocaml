@@ -424,8 +424,8 @@ module Variance : sig
   val conjugate : t -> t                (* exchange positive and negative *)
   val compose : t -> t -> t
   val strengthen : t -> t                (* remove May_weak when possible *)
-  val get_upper : t -> bool * bool                  (* may_pos, may_neg   *)
-  val get_lower : t -> bool * bool * bool * bool    (* pos, neg, inv, inj *)
+  val get_upper : t -> bool * bool                    (* may_pos, may_neg *)
+  val get_lower : t -> bool * bool * bool                (* pos, neg, inj *)
   val unknown_signature : injective:bool -> arity:int -> t list
   (** The most pessimistic variance for a completely unknown type. *)
 end
