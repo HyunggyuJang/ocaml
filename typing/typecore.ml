@@ -723,7 +723,7 @@ let solve_Ppat_construct ~refine env loc constr no_existentials
   generalize_structure ty_res;
   List.iter generalize_structure ty_args;
   if !Clflags.principal && refine = None then begin
-    (* Do not warn for couter examples *)
+    (* Do not warn for counter examples *)
     let exception Warn_only_once in
     try
       TypePairs.iter
@@ -1340,163 +1340,6 @@ let check_scope_escape loc env level ty =
                  env,
                  Pattern_type_clash(Errortrace.unification_error ~trace, None)))
 
-(**   In [retype_pat], we will check a counter-example
-      candidate produced by Parmatch. This is a syntactic pattern that
-      represents a set of values by using or-patterns (p_1 | ... | p_n)
-      to enumerate all alternatives in the counter-example
-      search. These or-patterns occur at every choice point, possibly
-      deep inside the pattern.
-
-      Parmatch does not use type information, so this pattern may
-      exhibit two issues:
-      - some parts of the pattern may be ill-typed due to GADTs, and
-      - some wildcard patterns may not match any values: their type is
-        empty.
-
-      The aim of [type_pat] in the [Counter_example] mode is to refine
-      this syntactic pattern into a well-typed pattern, and ensure
-      that it matches at least one concrete value.
-      - It filters ill-typed branches of or-patterns.
-        (see {!splitting_mode} below)
-      - It tries to check that wildcard patterns are non-empty.
-        (see {!explosion_fuel})
-  *)
-
-type counter_example_checking_info = {
-    explosion_fuel: int;
-    splitting_mode: splitting_mode;
-  }
-(**
-    [explosion_fuel] controls the checking of wildcard patterns.  We
-    eliminate potentially-empty wildcard patterns by exploding them
-    into concrete sub-patterns, for example (K1 _ | K2 _) or
-    { l1: _; l2: _ }. [explosion_fuel] is the depth limit on wildcard
-    explosion. Such depth limit is required to avoid non-termination
-    and compilation-time blowups.
-
-    [splitting_mode] controls the handling of or-patterns.  In
-    [Counter_example] mode, we only need to select one branch that
-    leads to a well-typed pattern. Checking all branches is expensive,
-    we use different search strategies (see {!splitting_mode}) to
-    reduce the number of explored alternatives.
- *)
-
-(** Due to GADT constraints, an or-pattern produced within
-    a counter-example may have ill-typed branches. Consider for example
-
-    {[
-      type _ tag = Int : int tag | Bool : bool tag
-    ]}
-
-    then [Parmatch] will propose the or-pattern [Int | Bool] whenever
-    a pattern of type [tag] is required to form a counter-example. For
-    example, a function expects a (int tag option) and only [None] is
-    handled by the user-written pattern. [Some (Int | Bool)] is not
-    well-typed in this context, only the sub-pattern [Some Int] is.
-    In this example, the expected type coming from the context
-    suffices to know which or-pattern branch must be chosen.
-
-    In the general case, choosing a branch can have non-local effects
-    on the typability of the term. For example, consider a tuple type
-    ['a tag * ...'a...], where the first component is a GADT.  All
-    constructor choices for this GADT lead to a well-typed branch in
-    isolation (['a] is unconstrained), but choosing one of them adds
-    a constraint on ['a] that may make the other tuple elements
-    ill-typed.
-
-    In general, after choosing each possible branch of the or-pattern,
-    [type_pat] has to check the rest of the pattern to tell if this
-    choice leads to a well-typed term. This may lead to an explosion
-    of typing/search work -- the rest of the term may in turn contain
-    alternatives.
-
-    We use careful strategies to try to limit counterexample-checking
-    time; [splitting_mode] represents those strategies.
-*)
-and splitting_mode =
-  | Backtrack_or
-  (** Always backtrack in or-patterns.
-
-      [Backtrack_or] selects a single alternative from an or-pattern
-      by using backtracking, trying to choose each branch in turn, and
-      to complete it into a valid sub-pattern. We call this
-      "splitting" the or-pattern.
-
-      We use this mode when looking for unused patterns or sub-patterns,
-      in particular to check a refutation clause (p -> .).
-    *)
-  | Refine_or of { inside_nonsplit_or: bool; }
-  (** Only backtrack when needed.
-
-      [Refine_or] tries another approach for refining or-pattern.
-
-      Instead of always splitting each or-pattern, It first attempts to
-      find branches that do not introduce new constraints (because they
-      do not contain GADT constructors). Those branches are such that,
-      if they fail, all other branches will fail.
-
-      If we find one such branch, we attempt to complete the subpattern
-      (checking what's outside the or-pattern), ignoring other
-      branches -- we never consider another branch choice again. If all
-      branches are constrained, it falls back to splitting the
-      or-pattern.
-
-      We use this mode when checking exhaustivity of pattern matching.
-  *)
-
-(** This exception is only used internally within [type_pat_aux], in
-    counter-example mode, to jump back to the parent or-pattern in the
-    [Refine_or] strategy.
-
-    Such a parent exists precisely when [inside_nonsplit_or = true];
-    it's an invariant that we always setup an exception handler for
-    [Need_backtrack] when we set this flag. *)
-exception Need_backtrack
-
-(** This exception is only used internally within [type_pat_aux], in
-    counter-example mode. We use it to discard counter-example candidates
-    that do not match any value. *)
-exception Empty_branch
-
-type abort_reason = Adds_constraints | Empty
-
-(** Remember current typing state for backtracking.
-   No variable information, as we only backtrack on
-   patterns without variables (cf. assert statements). *)
-type state =
- { snapshot: snapshot;
-   levels: Ctype.levels;
-   env: Env.t; }
-let save_state env =
-  { snapshot = Btype.snapshot ();
-    levels = Ctype.save_levels ();
-    env = !env; }
-let set_state s env =
-  Btype.backtrack s.snapshot;
-  Ctype.set_levels s.levels;
-  env := s.env
-
-(** Find the first alternative in the tree of or-patterns for which
-   [f] does not raise an error. If all fail, the last error is
-   propagated *)
-let rec find_valid_alternative f pat =
-  match pat.pat_desc with
-  | Tpat_or(p1,p2,_) ->
-      (try find_valid_alternative f p1 with
-       | Empty_branch | Error _ -> find_valid_alternative f p2
-      )
-  | _ -> f pat
-
-let no_explosion info = { info with explosion_fuel = 0 }
-
-let enter_nonsplit_or info =
-  let splitting_mode = match info.splitting_mode with
-  | Backtrack_or ->
-      (* in Backtrack_or mode, or-patterns are always split *)
-      assert false
-  | Refine_or _ ->
-      Refine_or {inside_nonsplit_or = true}
-  in { info with splitting_mode }
 
 (** The typedtree has two distinct syntactic categories for patterns,
    "value" patterns, matching on values, and "computation" patterns
@@ -1546,11 +1389,8 @@ let as_comp_pattern
   | Value -> as_computation_pattern pat
   | Computation -> pat
 
-(* type_pat propagates the expected type.
-   Unification may update the typing environment.
-
-   In counter-example mode, [Empty_branch] is raised when the counter-example
-   does not match any value.  *)
+(** [type_pat] propagates the expected type, and
+    unification may update the typing environment. *)
 let rec type_pat
   : type k . k pattern_category ->
       no_existentials: existential_restriction option ->
@@ -1927,6 +1767,269 @@ and type_pat_aux
   | Ppat_extension ext ->
       raise (Error_forward (Builtin_attributes.error_of_extension ext))
 
+let type_pat category ?no_existentials
+    ?(lev=get_current_level()) env sp expected_ty =
+  Misc.protect_refs [Misc.R (gadt_equations_level, Some lev)]
+    (fun () -> type_pat category ~no_existentials ~env sp expected_ty)
+
+let iter_pattern_variables_type f : pattern_variable list -> unit =
+  List.iter (fun {pv_type; _} -> f pv_type)
+
+let add_pattern_variables ?check ?check_as env pv =
+  List.fold_right
+    (fun {pv_id; pv_type; pv_loc; pv_as_var; pv_attributes} env ->
+       let check = if pv_as_var then check_as else check in
+       Env.add_value ?check pv_id
+         {val_type = pv_type; val_kind = Val_reg; Types.val_loc = pv_loc;
+          val_attributes = pv_attributes;
+          val_uid = Uid.mk ~current_unit:(Env.get_unit_name ());
+         } env
+    )
+    pv env
+
+let type_pattern category ~lev env spat expected_ty =
+  reset_pattern true;
+  let new_env = ref env in
+  let pat = type_pat category ~lev new_env spat expected_ty in
+  let pvs = get_ref pattern_variables in
+  let unpacks = get_ref module_variables in
+  (pat, !new_env, get_ref pattern_force, pvs, unpacks)
+
+let type_pattern_list
+    category no_existentials env spatl expected_tys allow
+  =
+  reset_pattern allow;
+  let new_env = ref env in
+  let type_pat (attrs, pat) ty =
+    Builtin_attributes.warning_scope ~ppwarning:false attrs
+      (fun () ->
+         type_pat category ~no_existentials new_env pat ty
+      )
+  in
+  let patl = List.map2 type_pat spatl expected_tys in
+  let pvs = get_ref pattern_variables in
+  let unpacks =
+    List.map (fun (name, loc) ->
+      {tu_name = name; tu_loc = loc;
+       tu_uid = Uid.mk ~current_unit:(Env.get_unit_name ())}
+    ) (get_ref module_variables)
+  in
+  let new_env = add_pattern_variables !new_env pvs in
+  (patl, new_env, get_ref pattern_force, pvs, unpacks)
+
+let type_class_arg_pattern cl_num val_env met_env l spat =
+  reset_pattern false;
+  let nv = newvar () in
+  let pat =
+    type_pat Value ~no_existentials:In_class_args (ref val_env) spat nv in
+  if has_variants pat then begin
+    Parmatch.pressure_variants val_env [pat];
+    finalize_variants pat;
+  end;
+  List.iter (fun f -> f()) (get_ref pattern_force);
+  if is_optional l then unify_pat (ref val_env) pat (type_option (newvar ()));
+  let (pv, val_env, met_env) =
+    List.fold_right
+      (fun {pv_id; pv_type; pv_loc; pv_as_var; pv_attributes}
+        (pv, val_env, met_env) ->
+         let check s =
+           if pv_as_var then Warnings.Unused_var s
+           else Warnings.Unused_var_strict s in
+         let id' = Ident.rename pv_id in
+         let val_uid = Uid.mk ~current_unit:(Env.get_unit_name ()) in
+         let val_env =
+          Env.add_value pv_id
+            { val_type = pv_type
+            ; val_kind = Val_reg
+            ; val_attributes = pv_attributes
+            ; val_loc = pv_loc
+            ; val_uid
+            }
+            val_env
+         in
+         let met_env =
+          Env.add_value id' ~check
+            { val_type = pv_type
+            ; val_kind = Val_ivar (Immutable, cl_num)
+            ; val_attributes = pv_attributes
+            ; val_loc = pv_loc
+            ; val_uid
+            }
+            met_env
+         in
+         ((id', pv_id, pv_type)::pv, val_env, met_env))
+      !pattern_variables ([], val_env, met_env)
+  in
+  (pat, pv, val_env, met_env)
+
+let type_self_pattern env spat =
+  let open Ast_helper in
+  let spat = Pat.mk(Ppat_alias (spat, mknoloc "selfpat-*")) in
+  reset_pattern false;
+  let nv = newvar() in
+  let pat =
+    type_pat Value ~no_existentials:In_self_pattern (ref env) spat nv in
+  List.iter (fun f -> f()) (get_ref pattern_force);
+  let pv = !pattern_variables in
+  pattern_variables := [];
+  pat, pv
+
+
+(** In [retype_pat], we will check a counter-example candidate produced
+    by Parmatch. This is a pattern that represents a set of values by
+    using or-patterns (p_1 | ... | p_n) to enumerate all alternatives
+    in the counter-example search. These or-patterns occur at every
+    choice point, possibly deep inside the pattern.
+
+    Parmatch does not use type information, so this pattern may
+    exhibit two issues:
+    - some parts of the pattern may be ill-typed due to GADTs, and
+    - some wildcard patterns may not match any values: their type is
+      empty.
+
+    The aim of [retype_pat] is to refine this untyped pattern into
+    a well-typed pattern, and ensure that it matches at least one
+    concrete value.
+    - It filters ill-typed branches of or-patterns.
+      (see {!splitting_mode} below)
+    - It tries to check that wildcard patterns are non-empty.
+      (see {!explosion_fuel})
+  *)
+
+type counter_example_checking_info = {
+    explosion_fuel: int;
+    splitting_mode: splitting_mode;
+  }
+(**
+    [explosion_fuel] controls the checking of wildcard patterns.  We
+    eliminate potentially-empty wildcard patterns by exploding them
+    into concrete sub-patterns, for example (K1 _ | K2 _) or
+    { l1: _; l2: _ }. [explosion_fuel] is the depth limit on wildcard
+    explosion. Such depth limit is required to avoid non-termination
+    and compilation-time blowups.
+
+    [splitting_mode] controls the handling of or-patterns.  In
+    [Counter_example] mode, we only need to select one branch that
+    leads to a well-typed pattern. Checking all branches is expensive,
+    we use different search strategies (see {!splitting_mode}) to
+    reduce the number of explored alternatives.
+ *)
+
+(** Due to GADT constraints, an or-pattern produced within
+    a counter-example may have ill-typed branches. Consider for example
+
+    {[
+      type _ tag = Int : int tag | Bool : bool tag
+    ]}
+
+    then [Parmatch] will propose the or-pattern [Int | Bool] whenever
+    a pattern of type [tag] is required to form a counter-example. For
+    example, a function expects a (int tag option) and only [None] is
+    handled by the user-written pattern. [Some (Int | Bool)] is not
+    well-typed in this context, only the sub-pattern [Some Int] is.
+    In this example, the expected type coming from the context
+    suffices to know which or-pattern branch must be chosen.
+
+    In the general case, choosing a branch can have non-local effects
+    on the typability of the term. For example, consider a tuple type
+    ['a tag * ...'a...], where the first component is a GADT.  All
+    constructor choices for this GADT lead to a well-typed branch in
+    isolation (['a] is unconstrained), but choosing one of them adds
+    a constraint on ['a] that may make the other tuple elements
+    ill-typed.
+
+    In general, after choosing each possible branch of the or-pattern,
+    [retype_pat] has to check the rest of the pattern to tell if this
+    choice leads to a well-typed term. This may lead to an explosion
+    of typing/search work -- the rest of the term may in turn contain
+    alternatives.
+
+    We use careful strategies to try to limit counterexample-checking
+    time; [splitting_mode] represents those strategies.
+*)
+and splitting_mode =
+  | Backtrack_or
+  (** Always backtrack in or-patterns.
+
+      [Backtrack_or] selects a single alternative from an or-pattern
+      by using backtracking, trying to choose each branch in turn, and
+      to complete it into a valid sub-pattern. We call this
+      "splitting" the or-pattern.
+
+      We use this mode when looking for unused patterns or sub-patterns,
+      in particular to check a refutation clause (p -> .).
+    *)
+  | Refine_or of { inside_nonsplit_or: bool; }
+  (** Only backtrack when needed.
+
+      [Refine_or] tries another approach for refining or-pattern.
+
+      Instead of always splitting each or-pattern, It first attempts to
+      find branches that do not introduce new constraints (because they
+      do not contain GADT constructors). Those branches are such that,
+      if they fail, all other branches will fail.
+
+      If we find one such branch, we attempt to complete the subpattern
+      (checking what's outside the or-pattern), ignoring other
+      branches -- we never consider another branch choice again. If all
+      branches are constrained, it falls back to splitting the
+      or-pattern.
+
+      We use this mode when checking exhaustivity of pattern matching.
+  *)
+
+(** This exception is only used internally within [retype_pat], to jump
+    back to the parent or-pattern in the [Refine_or] strategy.
+
+    Such a parent exists precisely when [inside_nonsplit_or = true];
+    it's an invariant that we always setup an exception handler for
+    [Need_backtrack] when we set this flag. *)
+exception Need_backtrack
+
+(** This exception is only used internally within [retype_pat]. We use
+    it to discard counter-example candidates that do not match any value. *)
+exception Empty_branch
+
+type abort_reason = Adds_constraints | Empty
+
+(** Remember current typing state for backtracking.
+    No variable information, as we only backtrack on
+    patterns without variables (cf. assert statements). *)
+type state =
+ { snapshot: snapshot;
+   levels: Ctype.levels;
+   env: Env.t; }
+let save_state env =
+  { snapshot = Btype.snapshot ();
+    levels = Ctype.save_levels ();
+    env = !env; }
+let set_state s env =
+  Btype.backtrack s.snapshot;
+  Ctype.set_levels s.levels;
+  env := s.env
+
+(** Find the first alternative in the tree of or-patterns for which
+    [f] does not raise an error. If all fail, the last error is
+    propagated *)
+let rec find_valid_alternative f pat =
+  match pat.pat_desc with
+  | Tpat_or(p1,p2,_) ->
+      (try find_valid_alternative f p1 with
+       | Empty_branch | Error _ -> find_valid_alternative f p2
+      )
+  | _ -> f pat
+
+let no_explosion info = { info with explosion_fuel = 0 }
+
+let enter_nonsplit_or info =
+  let splitting_mode = match info.splitting_mode with
+  | Backtrack_or ->
+      (* in Backtrack_or mode, or-patterns are always split *)
+      assert false
+  | Refine_or _ ->
+      Refine_or {inside_nonsplit_or = true}
+  in { info with splitting_mode }
+
 let rec retype_pat
   : type r . info:_ -> env:_ -> _ -> _ -> (pattern -> r) -> r
   = fun ~info ~env tp expected_ty k ->
@@ -2062,11 +2165,6 @@ let retype_pat ~counter_example_args
     retype_pat ~info:counter_example_args ~env tp expected_ty (fun x -> x)
     )
 
-let type_pat category ?no_existentials
-    ?(lev=get_current_level()) env sp expected_ty =
-  Misc.protect_refs [Misc.R (gadt_equations_level, Some lev)]
-    (fun () -> type_pat category ~no_existentials ~env sp expected_ty)
-
 (* this function is passed to Partial.parmatch
    to type check gadt nonexhaustiveness *)
 let partial_pred ~lev ~splitting_mode ?(explode=0) env expected_ty p =
@@ -2105,108 +2203,8 @@ let check_unused ?(lev=get_current_level ()) env expected_ty cases =
       | r -> r)
     cases
 
-let iter_pattern_variables_type f : pattern_variable list -> unit =
-  List.iter (fun {pv_type; _} -> f pv_type)
-
-let add_pattern_variables ?check ?check_as env pv =
-  List.fold_right
-    (fun {pv_id; pv_type; pv_loc; pv_as_var; pv_attributes} env ->
-       let check = if pv_as_var then check_as else check in
-       Env.add_value ?check pv_id
-         {val_type = pv_type; val_kind = Val_reg; Types.val_loc = pv_loc;
-          val_attributes = pv_attributes;
-          val_uid = Uid.mk ~current_unit:(Env.get_unit_name ());
-         } env
-    )
-    pv env
-
-let type_pattern category ~lev env spat expected_ty =
-  reset_pattern true;
-  let new_env = ref env in
-  let pat = type_pat category ~lev new_env spat expected_ty in
-  let pvs = get_ref pattern_variables in
-  let unpacks = get_ref module_variables in
-  (pat, !new_env, get_ref pattern_force, pvs, unpacks)
-
-let type_pattern_list
-    category no_existentials env spatl expected_tys allow
-  =
-  reset_pattern allow;
-  let new_env = ref env in
-  let type_pat (attrs, pat) ty =
-    Builtin_attributes.warning_scope ~ppwarning:false attrs
-      (fun () ->
-         type_pat category ~no_existentials new_env pat ty
-      )
-  in
-  let patl = List.map2 type_pat spatl expected_tys in
-  let pvs = get_ref pattern_variables in
-  let unpacks =
-    List.map (fun (name, loc) ->
-      {tu_name = name; tu_loc = loc;
-       tu_uid = Uid.mk ~current_unit:(Env.get_unit_name ())}
-    ) (get_ref module_variables)
-  in
-  let new_env = add_pattern_variables !new_env pvs in
-  (patl, new_env, get_ref pattern_force, pvs, unpacks)
-
-let type_class_arg_pattern cl_num val_env met_env l spat =
-  reset_pattern false;
-  let nv = newvar () in
-  let pat =
-    type_pat Value ~no_existentials:In_class_args (ref val_env) spat nv in
-  if has_variants pat then begin
-    Parmatch.pressure_variants val_env [pat];
-    finalize_variants pat;
-  end;
-  List.iter (fun f -> f()) (get_ref pattern_force);
-  if is_optional l then unify_pat (ref val_env) pat (type_option (newvar ()));
-  let (pv, val_env, met_env) =
-    List.fold_right
-      (fun {pv_id; pv_type; pv_loc; pv_as_var; pv_attributes}
-        (pv, val_env, met_env) ->
-         let check s =
-           if pv_as_var then Warnings.Unused_var s
-           else Warnings.Unused_var_strict s in
-         let id' = Ident.rename pv_id in
-         let val_uid = Uid.mk ~current_unit:(Env.get_unit_name ()) in
-         let val_env =
-          Env.add_value pv_id
-            { val_type = pv_type
-            ; val_kind = Val_reg
-            ; val_attributes = pv_attributes
-            ; val_loc = pv_loc
-            ; val_uid
-            }
-            val_env
-         in
-         let met_env =
-          Env.add_value id' ~check
-            { val_type = pv_type
-            ; val_kind = Val_ivar (Immutable, cl_num)
-            ; val_attributes = pv_attributes
-            ; val_loc = pv_loc
-            ; val_uid
-            }
-            met_env
-         in
-         ((id', pv_id, pv_type)::pv, val_env, met_env))
-      !pattern_variables ([], val_env, met_env)
-  in
-  (pat, pv, val_env, met_env)
-
-let type_self_pattern env spat =
-  let open Ast_helper in
-  let spat = Pat.mk(Ppat_alias (spat, mknoloc "selfpat-*")) in
-  reset_pattern false;
-  let nv = newvar() in
-  let pat =
-    type_pat Value ~no_existentials:In_self_pattern (ref env) spat nv in
-  List.iter (fun f -> f()) (get_ref pattern_force);
-  let pv = !pattern_variables in
-  pattern_variables := [];
-  pat, pv
-
+(** Some delayed checks, to be executed after typing the whole
+    compilation unit or toplevel phrase *)
 let delayed_checks = ref []
 let reset_delayed_checks () = delayed_checks := []
 let add_delayed_check f =
