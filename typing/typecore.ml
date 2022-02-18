@@ -1930,7 +1930,7 @@ and type_pat_aux
 let rec retype_pat
   : type r . info:_ -> env:_ -> _ -> _ -> (pattern -> r) -> r
   = fun ~info ~env tp expected_ty k ->
-  let type_pat ?(info=info) ?(env=env) = retype_pat ~info ~env in
+  let retype_pat ?(info=info) ?(env=env) = retype_pat ~info ~env in
   let loc = tp.pat_loc in
   let refine = Some true in
   let solve_expected (x : pattern) : pattern =
@@ -1954,7 +1954,7 @@ let rec retype_pat
       begin match Parmatch.pats_of_type !env expected_ty with
       | [] -> raise Empty_branch
       | [{pat_desc = Tpat_any}] -> k' ()
-      | [tp] -> type_pat ~info:(decrease 1) tp expected_ty k
+      | [tp] -> retype_pat ~info:(decrease 1) tp expected_ty k
       | tp :: tpl ->
           if must_backtrack_on_gadt then raise Need_backtrack;
           let tp =
@@ -1962,9 +1962,9 @@ let rec retype_pat
               (fun tp tp' -> {tp with pat_desc = Tpat_or (tp, tp', None)})
               tp tpl
           in
-          type_pat ~info:(decrease 5) tp expected_ty k
+          retype_pat ~info:(decrease 5) tp expected_ty k
       end
-  | Tpat_alias (p, _, _) -> type_pat ~info p expected_ty k
+  | Tpat_alias (p, _, _) -> retype_pat ~info p expected_ty k
   | Tpat_constant cst ->
       let cst = constant_or_raise !env loc (Untypeast.constant cst) in
       k @@ solve_expected (rp (Tpat_constant cst) ~pat_type:(type_constant cst))
@@ -1972,7 +1972,7 @@ let rec retype_pat
       assert (List.length tpl >= 2);
       let expected_tys = solve_Ppat_tuple ~refine loc env tpl expected_ty in
       let tpl_ann = List.combine tpl expected_tys in
-      map_fold_cont (fun (p,t) -> type_pat p t) tpl_ann (fun pl ->
+      map_fold_cont (fun (p,t) -> retype_pat p t) tpl_ann (fun pl ->
         rvp k (Tpat_tuple pl)
           ~pat_type:(newty (Ttuple(List.map (fun p -> p.pat_type) pl))))
   | Tpat_construct(cstr_lid, constr, targs, _) ->
@@ -1982,7 +1982,7 @@ let rec retype_pat
         solve_Ppat_construct ~refine env loc constr None None expected_ty
       in
       map_fold_cont
-        (fun (p,t) -> type_pat p t)
+        (fun (p,t) -> retype_pat p t)
         (List.combine targs ty_args)
         (fun args ->
           rvp k (Tpat_construct(cstr_lid, constr, args, existential_ctyp)))
@@ -1995,7 +1995,7 @@ let rec retype_pat
       in begin
         (* PR#6235: propagate type information *)
         match targ, arg_type with
-          Some p, [ty] -> type_pat p ty (fun p -> k (Some p))
+          Some p, [ty] -> retype_pat p ty (fun p -> k (Some p))
         | _            -> k None
       end
   | Tpat_record(fields, closed) ->
@@ -2003,13 +2003,13 @@ let rec retype_pat
       let type_label_pat (label_lid, label, targ) k =
         let ty_arg =
           solve_Ppat_record_field ~refine loc env label label_lid record_ty in
-        type_pat targ ty_arg (fun arg -> k (label_lid, label, arg))
+        retype_pat targ ty_arg (fun arg -> k (label_lid, label, arg))
       in
       map_fold_cont type_label_pat fields
         (fun fields -> rvp k (Tpat_record (fields, closed)))
   | Tpat_array tpl ->
       let ty_elt = solve_Ppat_array ~refine loc env expected_ty in
-      map_fold_cont (fun p -> type_pat p ty_elt) tpl
+      map_fold_cont (fun p -> retype_pat p ty_elt) tpl
         (fun pl -> rvp k (Tpat_array pl))
   | Tpat_or(tp1, tp2, _) ->
       (* We are in counter-example mode, but try to avoid backtracking *)
@@ -2019,19 +2019,19 @@ let rec retype_pat
         | Refine_or _ -> false in
       let state = save_state env in
       let split_or tp =
-        let typ pat = type_pat pat expected_ty k in
+        let typ pat = retype_pat pat expected_ty k in
         find_valid_alternative (fun pat -> set_state state env; typ pat) tp
       in
       if must_split then split_or tp else
-      let type_pat_result env tp : (_, abort_reason) result =
+      let retype_pat_result env tp : (_, abort_reason) result =
         let info = enter_nonsplit_or info in
-        match type_pat ~info tp expected_ty ~env (fun x -> x) with
+        match retype_pat ~info tp expected_ty ~env (fun x -> x) with
         | res -> Ok res
         | exception Need_backtrack -> Error Adds_constraints
         | exception Empty_branch -> Error Empty
       in
-      let p1 = type_pat_result (ref !env) tp1 in
-      let p2 = type_pat_result (ref !env) tp2 in
+      let p1 = retype_pat_result (ref !env) tp1 in
+      let p2 = retype_pat_result (ref !env) tp2 in
       begin match p1, p2 with
       | Error Empty, Error Empty ->
           raise Empty_branch
@@ -2053,7 +2053,7 @@ let rec retype_pat
   | Tpat_lazy tp1 ->
       let nv = solve_Ppat_lazy ~refine loc env expected_ty in
       (* do not explode under lazy: PR#7421 *)
-      type_pat ~info:(no_explosion info) tp1 nv
+      retype_pat ~info:(no_explosion info) tp1 nv
         (fun p1 -> rvp k (Tpat_lazy p1))
 
 let retype_pat ~counter_example_args
