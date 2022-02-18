@@ -1851,9 +1851,6 @@ let contains_extension pat =
      | _ -> false)
     pat
 
-let typecheck ~pred p =
-  pred p
-
 let do_check_partial ~pred loc casel pss = match pss with
 | [] ->
         (*
@@ -1873,8 +1870,7 @@ let do_check_partial ~pred loc casel pss = match pss with
     Partial
 | ps::_  ->
     let counter_examples =
-      exhaust None pss (List.length ps)
-      |> Seq.filter_map (typecheck ~pred) in
+      exhaust None pss (List.length ps) |> Seq.filter_map pred in
     match counter_examples () with
     | Seq.Nil -> Total
     | Seq.Cons (v, _rest) ->
