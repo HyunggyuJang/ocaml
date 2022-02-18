@@ -1209,8 +1209,7 @@ let map_fold_cont f xs k =
   List.fold_right (fun x k ys -> f x (fun y -> k (y :: ys)))
     xs (fun ys -> k (List.rev ys)) []
 
-let type_label_a_list
-    loc closed env usage type_lbl_a expected_type lid_a_list k =
+let type_label_a_list loc closed env usage type_lbl_a expected_type lid_a_list =
   let lbl_a_list =
     let lid_a_list =
       match find_record_qual lid_a_list with
@@ -1231,7 +1230,7 @@ let type_label_a_list
       (fun (_,lbl1,_) (_,lbl2,_) -> compare lbl1.lbl_pos lbl2.lbl_pos)
       lbl_a_list
   in
-  map_fold_cont type_lbl_a lbl_a_list k
+  List.map type_lbl_a lbl_a_list
 ;;
 
 (* Checks over the labels mentioned in a record pattern:
@@ -1553,20 +1552,19 @@ let as_comp_pattern
    In counter-example mode, [Empty_branch] is raised when the counter-example
    does not match any value.  *)
 let rec type_pat
-  : type k r . k pattern_category ->
+  : type k . k pattern_category ->
       no_existentials: existential_restriction option ->
-      env: Env.t ref -> Parsetree.pattern ->
-      type_expr -> (k general_pattern -> r) -> r
-  = fun category ~no_existentials ~env sp expected_ty k ->
+      env: Env.t ref -> Parsetree.pattern -> type_expr -> k general_pattern
+  = fun category ~no_existentials ~env sp expected_ty ->
   Builtin_attributes.warning_scope sp.ppat_attributes
     (fun () ->
-       type_pat_aux category ~no_existentials ~env sp expected_ty k
+       type_pat_aux category ~no_existentials ~env sp expected_ty
     )
 
 and type_pat_aux
-  : type k r . k pattern_category -> no_existentials:_ ->
-         env:_ -> _ -> _ -> (k general_pattern -> r) -> r
-  = fun category ~no_existentials ~env sp expected_ty k ->
+  : type k . k pattern_category -> no_existentials:_ ->
+         env:_ -> _ -> _ -> k general_pattern
+  = fun category ~no_existentials ~env sp expected_ty ->
   let type_pat category ?(env=env) =
     type_pat category ~no_existentials ~env
   in
@@ -1581,12 +1579,12 @@ and type_pat_aux
     | Value -> rp x
     | Computation -> rcp x
   in
-  let rp k x = k (crp x)
-  and rvp k x = k (crp (pure category x))
-  and rcp k x = k (crp (only_impure category x)) in
+  let rp = crp
+  and rvp x = crp (pure category x)
+  and rcp x = crp (only_impure category x) in
   match sp.ppat_desc with
     Ppat_any ->
-      rvp k {
+      rvp {
         pat_desc = Tpat_any;
         pat_loc = loc; pat_extra=[];
         pat_type = instance expected_ty;
@@ -1595,7 +1593,7 @@ and type_pat_aux
   | Ppat_var name ->
       let ty = instance expected_ty in
       let id = enter_variable loc name ty sp.ppat_attributes in
-      rvp k {
+      rvp {
         pat_desc = Tpat_var (id, name);
         pat_loc = loc; pat_extra=[];
         pat_type = ty;
@@ -1605,7 +1603,7 @@ and type_pat_aux
       let t = instance expected_ty in
       begin match name.txt with
       | None ->
-          rvp k {
+          rvp {
             pat_desc = Tpat_any;
             pat_loc = sp.ppat_loc;
             pat_extra=[Tpat_unpack, name.loc, sp.ppat_attributes];
@@ -1615,7 +1613,7 @@ and type_pat_aux
       | Some s ->
           let v = { name with txt = s } in
           let id = enter_variable loc v t ~is_module:true sp.ppat_attributes in
-          rvp k {
+          rvp {
             pat_desc = Tpat_var (id, v);
             pat_loc = sp.ppat_loc;
             pat_extra=[Tpat_unpack, loc, sp.ppat_attributes];
@@ -1630,27 +1628,26 @@ and type_pat_aux
       let cty, ty, ty' =
         solve_Ppat_poly_constraint ~refine env lloc sty expected_ty in
       let id = enter_variable lloc name ty' attrs in
-      rvp k { pat_desc = Tpat_var (id, name);
-              pat_loc = lloc;
-              pat_extra = [Tpat_constraint cty, loc, sp.ppat_attributes];
-              pat_type = ty;
-              pat_attributes = [];
-              pat_env = !env }
+      rvp { pat_desc = Tpat_var (id, name);
+            pat_loc = lloc;
+            pat_extra = [Tpat_constraint cty, loc, sp.ppat_attributes];
+            pat_type = ty;
+            pat_attributes = [];
+            pat_env = !env }
   | Ppat_alias(sq, name) ->
-      type_pat Value sq expected_ty (fun q ->
-        let ty_var = solve_Ppat_alias ~refine env q in
-        let id =
-          enter_variable ~is_as_variable:true loc name ty_var sp.ppat_attributes
-        in
-        rvp k {
-          pat_desc = Tpat_alias(q, id, name);
-          pat_loc = loc; pat_extra=[];
-          pat_type = q.pat_type;
-          pat_attributes = sp.ppat_attributes;
-          pat_env = !env })
+      let q = type_pat Value sq expected_ty in
+      let ty_var = solve_Ppat_alias ~refine env q in
+      let id =
+        enter_variable ~is_as_variable:true loc name ty_var sp.ppat_attributes
+      in
+      rvp { pat_desc = Tpat_alias(q, id, name);
+            pat_loc = loc; pat_extra=[];
+            pat_type = q.pat_type;
+            pat_attributes = sp.ppat_attributes;
+            pat_env = !env }
   | Ppat_constant cst ->
       let cst = constant_or_raise !env loc cst in
-      rvp k @@ solve_expected {
+      rvp @@ solve_expected {
         pat_desc = Tpat_constant cst;
         pat_loc = loc; pat_extra=[];
         pat_type = type_constant cst;
@@ -1668,21 +1665,20 @@ and type_pat_aux
       in
       let p = if c1 <= c2 then loop c1 c2 else loop c2 c1 in
       let p = {p with ppat_loc=loc} in
-      type_pat category p expected_ty k
+      type_pat category p expected_ty
         (* TODO: record 'extra' to remember about interval *)
   | Ppat_interval _ ->
       raise (Error (loc, !env, Invalid_interval))
   | Ppat_tuple spl ->
       assert (List.length spl >= 2);
       let expected_tys = solve_Ppat_tuple ~refine loc env spl expected_ty in
-      let spl_ann = List.combine spl expected_tys in
-      map_fold_cont (fun (p,t) -> type_pat Value p t) spl_ann (fun pl ->
-        rvp k {
+      let pl = List.map2 (type_pat Value) spl expected_tys in
+      rvp {
         pat_desc = Tpat_tuple pl;
         pat_loc = loc; pat_extra=[];
         pat_type = newty (Ttuple(List.map (fun p -> p.pat_type) pl));
         pat_attributes = sp.ppat_attributes;
-        pat_env = !env })
+        pat_env = !env }
   | Ppat_construct(lid, sarg) ->
       let expected_type =
         match extract_concrete_variant !env expected_ty with
@@ -1768,34 +1764,29 @@ and type_pat_aux
         Option.iter (fun (_, sarg) -> check_non_escaping sarg) sarg
       end;
 
-      map_fold_cont
-        (fun (p,t) -> type_pat Value p t)
-        (List.combine sargs ty_args)
-        (fun args ->
-          rvp k {
-            pat_desc=Tpat_construct(lid, constr, args, existential_ctyp);
+      let args = List.map2 (type_pat Value) sargs ty_args in
+      rvp { pat_desc=Tpat_construct(lid, constr, args, existential_ctyp);
             pat_loc = loc; pat_extra=[];
             pat_type = instance expected_ty;
             pat_attributes = sp.ppat_attributes;
-            pat_env = !env })
+            pat_env = !env }
   | Ppat_variant(tag, sarg) ->
       assert (tag <> Parmatch.some_private_tag);
       let constant = (sarg = None) in
       let arg_type, row, pat_type =
         solve_Ppat_variant ~refine loc env tag constant expected_ty in
-      let k arg =
-        rvp k {
+      let arg =
+        (* PR#6235: propagate type information *)
+        match sarg, arg_type with
+          Some sp, [ty] -> Some (type_pat Value sp ty)
+        | _             -> None
+      in
+      rvp {
         pat_desc = Tpat_variant(tag, arg, ref row);
         pat_loc = loc; pat_extra = [];
         pat_type = pat_type;
         pat_attributes = sp.ppat_attributes;
         pat_env = !env }
-      in begin
-        (* PR#6235: propagate type information *)
-        match sarg, arg_type with
-          Some p, [ty] -> type_pat Value p ty (fun p -> k (Some p))
-        | _            -> k None
-      end
   | Ppat_record(lid_sp_list, closed) ->
       assert (lid_sp_list <> []);
       let expected_type, record_ty =
@@ -1808,11 +1799,10 @@ and type_pat_aux
           let error = Wrong_expected_kind(Record, Pattern, expected_ty) in
           raise (Error (loc, !env, error))
       in
-      let type_label_pat (label_lid, label, sarg) k =
+      let type_label_pat (label_lid, label, sarg) =
         let ty_arg =
           solve_Ppat_record_field ~refine loc env label label_lid record_ty in
-        type_pat Value sarg ty_arg (fun arg ->
-          k (label_lid, label, arg))
+        (label_lid, label, type_pat Value sarg ty_arg)
       in
       let make_record_pat lbl_pat_list =
         check_recordpat_labels loc lbl_pat_list closed;
@@ -1824,21 +1814,23 @@ and type_pat_aux
           pat_env = !env;
         }
       in
-      let k' pat = rvp k @@ solve_expected pat in
-      k' (wrap_disambiguate "This record pattern is expected to have"
-            (mk_expected expected_ty)
-            (type_label_a_list loc false !env Env.Projection
-               type_label_pat expected_type lid_sp_list)
-            make_record_pat)
+      let lbl_a_list =
+        wrap_disambiguate "This record pattern is expected to have"
+          (mk_expected expected_ty)
+          (type_label_a_list loc false !env Env.Projection
+             type_label_pat expected_type)
+          lid_sp_list
+      in
+      rvp @@ solve_expected (make_record_pat lbl_a_list)
   | Ppat_array spl ->
       let ty_elt = solve_Ppat_array ~refine loc env expected_ty in
-      map_fold_cont (fun p -> type_pat Value p ty_elt) spl (fun pl ->
-        rvp k {
+      let pl = List.map (fun p -> type_pat Value p ty_elt) spl in
+      rvp {
         pat_desc = Tpat_array pl;
         pat_loc = loc; pat_extra=[];
         pat_type = instance expected_ty;
         pat_attributes = sp.ppat_attributes;
-        pat_env = !env })
+        pat_env = !env }
   | Ppat_or(sp1, sp2) ->
       let initial_pattern_variables = !pattern_variables in
       let initial_module_variables = !module_variables in
@@ -1848,8 +1840,7 @@ and type_pat_aux
       begin_def ();
       let lev = get_current_level () in
       gadt_equations_level := Some lev;
-      let type_pat_rec env sp =
-        type_pat category sp expected_ty ~env (fun x -> x) in
+      let type_pat_rec env sp = type_pat category sp expected_ty ~env in
       let env1 = ref !env in
       let p1 = type_pat_rec env1 sp1 in
       let p1_variables = !pattern_variables in
@@ -1874,70 +1865,65 @@ and type_pat_aux
       let p2 = alpha_pat alpha_env p2 in
       pattern_variables := p1_variables;
       module_variables := p1_module_variables;
-      rp k { pat_desc = Tpat_or (p1, p2, None);
-             pat_loc = loc; pat_extra = [];
-             pat_type = instance expected_ty;
-             pat_attributes = sp.ppat_attributes;
-             pat_env = !env }
+      rp { pat_desc = Tpat_or (p1, p2, None);
+           pat_loc = loc; pat_extra = [];
+           pat_type = instance expected_ty;
+           pat_attributes = sp.ppat_attributes;
+           pat_env = !env }
   | Ppat_lazy sp1 ->
       let nv = solve_Ppat_lazy ~refine loc env expected_ty in
-      type_pat Value sp1 nv (fun p1 ->
-        rvp k {
+      let p1 = type_pat Value sp1 nv in
+      rvp {
         pat_desc = Tpat_lazy p1;
         pat_loc = loc; pat_extra=[];
         pat_type = instance expected_ty;
         pat_attributes = sp.ppat_attributes;
-        pat_env = !env })
+        pat_env = !env }
   | Ppat_constraint(sp, sty) ->
       (* Pretend separate = true *)
       let cty, ty, expected_ty' =
         solve_Ppat_constraint ~refine loc env sty expected_ty in
-      type_pat category sp expected_ty' (fun p ->
-        (*Format.printf "%a@.%a@."
-          Printtyp.raw_type_expr ty
-          Printtyp.raw_type_expr p.pat_type;*)
-        let extra = (Tpat_constraint cty, loc, sp.ppat_attributes) in
-        let p : k general_pattern =
-          match category, (p : k general_pattern) with
-          | Value, {pat_desc = Tpat_var (id,s); _} ->
-            {p with
-              pat_type = ty;
-              pat_desc =
-                Tpat_alias
-                  ({p with pat_desc = Tpat_any; pat_attributes = []}, id,s);
-              pat_extra = [extra];
-            }
-          | _, p ->
-             { p with pat_type = ty; pat_extra = extra::p.pat_extra }
-        in k p)
+      let p = type_pat category sp expected_ty' in
+      let extra = (Tpat_constraint cty, loc, sp.ppat_attributes) in
+      begin match category, (p : k general_pattern) with
+      | Value, {pat_desc = Tpat_var (id,s); _} ->
+          { p with
+            pat_type = ty;
+            pat_desc =
+            Tpat_alias
+              ({p with pat_desc = Tpat_any; pat_attributes = []}, id,s);
+            pat_extra = [extra];
+          }
+      | _, p ->
+          { p with pat_type = ty; pat_extra = extra::p.pat_extra }
+      end
   | Ppat_type lid ->
       let (path, p) = build_or_pat !env loc lid in
-      k @@ pure category @@ solve_expected
+      pure category @@ solve_expected
         { p with pat_extra = (Tpat_type (path, lid), loc, sp.ppat_attributes)
         :: p.pat_extra }
   | Ppat_open (lid,p) ->
       let path, new_env =
         !type_open Asttypes.Fresh !env sp.ppat_loc lid in
       env := new_env;
-      type_pat category ~env p expected_ty ( fun p ->
-        let new_env = !env in
-        begin match Env.remove_last_open path new_env with
-        | None -> assert false
-        | Some closed_env -> env := closed_env
-        end;
-        k { p with pat_extra = (Tpat_open (path,lid,new_env),
+      let p = type_pat category ~env p expected_ty in
+      let new_env = !env in
+      begin match Env.remove_last_open path new_env with
+      | None -> assert false
+      | Some closed_env -> env := closed_env
+      end;
+      { p with pat_extra = (Tpat_open (path,lid,new_env),
                                 loc, sp.ppat_attributes) :: p.pat_extra }
-      )
   | Ppat_exception p ->
-      type_pat Value p Predef.type_exn (fun p_exn ->
-      rcp k {
+      let p_exn = type_pat Value p Predef.type_exn in
+      rcp {
         pat_desc = Tpat_exception p_exn;
         pat_loc = sp.ppat_loc;
         pat_extra = [];
         pat_type = expected_ty;
         pat_env = !env;
         pat_attributes = sp.ppat_attributes;
-      })
+      }
   | Ppat_extension ext ->
       raise (Error_forward (Builtin_attributes.error_of_extension ext))
 
@@ -2078,9 +2064,8 @@ let retype_pat ~counter_example_args
 
 let type_pat category ?no_existentials
     ?(lev=get_current_level()) env sp expected_ty =
-  Misc.protect_refs [Misc.R (gadt_equations_level, Some lev)] (fun () ->
-        type_pat category ~no_existentials ~env sp expected_ty (fun x -> x)
-    )
+  Misc.protect_refs [Misc.R (gadt_equations_level, Some lev)]
+    (fun () -> type_pat category ~no_existentials ~env sp expected_ty)
 
 (* this function is passed to Partial.parmatch
    to type check gadt nonexhaustiveness *)
@@ -3174,9 +3159,9 @@ and type_expect_
         wrap_disambiguate "This record expression is expected to have"
           (mk_expected ty_record)
           (type_label_a_list loc closed env Env.Construct
-             (fun e k -> k (type_label_exp true env loc ty_record e))
-             expected_type lid_sexp_list)
-          (fun x -> x)
+             (type_label_exp true env loc ty_record)
+             expected_type)
+          lid_sexp_list
       in
       with_explanation (fun () ->
         unify_exp_types loc env (instance ty_record) (instance ty_expected));
