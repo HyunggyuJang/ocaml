@@ -2809,6 +2809,41 @@ let check_apply_prim_type prim typ =
       end
   | _ -> false
 
+let desugar_default_argument ~default ~spat ~sbody =
+  let open Ast_helper in
+  let default_loc = default.pexp_loc in
+  let scases = [
+    Exp.case
+      (Pat.construct ~loc:default_loc
+         (mknoloc (Longident.(Ldot (Lident "*predef*", "Some"))))
+         (Some ([], Pat.var ~loc:default_loc (mknoloc "*sth*"))))
+      (Exp.ident ~loc:default_loc (mknoloc (Longident.Lident "*sth*")));
+    Exp.case
+      (Pat.construct ~loc:default_loc
+         (mknoloc (Longident.(Ldot (Lident "*predef*", "None"))))
+         None)
+      default;
+  ]
+  in
+  let sloc =
+    { Location.loc_start = spat.ppat_loc.Location.loc_start;
+      loc_end = default_loc.Location.loc_end;
+      loc_ghost = true }
+  in
+  let smatch =
+    Exp.match_ ~loc:sloc
+      (Exp.ident ~loc:sloc (mknoloc (Longident.Lident "*opt*")))
+      scases
+  in
+  let pat = Pat.var ~loc:sloc (mknoloc "*opt*") in
+  let loc_body = {sbody.pexp_loc with loc_ghost = true} in
+  let body =
+    Exp.let_ ~loc:loc_body Nonrecursive
+      ~attrs:[Attr.mk (mknoloc "#default") (PStr [])]
+      [Vb.mk spat smatch] sbody
+  in
+  [Exp.case pat body]
+
 (* Merge explanation to type clash error *)
 
 let with_explanation explanation f =
@@ -2946,40 +2981,9 @@ and type_expect_
         exp_env = env }
   | Pexp_fun (l, Some default, spat, sbody) ->
       assert(is_optional l); (* default allowed only with optional argument *)
-      let open Ast_helper in
-      let default_loc = default.pexp_loc in
-      let scases = [
-        Exp.case
-          (Pat.construct ~loc:default_loc
-             (mknoloc (Longident.(Ldot (Lident "*predef*", "Some"))))
-             (Some ([], Pat.var ~loc:default_loc (mknoloc "*sth*"))))
-          (Exp.ident ~loc:default_loc (mknoloc (Longident.Lident "*sth*")));
-
-        Exp.case
-          (Pat.construct ~loc:default_loc
-             (mknoloc (Longident.(Ldot (Lident "*predef*", "None"))))
-             None)
-          default;
-       ]
-      in
-      let sloc =
-        { Location.loc_start = spat.ppat_loc.Location.loc_start;
-          loc_end = default_loc.Location.loc_end;
-          loc_ghost = true }
-      in
-      let smatch =
-        Exp.match_ ~loc:sloc
-          (Exp.ident ~loc (mknoloc (Longident.Lident "*opt*")))
-          scases
-      in
-      let pat = Pat.var ~loc:sloc (mknoloc "*opt*") in
-      let body =
-        Exp.let_ ~loc Nonrecursive
-          ~attrs:[Attr.mk (mknoloc "#default") (PStr [])]
-          [Vb.mk spat smatch] sbody
-      in
+      let case = desugar_default_argument ~default ~spat ~sbody in
       type_function ?in_function loc sexp.pexp_attributes env
-                    ty_expected_explained l [Exp.case pat body]
+                    ty_expected_explained l case
   | Pexp_fun (l, None, spat, sbody) ->
       type_function ?in_function loc sexp.pexp_attributes env
                     ty_expected_explained l [Ast_helper.Exp.case spat sbody]
