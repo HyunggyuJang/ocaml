@@ -168,12 +168,15 @@ let emit_def ppf def s ct =
 let print_arg_typed ppf (s, ct) =
   fprintf ppf "@ @[<1>(%s :@ %a)@]" s print_term ct
 
+let newlines = ref 1
+
 let emit_vernacular ppf = function
   | CTverbatim s            -> fprintf ppf "%s" s
   | CTdefinition (s, ct) -> emit_def ppf "Definition" s ct
   | CTfixpoint (s, ct)   -> emit_def ppf "Fixpoint" s ct
   | CTeval ct ->
-      fprintf ppf "@[<2>Eval vm_compute in@ %a.@]@ " print_term ct
+      fprintf ppf "@[<2>Eval vm_compute in@ %a.@]" print_term ct;
+      newlines := 2
   | CTinductive td ->
       fprintf ppf "@[<hv2>@[<2>Inductive %s" td.name;
       List.iter (print_arg_typed ppf) td.args;
@@ -187,7 +190,11 @@ let emit_vernacular ppf = function
           | None -> fprintf ppf "@]"
           | Some ret -> fprintf ppf "@ : %a@]" print_term ret)
         td.cases;
-      fprintf ppf ".@]@ "
+      fprintf ppf ".@]";
+      newlines := 2
+
+let print_newlines ppf () =
+  for _ = 1 to !newlines do pp_print_newline ppf () done; newlines := 1
 
 let emit_gallina _modname ppf cmds =
-  pp_print_list ~pp_sep:pp_print_newline emit_vernacular ppf cmds
+  pp_print_list ~pp_sep:print_newlines emit_vernacular ppf cmds

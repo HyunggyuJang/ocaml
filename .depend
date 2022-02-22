@@ -3863,7 +3863,6 @@ coqgen/coqcore.cmo : \
     coqgen/coqtypes.cmi \
     coqgen/coqinit.cmi \
     coqgen/coqdef.cmi \
-    typing/btype.cmi \
     parsing/asttypes.cmi \
     coqgen/coqcore.cmi
 coqgen/coqcore.cmx : \
@@ -3875,7 +3874,6 @@ coqgen/coqcore.cmx : \
     coqgen/coqtypes.cmx \
     coqgen/coqinit.cmx \
     coqgen/coqdef.cmx \
-    typing/btype.cmx \
     parsing/asttypes.cmi \
     coqgen/coqcore.cmi
 coqgen/coqcore.cmi : \
@@ -3959,6 +3957,7 @@ coqgen/coqprint.cmi : \
 coqgen/coqtypes.cmo : \
     typing/types.cmi \
     typing/path.cmi \
+    typing/ident.cmi \
     typing/ctype.cmi \
     coqgen/coqdef.cmi \
     typing/btype.cmi \
@@ -3967,6 +3966,7 @@ coqgen/coqtypes.cmo : \
 coqgen/coqtypes.cmx : \
     typing/types.cmx \
     typing/path.cmx \
+    typing/ident.cmx \
     typing/ctype.cmx \
     coqgen/coqdef.cmx \
     typing/btype.cmx \
@@ -3975,6 +3975,7 @@ coqgen/coqtypes.cmx : \
 coqgen/coqtypes.cmi : \
     typing/types.cmi \
     parsing/location.cmi \
+    typing/ident.cmi \
     typing/env.cmi \
     coqgen/coqdef.cmi
 middle_end/closure/closure.cmo : \

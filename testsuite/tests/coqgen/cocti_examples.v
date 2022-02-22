@@ -44,7 +44,7 @@ Extraction ml_type_eq_dec.
 
 Local Definition ml_type := ml_type.
 Local Definition ml_exns := ml_exns.
-  
+
 Record key := mkkey {key_id : int; key_type : ml_type}.
 
 Variant loc : ml_type -> Type :=
@@ -98,7 +98,7 @@ Definition coq_type_purary p T :=
   if p is 0 then M ct else ct.
 
 (* Test *)
-Definition ml_succ : coq_type (ml_arrow ml_int ml_int) := 
+Definition ml_succ : coq_type (ml_arrow ml_int ml_int) :=
   fun n => Ret (Int63.succ n).
 
 Section comparisons.
@@ -108,7 +108,7 @@ Definition lexi_compare (cmp1 cmp2 : M comparison) :=
 
 Fixpoint compare_rec (T : ml_type) (h : nat)
   : coq_type T -> coq_type T -> M comparison:=
-  if h is h.+1 then 
+  if h is h.+1 then
     match T as T return coq_type T -> coq_type T -> M comparison with
     | ml_int => fun x y => Ret (Int63.compare x y)
     | ml_bool => fun x y => Ret (Bool.compare x y)
@@ -331,7 +331,7 @@ Fixpoint list_mem (T : ml_type) (h : nat) (a : coq_type T)
   if h is h.+1 then
     match l with
     | nil => Ret false
-    | b :: l => 
+    | b :: l =>
       do e <- ml_eq T h a b; if e then Ret true else list_mem T h a l
     end
   else FailGas.

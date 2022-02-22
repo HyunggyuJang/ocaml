@@ -518,4 +518,3 @@ Definition it_20 :=
              Ret (f_1 : coq_type (ml_arrow ml_int ml_empty))))
        0%int63).
 Eval vm_compute in it_20.
-

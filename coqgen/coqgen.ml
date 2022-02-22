@@ -128,7 +128,7 @@ let make_compare_rec vars =
 
 let transl_implementation _modname st =
   let cmds, vars = transl_structure ~vars:init_vars st.str_items in
-  let typedefs, cmds = 
+  let typedefs, cmds =
     List.partition (function CTinductive _ -> true | _ -> false) cmds
   in
   CTverbatim "From mathcomp Require Import ssreflect ssrnat seq.\
