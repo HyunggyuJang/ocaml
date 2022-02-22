@@ -169,6 +169,9 @@ let rec tarai x y z =
 
 tarai 1 2 3;;
 
+let failwith s = raise (Failure s);;
+failwith "Bad";;
+
 (* loops *)
 omega 1;;
 

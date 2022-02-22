@@ -168,17 +168,10 @@ let init_term_map vars =
      ce_vars = [tv];
      ce_rec = Nonrecursive;
      ce_purary = 3});
-   (["failwith"],
+   (["raise"],
     let tv = newgenvar () in
-    {ce_name = "failwith";
-     ce_type = newgenarrow Predef.type_string tv;
-     ce_vars = [tv];
-     ce_rec = Nonrecursive;
-     ce_purary = 1});
-   (["invalid_arg"],
-    let tv = newgenvar () in
-    {ce_name = "invalid_arg";
-     ce_type = newgenarrow Predef.type_string tv;
+    {ce_name = "raise";
+     ce_type = newgenarrow Predef.type_exn tv;
      ce_vars = [tv];
      ce_rec = Nonrecursive;
      ce_purary = 1});

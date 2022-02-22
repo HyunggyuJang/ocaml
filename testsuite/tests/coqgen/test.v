@@ -23,7 +23,7 @@ Inductive ml_type :=
   | ml_arrow (_ : ml_type) (_ : ml_type).
 
 
-Inductive ml_exns (M : Type -> Type) :=
+Inductive ml_exns {M : Type -> Type} :=
   | Invalid_argument (_ : string)
   | Failure (_ : string)
   | Not_found.
@@ -42,7 +42,7 @@ revert T2; induction T1; destruct T2;
 Defined.
 
 Local Definition ml_type := ml_type.
-Local Definition ml_exns := ml_exns.
+Local Definition ml_exns := @ml_exns.
 Record key := mkkey {key_id : int; key_type : ml_type}.
 Variant loc : ml_type -> Type := mkloc : forall k : key, loc (key_type k).
 
@@ -125,7 +125,7 @@ Fixpoint compare_rec (h : nat) (T : ml_type)
     | ml_list T1 => fun x y => compare_list compare_rec T1 x y
     | ml_string => fun x y => Ret (compare_string x y)
     | ml_empty =>
-      fun x y => Fail (Catchable (Invalid_argument M "compare"%string))
+      fun x y => Fail (Catchable (Invalid_argument "compare"%string))
     | ml_array_t T1 =>
       fun x y =>
         match x, y with
@@ -183,7 +183,7 @@ Fixpoint compare_rec (h : nat) (T : ml_type)
         end
     | ml_ref T1 => fun x y => compare_ref compare_rec T1 x y
     | ml_arrow T1 T2 =>
-      fun x y => Fail (Catchable (Invalid_argument M "compare"%string))
+      fun x y => Fail (Catchable (Invalid_argument "compare"%string))
     end
   else fun _ _ => FailGas.
 
@@ -207,7 +207,7 @@ Definition getarray T (a : coq_type (ml_array T)) n : M (coq_type T) :=
   let: ArrayVal s := s in
   do n <- bounded_nat_of_int (seq.size s) n;
   if s is x :: _ then Ret (nth x s n) else
-  raise _ (Invalid_argument M "getarray").
+  raise _ (Invalid_argument "getarray").
 Definition setarray T (a : coq_type (ml_array T)) n (x : coq_type T) :=
   do s <- getref (ml_array_t T) a;
   let: ArrayVal s := s in
@@ -507,14 +507,20 @@ Fixpoint tarai (h : nat) (x y z_1 : coq_type ml_int) : M (coq_type ml_int) :=
 Definition it_18 := Restart it_17 (tarai h 1%int63 2%int63 3%int63).
 Eval vm_compute in it_18.
 
-Definition it_19 := Restart it_18 (omega ml_int 1%int63).
+Definition failwith (T : ml_type) (s : coq_type ml_string)
+  : M (coq_type T) := raise T (Failure s).
+
+Definition it_19 := Restart it_18 (failwith ml_empty "Bad"%string).
 Eval vm_compute in it_19.
 
-Definition it_20 :=
-  Restart it_19
+Definition it_20 := Restart it_19 (omega ml_int 1%int63).
+Eval vm_compute in it_20.
+
+Definition it_21 :=
+  Restart it_20
     (AppM
        (fixpt h ml_empty ml_int
           (fun f_1 : coq_type (ml_arrow ml_int ml_empty) =>
              Ret (f_1 : coq_type (ml_arrow ml_int ml_empty))))
        0%int63).
-Eval vm_compute in it_20.
+Eval vm_compute in it_21.

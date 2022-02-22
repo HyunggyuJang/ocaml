@@ -100,7 +100,7 @@ let make_compare_rec vars =
         | None, _ -> ctapp (CTid "Fail")
               [ctapp (CTid "Catchable")
                  [ctapp (CTid"Invalid_argument")
-                    [CTid"M"; CTcstr"\"compare\"%string"]]]
+                    [CTcstr"\"compare\"%string"]]]
       in
       CTabs ("x", None, CTabs ("y", None, ret))
     in
@@ -136,7 +136,7 @@ let transl_implementation _modname st =
 \n\n(* Generated representation of all ML types *)" ::
   make_ml_type vars ::
   CTverbatim "\
-\nInductive ml_exns (M : Type -> Type) :=\
+\nInductive ml_exns {M : Type -> Type} :=\
 \n  | Invalid_argument (_ : string)\
 \n  | Failure (_ : string)\
 \n  | Not_found.\n" ::
@@ -153,7 +153,7 @@ let transl_implementation _modname st =
 \n    right; injection; intros; contradiction.\
 \nDefined.\n\
 \nLocal Definition ml_type := ml_type.\
-\nLocal Definition ml_exns := ml_exns.\
+\nLocal Definition ml_exns := @ml_exns.\
 \nRecord key := mkkey {key_id : int; key_type : ml_type}.\
 \nVariant loc : ml_type -> Type := mkloc : forall k : key, loc (key_type k).\
 \n\
@@ -195,7 +195,7 @@ let transl_implementation _modname st =
 \n  let: ArrayVal s := s in\
 \n  do n <- bounded_nat_of_int (seq.size s) n;\
 \n  if s is x :: _ then Ret (nth x s n) else\
-\n  raise _ (Invalid_argument M \"getarray\").\
+\n  raise _ (Invalid_argument \"getarray\").\
 \nDefinition setarray T (a : coq_type (ml_array T)) n (x : coq_type T) :=\
 \n  do s <- getref (ml_array_t T) a;\
 \n  let: ArrayVal s := s in\
