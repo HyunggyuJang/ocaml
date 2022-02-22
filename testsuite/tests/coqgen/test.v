@@ -23,7 +23,7 @@ Inductive ml_type :=
   | ml_arrow (_ : ml_type) (_ : ml_type).
 
 
-Inductive ml_exns :=
+Inductive ml_exns (M : Type -> Type) :=
   | Invalid_argument (_ : string)
   | Failure (_ : string)
   | Not_found.
@@ -72,7 +72,7 @@ Fixpoint coq_type (T : ml_type) : Type :=
   | ml_char => Ascii.ascii
   | ml_bool => bool
   | ml_unit => unit
-  | ml_exn => ml_exns
+  | ml_exn => ml_exns M
   | ml_array T1 => loc (ml_array_t T1)
   | ml_list T1 => list (coq_type T1)
   | ml_string => String.string
@@ -125,7 +125,7 @@ Fixpoint compare_rec (h : nat) (T : ml_type)
     | ml_list T1 => fun x y => compare_list compare_rec T1 x y
     | ml_string => fun x y => Ret (compare_string x y)
     | ml_empty =>
-      fun x y => Fail (Catchable (Invalid_argument "compare"%string))
+      fun x y => Fail (Catchable (Invalid_argument M "compare"%string))
     | ml_array_t T1 =>
       fun x y =>
         match x, y with
@@ -183,7 +183,7 @@ Fixpoint compare_rec (h : nat) (T : ml_type)
         end
     | ml_ref T1 => fun x y => compare_ref compare_rec T1 x y
     | ml_arrow T1 T2 =>
-      fun x y => Fail (Catchable (Invalid_argument "compare"%string))
+      fun x y => Fail (Catchable (Invalid_argument M "compare"%string))
     end
   else fun _ _ => FailGas.
 
@@ -207,7 +207,7 @@ Definition getarray T (a : coq_type (ml_array T)) n : M (coq_type T) :=
   let: ArrayVal s := s in
   do n <- bounded_nat_of_int (seq.size s) n;
   if s is x :: _ then Ret (nth x s n) else
-  raise _ (Invalid_argument "getarray").
+  raise _ (Invalid_argument M "getarray").
 Definition setarray T (a : coq_type (ml_array T)) n (x : coq_type T) :=
   do s <- getref (ml_array_t T) a;
   let: ArrayVal s := s in

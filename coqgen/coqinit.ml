@@ -95,7 +95,7 @@ let init_type_map vars =
      ct_def = Some (["a"], ["ArrayVal", [CTapp(CTid"ml_list", [CTid "a"])]])});
    (Predef.path_exn, [],
     {ctd with ct_name = "ml_exn";
-     ct_type = CTid "ml_exns";
+     ct_type = CTapp (CTid "ml_exns", [CTid "M"]);
      ct_constrs = List.map (fun x -> (x,x))
        ["Invalid_argument"; "Failure"; "Not_found"];
      ct_def = Some ([], ["Invalid_argument", [CTid"ml_string"];

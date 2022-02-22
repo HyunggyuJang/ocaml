@@ -1,5 +1,5 @@
 From mathcomp Require Import all_ssreflect.
-Require Import Int63 Ascii String cocti_defs.
+Require Import Ascii String Int63 cocti_defs.
 
 Axiom abstr : Set.
 Inductive ml_type : Set :=
@@ -21,7 +21,7 @@ Axiom a : abstr.
 Axiom t : ml_type -> ml_type -> abstr.
 *)
 
-Inductive ml_exns :=
+Inductive ml_exns (M : Type -> Type) :=
   | Failure of string
   | Invalid_argument of string
   | Not_found.
@@ -70,7 +70,7 @@ Inductive expr (T : ml_type) :=
 
 Local Fixpoint coq_type_rec (p : nat) (T : ml_type) : Type :=
   match T with
-  | ml_exn => ml_exns
+  | ml_exn => ml_exns M
   | ml_arrow T1 T2 =>
     let p := p.-1 in
     let ct2 := coq_type_rec p T2 in
@@ -207,7 +207,7 @@ Eval cbv in Omega.
 Definition Omega : M empty :=
   do r : loc (ml_arrow ml_int ml_empty)
      <- newref (ml_arrow ml_int ml_empty)
-               (fun x => raise ml_empty (Failure "omega"));
+               (fun x => raise ml_empty (Failure M "omega"));
   let Delta i := do f <- getref _ r; f i in
   do _ <- setref _ r Delta; Delta 1%int63.
 
@@ -219,7 +219,7 @@ Fail Transparent andb_prop.
 
 Definition Fix T1 T2 (F : coq_type (ml_arrow (ml_arrow T1 T2) (ml_arrow T1 T2)))
   : M (coq_type (ml_arrow T1 T2)) :=
-  do r <- newref (ml_arrow T1 T2) (fun x => raise T2 (Failure "Fix"));
+  do r <- newref (ml_arrow T1 T2) (fun x => raise T2 (Failure M "Fix"));
   let f x :=  do f <- getref _ r; f x in
   do _ <- setref _ r f; Ret f.
 

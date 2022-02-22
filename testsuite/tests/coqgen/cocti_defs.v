@@ -66,24 +66,31 @@ Record key := mkkey {key_id : int; key_type : ml_type}.
 Variant loc : ml_type -> Type :=
   mkloc : forall k : key, loc (key_type k).
 Parameter coq_type : forall M : Type -> Type, ml_type -> Type.
-Parameter ml_exns : Type.
+Parameter ml_exns : forall M : Type -> Type, Type.
 End MLTY.
 
 Module REFmonad(MLtypes : MLTY).
 Import MLtypes.
 
+(*
 Inductive Exn :=
   | GasExhausted
   | RefLookup
   | BoundedNat
   | Catchable of ml_exns.
+*)
 
 Record binding (M : Type -> Type) :=
   mkbind { bind_key : key; bind_val : coq_type M (key_type bind_key) }.
 Arguments mkbind {M}.
 
 #[bypass_check(positivity)]
-Inductive Env := mkEnv : int -> seq (binding (M0 Env Exn)) -> Env.
+Inductive Env := mkEnv : int -> seq (binding (M0 Env Exn)) -> Env
+with Exn :=
+  | GasExhausted
+  | RefLookup
+  | BoundedNat
+  | Catchable of ml_exns (M0 Env Exn).
 
 Module Env. Definition Env := Env. Definition Exn := Exn. End Env.
 Module EFmonadEnv := EFmonad(Env).
@@ -149,11 +156,11 @@ Definition setref T (l : loc T) (val : coq_type T) : M unit := fun env =>
   | Some refs' => Ret tt (mkEnv c refs')
   end.
 
-Definition raise T (e : ml_exns) : M (coq_type T) :=
+Definition raise T (e : ml_exns M ) : M (coq_type T) :=
   Fail (Catchable e).
 
 Definition handle T (c : M (coq_type T))
-           (h : ml_exns -> M (coq_type T)) : M (coq_type T) :=
+           (h : ml_exns M -> M (coq_type T)) : M (coq_type T) :=
   fun env =>
     match c env with
     | (env', inr (Catchable e)) => h e env'
