@@ -96,8 +96,6 @@ Module Env. Definition Env := Env. Definition Exn := Exn. End Env.
 Module EFmonadEnv := EFmonad(Env).
 Export EFmonadEnv.
 
-Definition FailGas {A} : M A := fun env => (env, inr GasExhausted).
-
 Section monadic_operations.
 Let coq_type := coq_type M.
 Let binding := binding M.
@@ -155,6 +153,8 @@ Definition setref T (l : loc T) (val : coq_type T) : M unit := fun env =>
   | None => Fail RefLookup env
   | Some refs' => Ret tt (mkEnv c refs')
   end.
+
+Definition FailGas {A} : M A := Fail GasExhausted.
 
 Definition raise T (e : ml_exns M ) : M (coq_type T) :=
   Fail (Catchable e).

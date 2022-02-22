@@ -172,6 +172,8 @@ tarai 1 2 3;;
 let failwith s = raise (Failure s);;
 failwith "Bad";;
 
+(fun x -> raise x) (Failure "Hello");;
+
 (* loops *)
 omega 1;;
 
