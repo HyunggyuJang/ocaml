@@ -60,7 +60,7 @@ Inductive eqw (T1 T2 : ml_type) :=
 type _ expr =
      | Int : int -> int expr
      | Add : (int -> int -> int) expr
-     | App : (’a -> ’b) expr * ’a expr -> ’b expr
+     | App : ('a -> 'b) expr * 'a expr -> 'b expr
 *)
 
 Inductive expr (T : ml_type) :=
