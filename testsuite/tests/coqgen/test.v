@@ -42,7 +42,6 @@ revert T2; induction T1; destruct T2;
 Defined.
 
 Local Definition ml_type := ml_type.
-Local Definition ml_exns := @ml_exns.
 Record key := mkkey {key_id : int; key_type : ml_type}.
 Variant loc : ml_type -> Type := mkloc : forall k : key, loc (key_type k).
 
@@ -72,7 +71,7 @@ Fixpoint coq_type (T : ml_type) : Type :=
   | ml_char => Ascii.ascii
   | ml_bool => bool
   | ml_unit => unit
-  | ml_exn => ml_exns M
+  | ml_exn => @ml_exns M
   | ml_array T1 => loc (ml_array_t T1)
   | ml_list T1 => list (coq_type T1)
   | ml_string => String.string
@@ -89,6 +88,7 @@ Fixpoint coq_type (T : ml_type) : Type :=
   end.
 
 End with_monad.
+Local Definition ml_exn := ml_exn.
 End MLtypes.
 Export MLtypes.
 

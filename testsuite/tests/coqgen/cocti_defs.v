@@ -33,8 +33,12 @@ Definition Bind {A B} (x : M A) (f : A -> M B) : M B := fun env =>
 Definition BindW {A B} (x : W A) (f : A -> M B) : W B :=
   Bind (fun _ => x) f (fst x).  (* (fst x) could be anything *)
 
-Definition Restart {A B} (x : W A) (f : M B) : W B :=
-  BindW x (fun _ => f).
+(* Strict version
+Definition Restart {A B} (x : W A) (f : M B) : W B := BindW x (fun _ => f).
+*)
+
+(* Allow to restart after exception *)
+Definition Restart {A B} (x : W A) (f : M B) : W B := f (fst x).
 
 Definition RunW {A} (x : W A) : A + Exn := snd x.
 
@@ -62,11 +66,11 @@ End EFmonad.
 Module Type MLTY.
 Parameter ml_type : Set.
 Parameter ml_type_eq_dec : forall x y : ml_type, {x=y}+{x<>y}.
+Parameter ml_exn : ml_type.
 Record key := mkkey {key_id : int; key_type : ml_type}.
 Variant loc : ml_type -> Type :=
   mkloc : forall k : key, loc (key_type k).
 Parameter coq_type : forall M : Type -> Type, ml_type -> Type.
-Parameter ml_exns : forall M : Type -> Type, Type.
 End MLTY.
 
 Module REFmonad(MLtypes : MLTY).
@@ -90,7 +94,7 @@ with Exn :=
   | GasExhausted
   | RefLookup
   | BoundedNat
-  | Catchable of ml_exns (M0 Env Exn).
+  | Catchable of coq_type (M0 Env Exn) ml_exn.
 
 Module Env. Definition Env := Env. Definition Exn := Exn. End Env.
 Module EFmonadEnv := EFmonad(Env).
@@ -156,11 +160,11 @@ Definition setref T (l : loc T) (val : coq_type T) : M unit := fun env =>
 
 Definition FailGas {A} : M A := Fail GasExhausted.
 
-Definition raise T (e : ml_exns M ) : M (coq_type T) :=
+Definition raise T (e : coq_type ml_exn) : M (coq_type T) :=
   Fail (Catchable e).
 
 Definition handle T (c : M (coq_type T))
-           (h : ml_exns M -> M (coq_type T)) : M (coq_type T) :=
+           (h : coq_type ml_exn -> M (coq_type T)) : M (coq_type T) :=
   fun env =>
     match c env with
     | (env', inr (Catchable e)) => h e env'

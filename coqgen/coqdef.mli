@@ -90,6 +90,7 @@ type coq_env = {
 
 val empty_vars : coq_env
 val add_type : Path.t -> coq_type_desc -> coq_env -> coq_env
+val add_exception : Path.t -> string -> coq_term list -> coq_env -> coq_env
 val add_term :
   ?toplevel:bool -> Path.t -> coq_term_desc -> coq_env -> coq_env
 val add_tvar : Types.type_expr -> Names.elt -> coq_env -> coq_env

@@ -131,6 +131,9 @@ let transl_implementation _modname st =
   let typedefs, cmds =
     List.partition (function CTinductive _ -> true | _ -> false) cmds
   in
+  (*let exceptions =
+    CTinductive
+      { name = "ml_exns"; kind = CTsort *)
   CTverbatim "From mathcomp Require Import ssreflect ssrnat seq.\
 \nRequire Import Int63 Ascii String cocti_defs.\
 \n\n(* Generated representation of all ML types *)" ::
@@ -153,7 +156,6 @@ let transl_implementation _modname st =
 \n    right; injection; intros; contradiction.\
 \nDefined.\n\
 \nLocal Definition ml_type := ml_type.\
-\nLocal Definition ml_exns := @ml_exns.\
 \nRecord key := mkkey {key_id : int; key_type : ml_type}.\
 \nVariant loc : ml_type -> Type := mkloc : forall k : key, loc (key_type k).\
 \n\
@@ -164,6 +166,7 @@ let transl_implementation _modname st =
   CTverbatim "Local (* Generated type translation function *)" ::
   make_coq_type vars ::
   CTverbatim "End with_monad.\
+\nLocal Definition ml_exn := ml_exn.\
 \nEnd MLtypes.\
 \nExport MLtypes.\
 \n\
