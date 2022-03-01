@@ -3882,6 +3882,7 @@ coqgen/coqcore.cmi : \
     parsing/asttypes.cmi
 coqgen/coqdef.cmo : \
     typing/types.cmi \
+    typing/predef.cmi \
     typing/path.cmi \
     utils/misc.cmi \
     parsing/location.cmi \
@@ -3890,6 +3891,7 @@ coqgen/coqdef.cmo : \
     coqgen/coqdef.cmi
 coqgen/coqdef.cmx : \
     typing/types.cmx \
+    typing/predef.cmx \
     typing/path.cmx \
     utils/misc.cmx \
     parsing/location.cmx \
