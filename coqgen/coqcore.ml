@@ -361,6 +361,21 @@ let rec transl_exp ~vars e =
   | Texp_match (e, cases, partial) ->
       let ct = transl_exp ~vars e in
       transl_match ~vars ct cases partial
+  | Texp_try (e1, cases) ->
+      let ct = transl_exp ~vars e1 in
+      if ct.pary > 0 then ct else
+      let v = fresh_name ~vars "v" in
+      let vars = add_reserved v vars in
+      let cty = transl_type ~loc ~env:e.exp_env ~vars e.exp_type in
+      let failed = ctapp (CTid"raise") [cty; CTid "v"] in
+      let ct1 = {pterm = CTid v; prec = Nonrecursive; pary = 1} in
+      let cases =
+        List.map (fun c -> {c with c_lhs = as_computation_pattern c.c_lhs})
+          cases in
+      let cm = transl_match ~vars ~failed ct1 cases Partial in
+      let prec = if ct.prec = Recursive then Recursive else cm.prec in
+      {prec; pary = 0;
+       pterm = ctapp (CTid"handle") [cty; ct.pterm; CTabs (v, None, cm.pterm)]}
   | Texp_function {arg_label = Nolabel; param; cases; partial} ->
       let pat, exp =
         match cases with
@@ -380,7 +395,7 @@ let rec transl_exp ~vars e =
   | _ ->
       not_allowed ~loc "This kind of term"
 
-and transl_match ~vars ct cases partial =
+and transl_match ~vars ?(failed=CTid"FailGas") ct cases partial =
   let ccases = List.map (transl_cases ~vars) cases in
   let lhs, ctl = List.split ccases in
   let prec =
@@ -396,7 +411,7 @@ and transl_match ~vars ct cases partial =
   in
   let ccases = List.combine (List.map fst lhs) ctl in
   let ccases =
-    if partial = Partial then ccases @ [CTid"_", CTid"FailGas"] else ccases in
+    if partial = Partial then ccases @ [CTid"_", failed] else ccases in
   let pterm =
     if ct.pary = 0 then
       let v = fresh_name ~vars "v" in

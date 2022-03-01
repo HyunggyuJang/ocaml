@@ -515,17 +515,24 @@ Eval vm_compute in it_19.
 
 Definition it_20 :=
   Restart it_19
-    ((fun x : coq_type ml_exn => raise ml_empty x) (Failure "Hello"%string)).
+    (handle ml_string
+       (if true then failwith ml_string "a"%string else Ret "b"%string)
+       (fun v => if v is Failure x then Ret x else raise ml_string v)).
 Eval vm_compute in it_20.
 
-Definition it_21 := Restart it_20 (omega ml_int 1%int63).
+Definition it_21 :=
+  Restart it_20
+    ((fun x : coq_type ml_exn => raise ml_empty x) (Failure "Hello"%string)).
 Eval vm_compute in it_21.
 
-Definition it_22 :=
-  Restart it_21
+Definition it_22 := Restart it_21 (omega ml_int 1%int63).
+Eval vm_compute in it_22.
+
+Definition it_23 :=
+  Restart it_22
     (AppM
        (fixpt h ml_empty ml_int
           (fun f_1 : coq_type (ml_arrow ml_int ml_empty) =>
              Ret (f_1 : coq_type (ml_arrow ml_int ml_empty))))
        0%int63).
-Eval vm_compute in it_22.
+Eval vm_compute in it_23.
