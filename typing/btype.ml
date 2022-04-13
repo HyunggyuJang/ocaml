@@ -258,8 +258,7 @@ let fold_row f init row =
 let iter_row f row =
   fold_row (fun () v -> f v) () row
 
-let fold_type_expr f init ty =
-  match get_desc ty with
+let fold_type_desc f init = function
     Tvar _              -> init
   | Tarrow (_, ty1, ty2, _) ->
       let result = f init ty1 in
@@ -285,6 +284,14 @@ let fold_type_expr f init ty =
     List.fold_left f result tyl
   | Tpackage (_, fl)  ->
     List.fold_left (fun result (_n, ty) -> f result ty) init fl
+
+and fold_type_expr f init ty =
+  let result = fold_type_desc f init (get_desc ty) in
+  let abbrevs = get_abbrevs ty in
+  if abbrevs = [] then result else
+  let fold_abbrev init (_, args) =
+    List.fold_left (fold_type_desc f) init args in
+  List.fold_left fold_abbrev result abbrevs
 
 let iter_type_expr f ty =
   fold_type_expr (fun () v -> f v) () ty
