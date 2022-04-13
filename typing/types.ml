@@ -21,6 +21,7 @@ open Asttypes
 
 type transient_expr =
   { mutable desc: type_desc;
+    mutable abbrevs: (Path.t * type_expr list) list;
     mutable level: int;
     mutable scope: int;
     id: int }
@@ -541,6 +542,16 @@ let get_desc t = (repr t).desc
 let get_level t = (repr t).level
 let get_scope t = (repr t).scope
 let get_id t = (repr t).id
+let get_abbrevs t = (repr t).abbrevs
+
+let add_abbrev ty path args =
+  let ty = repr ty in
+  if List.exists (fun (p,_) -> Path.same p path) ty.abbrevs then () else
+  ty.abbrevs <- (path, args) :: ty.abbrevs
+
+let inherit_abbrevs ~from:ty ty' =
+  let abbrevs = get_abbrevs ty in
+  List.iter (fun (path,args) -> add_abbrev ty' path args) abbrevs
 
 (* transient type_expr *)
 

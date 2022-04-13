@@ -1499,7 +1499,7 @@ let expand_abbrev_gen kind find_type_expansion env ty =
       let level = get_level ty in
       let scope = get_scope ty in
       let lookup_abbrev = proper_abbrevs path args abbrev in
-      begin match find_expans kind path !lookup_abbrev with
+      let ty' = match find_expans kind path !lookup_abbrev with
         Some ty' ->
           (* prerr_endline
             ("found a "^string_of_kind kind^" expansion for "^Path.name path);*)
@@ -1543,7 +1543,11 @@ let expand_abbrev_gen kind find_type_expansion env ty =
             update_scope scope ty;
             update_scope scope ty';
             ty'
-      end
+      in
+      inherit_abbrevs ~from:ty ty';
+      link_type ty ty';
+      add_abbrev ty' path args;
+      ty'
   | _ ->
       assert false
 
