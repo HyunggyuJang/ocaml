@@ -89,4 +89,8 @@ distclean::
 depend: unix.ml
 	$(OCAMLDEP_CMD) *.mli *.ml > .depend
 
+.PHONY: dune-files
+dune-files::
+	@echo $(ALL_C_SOURCES:.c=)
+
 include .depend
