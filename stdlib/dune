@@ -30,15 +30,15 @@
      ;; It's especially ugly because the compiler insists on checking arity...
      ((action
         (progn
-          (run sed -i s/%atomic_load/%identity/ %{input-file})
-          (run sed -i s/%atomic_cas/%obj_set_field/ %{input-file})
-          (run sed s/%atomic_[a-z_]*/%addint/ %{input-file})))
+          (run sed -i'' -e s/%atomic_load/%identity/ %{input-file})
+          (run sed -i'' -e s/%atomic_cas/%obj_set_field/ %{input-file})
+          (run sed -i'' -e s/%atomic_[a-z_]*/%addint/ %{input-file})))
       camlinternalAtomic)
      ((action (run sed s/%dls_get/%identity/ %{input-file}))
       domain)
      ((action
         (progn
-          (run sed -i s/%perform/%identity/ %{input-file})
+          (run sed -i'' -e s/%perform/%identity/ %{input-file})
           (run sed s/%r[a-z]*/%obj_set_field/ %{input-file})))
       effect)
      )))
