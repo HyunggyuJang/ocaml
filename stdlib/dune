@@ -18,12 +18,27 @@
    (exit_module std_exit)
    (internal_modules Camlinternal*)
    (modules_before_stdlib
-     camlinternalFormatBasics
-     camlinternalAtomic))
+     camlinternalFormatBasics))
  (flags (:standard -w -9 -nolabels))
  (preprocess
    (per_module
-     ((action
-          (run awk -f %{dep:expand_module_aliases.awk} %{input-file}))
+     ((action (run awk -f %{dep:expand_module_aliases.awk} %{input-file}))
       stdlib)
+     ;; AWFUL HACKS: remove once 5.0 is released
+     ;; (this is needed because we're building with a compiler which doesn't
+     ;; know these primitives yet)
+     ;; It's especially ugly because the compiler insists on checking arity...
+     ((action
+        (progn
+          (run sed -i'' -e s/%atomic_load/%identity/ %{input-file})
+          (run sed -i'' -e s/%atomic_cas/%obj_set_field/ %{input-file})
+          (run sed -i'' -e s/%atomic_[a-z_]*/%addint/ %{input-file})))
+      camlinternalAtomic)
+     ((action (run sed s/%dls_get/%identity/ %{input-file}))
+      domain)
+     ((action
+        (progn
+          (run sed -i'' -e s/%perform/%identity/ %{input-file})
+          (run sed s/%r[a-z]*/%obj_set_field/ %{input-file})))
+      effect)
      )))
