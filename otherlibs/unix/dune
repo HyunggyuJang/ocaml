@@ -20,14 +20,18 @@
  (c_flags (-I %{project_root}/runtime))
  (libraries stdlib)
  (c_names
-   accept access addrofstr alarm bind channels chdir chmod chown chroot close
-   fsync closedir connect cst2constr cstringv dup dup2 envir errmsg execv execve
-   execvp exit fchmod fchown fcntl fork ftruncate getaddrinfo getcwd getegid
-   geteuid getgid getgr getgroups gethost gethostname getlogin getnameinfo
-   getpeername getpid getppid getproto getpw gettimeofday getserv getsockname
-   getuid gmtime initgroups isatty itimer kill link listen lockf lseek mkdir
-   mkfifo mmap mmap_ba nice open opendir pipe putenv read readdir readlink
-   rename rewinddir rmdir select sendrecv setgid setgroups setsid setuid
-   shutdown signals sleep socket socketaddr socketpair sockopt stat strofaddr
-   symlink termios time times truncate umask unixsupport unlink utimes wait
-   write))
+   access addrofstr chdir chmod cst2constr cstringv execv execve execvp fsync
+   mkdir exit getaddrinfo getcwd gethost gethostname getnameinfo getproto
+   getserv gmtime mmap_ba putenv rmdir socketaddr strofaddr time unlink
+   accept_unix bind_unix channels_unix close_unix connect_unix dup_unix
+   envir_unix errmsg_unix getpeername_unix getpid_unix getsockname_unix
+   gettimeofday_unix isatty_unix link_unix listen_unix lockf_unix lseek_unix
+   mmap_unix open_unix pipe_unix read_unix readlink_unix realpath_unix
+   rename_unix select_unix sendrecv_unix shutdown_unix sleep_unix socket_unix
+   socketpair_unix sockopt_unix stat_unix symlink_unix times_unix truncate_unix
+   unixsupport_unix utimes_unix write_unix alarm chown chroot closedir dup2
+   fchmod fchown fcntl fork ftruncate getegid geteuid getgid getgr getgroups
+   getlogin getppid getpw getuid initgroups itimer kill mkfifo nice opendir
+   readdir rewinddir setgid setgroups setsid setuid signals spawn termios umask
+   wait)
+ (modules_without_implementation unix))

@@ -53,4 +53,8 @@ include ../Makefile.otherlibs.common
 depend:
 	$(OCAMLRUN) $(ROOTDIR)/boot/ocamlc -depend -slash *.mli *.ml > .depend
 
+.PHONY: dune-files
+dune-files::
+	@echo $(ALL_C_SOURCES:.c=)
+
 include .depend
