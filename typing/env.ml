@@ -132,7 +132,7 @@ let used_labels : label_usage usage_tbl ref =
 
 (** Map indexed by the name of module components. *)
 module NameMap = String.Map
-module TyNameMap = Map.Make(Path.TyPath.Order(String))
+module TyNameMap = Map.Make(Ident.TyPath.Order(String))
 
 type value_unbound_reason =
   | Val_unbound_instance_variable

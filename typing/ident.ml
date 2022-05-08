@@ -176,9 +176,9 @@ module TyPath = struct
   type 'a t =
     | Regular of 'a
     | Ext of 'a
-    | Cstr of 'a * string
     | Row of 'a
     | Obj of 'a
+    | Cstr of 'a * string
 
   (* let typath_of_path = function *)
   (*   | Pident id as p when is_uident (Ident.name id) -> Ext p *)
@@ -207,7 +207,18 @@ module TyPath = struct
   module Order(M: Set.OrderedType) =
   struct
     type nonrec t = M.t t
-    let compare                 (* Cf. Path.compare *)
+    let compare p1 p2 =
+      if p1 == p2 then 0 else
+        match (p1, p2) with
+          (Cstr (_, s1), Cstr (_, s2)) -> String.compare s1 s2
+        | (Regular _, _) -> -1
+        | (_, Regular _) -> 1
+        | (Ext _, _) -> -1
+        | (_, Ext _) -> 1
+        | (Row _, _) -> -1
+        | (_, Row _) -> 1
+        | (Obj _, _) -> -1
+        | (_, Obj _) -> 1
   end
 end
 
