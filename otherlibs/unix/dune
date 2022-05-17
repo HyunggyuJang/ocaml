@@ -33,5 +33,4 @@
    fchmod fchown fcntl fork ftruncate getegid geteuid getgid getgr getgroups
    getlogin getppid getpw getuid initgroups itimer kill mkfifo nice opendir
    readdir rewinddir setgid setgroups setsid setuid signals spawn termios umask
-   wait)
- (modules_without_implementation unix))
+   wait))
