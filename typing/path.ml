@@ -16,9 +16,9 @@
 type t =
     Pident of Ident.t
   | Pdot of t * string
+  | Papply of t * t
   | Pcstr_ty of t * string
   | Pext_ty of t
-  | Papply of t * t
   | Pcls of t
 
 let rec same p1 p2 =

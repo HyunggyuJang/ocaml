@@ -18,9 +18,9 @@
 type t =
     Pident of Ident.t
   | Pdot of t * string
+  | Papply of t * t
   | Pcstr_ty of t * string
   | Pext_ty of t
-  | Papply of t * t
   | Pcls of Ident.t
 
 val same: t -> t -> bool
