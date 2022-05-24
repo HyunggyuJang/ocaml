@@ -29,7 +29,6 @@ type 'a class_info = {
   cls_ty_decl : class_type_declaration;
   cls_obj_id : Ident.t;
   cls_obj_abbr : type_declaration;
-  cls_typesharp_id : Ident.t;
   cls_abbr : type_declaration;
   cls_arity : int;
   cls_pub_methods : string list;
@@ -42,7 +41,6 @@ type class_type_info = {
   clsty_ty_decl : class_type_declaration;
   clsty_obj_id : Ident.t;
   clsty_obj_abbr : type_declaration;
-  clsty_typesharp_id : Ident.t;
   clsty_abbr : type_declaration;
   clsty_info : Typedtree.class_type_declaration;
 }
@@ -55,7 +53,6 @@ type 'a full_class = {
   cltydef: class_type_declaration;
   obj_id: Ident.t;
   obj_abbr: type_declaration;
-  ty_id: Ident.t;
   cl_abbr: type_declaration;
   arity: int;
   pub_meths: string list;
@@ -1078,7 +1075,7 @@ and class_expr_aux cl_num val_env met_env virt self_scope scl =
              raise(Error(cty'.ctyp_loc, val_env, Parameter_mismatch err)))
         tyl params;
       let cl =
-        rc {cl_desc = Tty_ident (path, lid, tyl);
+        rc {cl_desc = Tcl_ident (path, lid, tyl);
             cl_loc = scl.pcl_loc;
             cl_type = clty';
             cl_env = val_env;
@@ -1443,11 +1440,11 @@ let temp_abbrev loc env id arity uid =
   (!params, ty, env)
 
 let initial_env define_class approx
-    (res, env) (cl, id, ty_id, obj_id, ty_id, uid) =
+    (res, env) (cl, id, ty_id, obj_id, cl_id, uid) =
   (* Temporary abbreviations *)
   let arity = List.length cl.pci_params in
   let (obj_params, obj_ty, env) = temp_abbrev cl.pci_loc env obj_id arity uid in
-  let (cl_params, cl_ty, env) = temp_abbrev cl.pci_loc env ty_id arity uid in
+  let (cl_params, cl_ty, env) = temp_abbrev cl.pci_loc env cl_id arity uid in
 
   (* Temporary type for the class constructor *)
   if !Clflags.principal then Ctype.begin_def ();
@@ -1491,14 +1488,14 @@ let initial_env define_class approx
   in
   ((cl, id, ty_id,
     obj_id, obj_params, obj_ty,
-    ty_id, cl_params, cl_ty,
+    cl_id, cl_params, cl_ty,
     constr_type, dummy_class)::res,
    env)
 
 let class_infos define_class kind
     (cl, id, ty_id,
      obj_id, obj_params, obj_ty,
-     ty_id, cl_params, cl_ty,
+     cl_id, cl_params, cl_ty,
      constr_type, dummy_class)
     (res, env) =
 
@@ -1697,12 +1694,12 @@ let class_infos define_class kind
      type_uid = dummy_class.cty_uid;
     }
   in
-  ((cl, id, clty, ty_id, cltydef, obj_id, obj_abbr, ty_id, cl_abbr, ci_params,
+  ((cl, id, clty, ty_id, cltydef, obj_id, obj_abbr, cl_id, cl_abbr, ci_params,
     arity, pub_meths, List.rev !coercion_locs, expr) :: res,
    env)
 
 let final_decl env define_class
-    (cl, id, clty, ty_id, cltydef, obj_id, obj_abbr, ty_id, cl_abbr, ci_params,
+    (cl, id, clty, ty_id, cltydef, obj_id, obj_abbr, cl_id, cl_abbr, ci_params,
      arity, pub_meths, coe, expr) =
 
   begin try Ctype.collapse_conj_params env clty.cty_params
@@ -1734,7 +1731,7 @@ let final_decl env define_class
       in
       raise(Error(cl.pci_loc, env, Unbound_type_var(printer, reason)))
   end;
-  { id; clty; ty_id; cltydef; obj_id; obj_abbr; ty_id; cl_abbr; arity;
+  { id; clty; ty_id; cltydef; obj_id; obj_abbr; cl_id; cl_abbr; arity;
     pub_meths; coe;
     id_loc = cl.pci_name;
     req = { ci_loc = cl.pci_loc;
@@ -1745,7 +1742,7 @@ let final_decl env define_class
             ci_id_class = id;
             ci_id_class_type = ty_id;
             ci_id_object = obj_id;
-            ci_id_typehash = ty_id;
+            ci_id_typehash = cl_id;
             ci_expr = expr;
             ci_decl = clty;
             ci_type_decl = cltydef;
@@ -1757,7 +1754,7 @@ let final_decl env define_class
 let class_infos define_class kind
     (cl, id, ty_id,
      obj_id, obj_params, obj_ty,
-     ty_id, cl_params, cl_ty,
+     cl_id, cl_params, cl_ty,
      constr_type, dummy_class)
     (res, env) =
   Builtin_attributes.warning_scope cl.pci_attributes
@@ -1765,7 +1762,7 @@ let class_infos define_class kind
        class_infos define_class kind
          (cl, id, ty_id,
           obj_id, obj_params, obj_ty,
-          ty_id, cl_params, cl_ty,
+          cl_id, cl_params, cl_ty,
           constr_type, dummy_class)
          (res, env)
     )
@@ -1777,7 +1774,7 @@ let merge_type_decls decl (obj_abbr, cl_abbr, clty, cltydef) =
   {decl with obj_abbr; cl_abbr; clty; cltydef}
 
 let final_env define_class env { id; clty; ty_id; cltydef; obj_id; obj_abbr;
-    ty_id; cl_abbr } =
+    cl_id; cl_abbr } =
   (* Add definitions after cleaning them *)
   Env.add_type ~check:true obj_id
     (Subst.type_declaration Subst.identity obj_abbr) (
@@ -1788,7 +1785,7 @@ let final_env define_class env { id; clty; ty_id; cltydef; obj_id; obj_abbr;
 
 (* Check that #c is coercible to c if there is a self-coercion *)
 let check_coercions env { id; id_loc; clty; ty_id; cltydef; obj_id; obj_abbr;
-    ty_id; cl_abbr; arity; pub_meths; coe; req } =
+    cl_id; cl_abbr; arity; pub_meths; coe; req } =
   begin match coe with [] -> ()
   | loc :: _ ->
       let cl_ty, obj_ty =
@@ -1817,7 +1814,7 @@ let check_coercions env { id; id_loc; clty; ty_id; cltydef; obj_id; obj_abbr;
    cls_ty_decl = cltydef;
    cls_obj_id = obj_id;
    cls_obj_abbr = obj_abbr;
-   cls_typesharp_id = ty_id;
+   cls_typesharp_id = cl_id;
    cls_abbr = cl_abbr;
    cls_arity = arity;
    cls_pub_methods = pub_meths;

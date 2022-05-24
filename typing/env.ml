@@ -1107,6 +1107,14 @@ let type_of_cstr path = function
       end
   | _ -> assert false
 
+let find_cltype path env =
+  match path with
+  | Pident id -> (IdTbl.find_same id env.cltypes).cltda_declaration
+  | Pdot(p, s) ->
+      let sc = find_structure_components p env in
+      (NameMap.find s sc.comp_cltypes).cltda_declaration
+  | Papply _ | Pcstr_ty _ | Pext_ty _ -> raise Not_found
+
 let rec find_type_data path env =
   match Path.Map.find path env.local_constraints with
   | decl ->
@@ -1133,6 +1141,14 @@ let rec find_type_data path env =
       | Pext_ty p ->
           let cda = find_extension p env in
           type_of_cstr path cda.cda_description
+      | Pcls p ->
+          let clty = find_cltype p env in
+          let decl = clty.clty_ty in
+          {
+            tda_declaration = decl;
+            tda_descriptions = Type_abstract;
+            tda_shape = Shape.leaf decl.type_uid;
+          }
       | Papply _ -> raise Not_found
     end
 
@@ -1153,14 +1169,6 @@ let find_class_full path env =
   | Pdot(p, s) ->
       let sc = find_structure_components p env in
       NameMap.find s sc.comp_classes
-  | Papply _ | Pcstr_ty _ | Pext_ty _ -> raise Not_found
-
-let find_cltype path env =
-  match path with
-  | Pident id -> (IdTbl.find_same id env.cltypes).cltda_declaration
-  | Pdot(p, s) ->
-      let sc = find_structure_components p env in
-      (NameMap.find s sc.comp_cltypes).cltda_declaration
   | Papply _ | Pcstr_ty _ | Pext_ty _ -> raise Not_found
 
 let find_value path env =

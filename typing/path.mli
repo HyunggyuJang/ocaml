@@ -21,7 +21,7 @@ type t =
   | Pcstr_ty of t * string
   | Pext_ty of t
   | Papply of t * t
-  | Pobj of Ident.t
+  | Pcls of Ident.t
 
 val same: t -> t -> bool
 val compare: t -> t -> int
