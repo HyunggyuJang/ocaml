@@ -193,15 +193,11 @@ let restore_global_level gl =
   global_level := gl
 
 (**** Whether a path points to an object type (with hidden row variable) ****)
-let is_object_type_name name =
-  name.[0] = '#'
 
 let is_object_type path =
   match path with
-  | Path.Pident id -> is_object_type_name (Ident.name id)
-  | Path.Pdot(_, s) -> is_object_type_name s
-  | Path.Pcstr_ty _ | Path.Pext_ty _ -> false
-  | Path.Papply _ -> assert false
+  | Path.Pcls _ -> true
+  | _ -> false
 
 (**** Control tracing of GADT instances *)
 

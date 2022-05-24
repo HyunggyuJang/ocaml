@@ -1016,7 +1016,7 @@ let rec find_module_components path env =
       let f_comp = find_functor_components f_path env in
       let loc = Location.(in_file !input_name) in
       !components_of_functor_appl' ~loc ~f_path ~f_comp ~arg env
-  | Pcstr_ty _ | Pext_ty _ -> raise Not_found
+  | Pcstr_ty _ | Pext_ty _ | Pcls _ -> raise Not_found
 
 and find_structure_components path env =
   match get_components (find_module_components path env) with
@@ -1041,7 +1041,7 @@ let find_module ~alias path env =
       let fc = find_functor_components p1 env in
       if alias then md (fc.fcomp_res)
       else md (modtype_of_functor_appl fc p1 p2)
-  | Pcstr_ty _ | Pext_ty _ -> raise Not_found
+  | Pcstr_ty _ | Pext_ty _ | Pcls _ -> raise Not_found
 
 let find_module_lazy ~alias path env =
   match path with
@@ -1059,7 +1059,7 @@ let find_module_lazy ~alias path env =
         else md (modtype_of_functor_appl fc p1 p2)
       in
       Subst.Lazy.of_module_decl md
-  | Pcstr_ty _ | Pext_ty _ -> raise Not_found
+  | Pcstr_ty _ | Pext_ty _ | Pcls _ -> raise Not_found
 
 let find_strengthened_module ~aliasable path env =
   let md = find_module_lazy ~alias:true path env in
@@ -1224,17 +1224,16 @@ let find_constructor_address path env =
 let find_hash_type path env =
   match path with
   | Pident id ->
-      let name = "#" ^ Ident.name id in
-      let _, tda =
-        IdTbl.find_name wrap_identity ~mark:false name env.types
+      let name = Ident.name id in
+      let _, cltda =
+        IdTbl.find_name wrap_identity ~mark:false name env.cltypes
       in
-      tda.tda_declaration
-  | Pdot(p, s) ->
+      cltda.cltda_declaration.clty_ty
+  | Pdot(p, name) ->
       let c = find_structure_components p env in
-      let name = "#" ^ s in
-      let tda = NameMap.find name c.comp_types in
-      tda.tda_declaration
-  | Papply _ | Pcstr_ty _ | Pext_ty _ -> raise Not_found
+      let cda = NameMap.find name c.comp_cltypes in
+      cltda.cltda_declaration.clty_ty
+  | Papply _ | Pcstr_ty _ | Pext_ty _ | Pcls _ -> raise Not_found
 
 let find_shape env (ns : Shape.Sig_component_kind.t) id =
   match ns with
