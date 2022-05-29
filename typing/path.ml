@@ -17,6 +17,8 @@ type t =
     Pident of Ident.t
   | Pdot of t * string
   | Papply of t * t
+  | Pextra_ty of extra_ty
+and extra_ty =
   | Pcstr_ty of t * string
   | Pext_ty of t
   | Pcls of t
@@ -26,11 +28,17 @@ let rec same p1 p2 =
   || match (p1, p2) with
     (Pident id1, Pident id2) -> Ident.same id1 id2
   | (Pdot(p1, s1), Pdot(p2, s2)) -> s1 = s2 && same p1 p2
-  | (Pcstr_ty(p1, s1), Pcstr_ty(p2, s2)) ->
-    s1 = s2 && same p1 p2
-  | (Pext_ty p1, Pext_ty p2) -> same p1 p2
   | (Papply(fun1, arg1), Papply(fun2, arg2)) ->
        same fun1 fun2 && same arg1 arg2
+  | (Pextra_ty p1, Pextra_ty p2) ->
+      same_extra p1 p2
+  | (_, _) -> false
+and same_extra p1 p2 =
+  match (p1, p2) with
+    (Pcstr_ty(p1, s1), Pcstr_ty(p2, s2)) ->
+    s1 = s2 && same p1 p2
+  | (Pext_ty p1, Pext_ty p2) -> same p1 p2
+  | (Pcls p1, Pcls p2) -> same p1 p2
   | (_, _) -> false
 
 let rec compare p1 p2 =
