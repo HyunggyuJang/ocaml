@@ -1469,12 +1469,30 @@ let initial_env define_class approx
      cty_uid = uid;
     }
   in
+  let dummy_cty_ty =
+    let arity = List.length cl_params in
+    {type_params = cl_params;
+     type_arity = arity;
+     type_kind = Type_abstract;
+     type_private = Public;
+     type_manifest = Some cl_ty;
+     type_variance = Variance.unknown_signature ~injective:false ~arity;
+     type_separability = Types.Separability.default_signature ~arity;
+     type_is_newtype = false;
+     type_expansion_scope = Btype.lowest_level;
+     type_loc = cl.pci_loc;
+     type_attributes = [];
+     type_immediate = Unknown;
+     type_unboxed_default = false;
+     type_uid = dummy_class.cty_uid;
+    } in
   let env =
     Env.add_cltype ty_id
       {clty_params = [];            (* Dummy value *)
        clty_variance = [];
        clty_type = dummy_cty;       (* Dummy value *)
        clty_path = unbound_class;
+       clty_ty = dummy_cty_ty;      (* Dummy value *)
        clty_loc = Location.none;
        clty_attributes = [];
        clty_uid = uid;
