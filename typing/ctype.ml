@@ -196,7 +196,7 @@ let restore_global_level gl =
 
 let is_object_type path =
   match path with
-  | Path.Pcls _ -> true
+  | Path.Pextra_ty (Path.Pcls _) -> true
   | _ -> false
 
 (**** Control tracing of GADT instances *)
@@ -276,8 +276,8 @@ let set_mode_pattern ~generate ~injective ~allow_recursive f =
 
 let rec in_current_module = function
   | Path.Pident _ -> true
-  | Path.Pcstr_ty(p, _) | Path.Pext_ty p -> in_current_module p
   | Path.Pdot _ | Path.Papply _ -> false
+  | Path.Pextra_ty p -> in_current_module (Path.path_of_extra_ty p)
 
 let in_pervasives p =
   in_current_module p &&

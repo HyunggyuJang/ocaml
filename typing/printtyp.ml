@@ -115,7 +115,7 @@ module Namespace = struct
 
   let best_class_namespace = function
     | Papply _ | Pdot _ -> Module
-    | Pcstr_ty _ | Pext_ty _ -> Type
+    | Pextra_ty _ -> Type
     | Pident c ->
         match location Class c with
         | Some _ -> Class
@@ -386,13 +386,18 @@ let rec rewrite_double_underscore_paths env p =
   match p with
   | Pdot (p, s) ->
     Pdot (rewrite_double_underscore_paths env p, s)
-  | Pcstr_ty (p, s) ->
-    Pcstr_ty (rewrite_double_underscore_paths env p, s)
-  | Pext_ty p ->
-    Pext_ty (rewrite_double_underscore_paths env p)
   | Papply (a, b) ->
     Papply (rewrite_double_underscore_paths env a,
             rewrite_double_underscore_paths env b)
+  | Pextra_ty p -> Pextra_ty begin
+      match p with
+        Pcstr_ty (p, s) ->
+          Pcstr_ty (rewrite_double_underscore_paths env p, s)
+      | Pext_ty p ->
+          Pext_ty (rewrite_double_underscore_paths env p)
+      | Pcls p ->
+          Pcls (rewrite_double_underscore_paths env p)
+    end
   | Pident id ->
     let name = Ident.name id in
     match find_double_underscore name with
@@ -423,14 +428,19 @@ let rec tree_of_path namespace = function
       Oide_ident (ident_name namespace id)
   | Pdot(_, s) as path when non_shadowed_pervasive path ->
       Oide_ident (Naming_context.pervasives_name namespace s)
-  | Pcstr_ty(p, s) ->
-      Oide_dot (tree_of_path Type p, s)
-  | Pext_ty p ->
-      tree_of_path Other p
   | Pdot(p, s) ->
       Oide_dot (tree_of_path Module p, s)
   | Papply(p1, p2) ->
       Oide_apply (tree_of_path Module p1, tree_of_path Module p2)
+  | Pextra_ty p -> begin
+      match p with
+        Pcstr_ty(p, s) ->
+          Oide_dot (tree_of_path Type p, s)
+      | Pext_ty p ->
+          tree_of_path Other p
+      | Pcls p ->
+          tree_of_path Class_type p
+    end
 
 let tree_of_path namespace p =
   tree_of_path namespace (rewrite_double_underscore_paths !printing_env p)
@@ -666,12 +676,17 @@ let penalty s =
 let rec path_size = function
     Pident id ->
       penalty (Ident.name id), -Ident.scope id
-  | Pdot (p, _) | Pcstr_ty (p, _) ->
+  | Pdot (p, _) ->
       let (l, b) = path_size p in (1+l, b)
-  | Pext_ty p -> path_size p
   | Papply (p1, p2) ->
       let (l, b) = path_size p1 in
       (l + fst (path_size p2), b)
+  | Pextra_ty p -> begin
+      match p with
+        Pcstr_ty (p, _) ->
+          let (l, b) = path_size p in (1+l, b)
+      | Pext_ty p | Pcls p -> path_size p
+    end
 
 let same_printing_env env =
   let used_pers = Env.used_persistent () in
@@ -718,11 +733,16 @@ let wrap_printing_env ~error env f =
 let rec lid_of_path = function
     Path.Pident id ->
       Longident.Lident (Ident.name id)
-  | Path.Pdot (p1, s) | Path.Pcstr_ty (p1, s)->
+  | Path.Pdot (p1, s) ->
       Longident.Ldot (lid_of_path p1, s)
-  | Path.Pext_ty p -> lid_of_path p
   | Path.Papply (p1, p2) ->
       Longident.Lapply (lid_of_path p1, lid_of_path p2)
+  | Path.Pextra_ty p -> begin
+      match p with
+        Path.Pcstr_ty (p1, s) ->
+          Longident.Ldot (lid_of_path p1, s)
+      | Path.Pext_ty p | Path.Pcls p -> lid_of_path p
+    end
 
 let is_unambiguous path env =
   let l = Env.find_shadowed_types path env in

@@ -23,6 +23,12 @@ and extra_ty =
   | Pext_ty of t
   | Pcls of t
 
+let path_of_extra_ty = function
+  | Pcstr_ty (p, _)
+  | Pext_ty p
+  | Pcls p
+    -> p
+
 let rec same p1 p2 =
   p1 == p2
   || match (p1, p2) with
@@ -61,7 +67,7 @@ let rec compare p1 p2 =
   | ((Pextra_ty _ | Papply _) , Pdot _)
   | (Pextra_ty _, Papply _)
     -> 1
-and compare_extra p1 p2
+and compare_extra p1 p2 =
   if p1 == p2 then 0
   else match (p1, p2) with
     (Pcstr_ty(p1, s1), Pcstr_ty(p2, s2)) ->
@@ -78,12 +84,13 @@ and compare_extra p1 p2
 
 let rec find_free_opt ids = function
     Pident id -> List.find_opt (Ident.same id) ids
-  | Pdot(p, _) | Pcstr_ty(p, _) | Pext_ty p -> find_free_opt ids p
+  | Pdot(p, _) -> find_free_opt ids p
   | Papply(p1, p2) -> begin
       match find_free_opt ids p1 with
       | None -> find_free_opt ids p2
       | Some _ as res -> res
     end
+  | Pextra_ty p -> find_free_opt ids (path_of_extra_ty p)
 
 let exists_free ids p =
   match find_free_opt ids p with
@@ -92,55 +99,74 @@ let exists_free ids p =
 
 let rec scope = function
     Pident id -> Ident.scope id
-  | Pdot(p, _) | Pcstr_ty(p, _) | Pext_ty p -> scope p
+  | Pdot(p, _) -> scope p
   | Papply(p1, p2) -> Int.max (scope p1) (scope p2)
+  | Pextra_ty p -> scope (path_of_extra_ty p)
 
 let kfalse _ = false
 
 let rec name ?(paren=kfalse) = function
     Pident id -> Ident.name id
-  | Pdot(p, s) | Pcstr_ty(p, s) ->
+  | Pdot(p, s) ->
       name ~paren p ^ if paren s then ".( " ^ s ^ " )" else "." ^ s
-  | Pext_ty p -> name ~paren p
   | Papply(p1, p2) -> name ~paren p1 ^ "(" ^ name ~paren p2 ^ ")"
+  | Pextra_ty p ->
+      match p with
+        Pcstr_ty(p, s) ->
+          name ~paren p ^ if paren s then ".( " ^ s ^ " )" else "." ^ s
+      | Pext_ty p | Pcls p -> name ~paren p
+
 
 let rec print ppf = function
   | Pident id -> Ident.print_with_scope ppf id
-  | Pdot(p, s) | Pcstr_ty(p, s) -> Format.fprintf ppf "%a.%s" print p s
-  | Pext_ty p -> print ppf p
+  | Pdot(p, s) -> Format.fprintf ppf "%a.%s" print p s
   | Papply(p1, p2) -> Format.fprintf ppf "%a(%a)" print p1 print p2
+  | Pextra_ty p ->
+      match p with
+        Pcstr_ty(p, s) -> Format.fprintf ppf "%a.%s" print p s
+      | Pext_ty p | Pcls p -> print ppf p
 
 let rec head = function
     Pident id -> id
-  | Pdot(p, _) | Pcstr_ty(p, _) | Pext_ty p -> head p
+  | Pdot(p, _) -> head p
   | Papply _ -> assert false
+  | Pextra_ty p -> head (path_of_extra_ty p)
 
 let flatten =
   let rec flatten acc = function
     | Pident id -> `Ok (id, acc)
-    | Pdot (p, s) | Pcstr_ty(p, s) -> flatten (s :: acc) p
-    | Pext_ty p -> flatten acc p
+    | Pdot (p, s) -> flatten (s :: acc) p
     | Papply _ -> `Contains_apply
+    | Pextra_ty p -> begin
+        match p with
+          Pcstr_ty(p, s) -> flatten (s :: acc) p
+        | Pext_ty p | Pcls p -> flatten acc p
+      end
   in
   fun t -> flatten [] t
 
 let heads p =
   let rec heads p acc = match p with
     | Pident id -> id :: acc
-    | Pdot (p, _) | Pcstr_ty(p, _) | Pext_ty p -> heads p acc
+    | Pdot (p, _) -> heads p acc
     | Papply(p1, p2) ->
         heads p1 (heads p2 acc)
+    | Pextra_ty p -> heads (path_of_extra_ty p) acc
   in heads p []
 
 let rec last = function
   | Pident id -> Ident.name id
-  | Pdot(_, s) | Pcstr_ty(_, s) -> s
-  | Papply(_, p) | Pext_ty p -> last p
+  | Pdot(_, s) -> s
+  | Papply(_, p) -> last p
+  | Pextra_ty p ->
+      match p with
+        Pcstr_ty(_, s) -> s
+      | Pext_ty p | Pcls p -> last p
 
 let is_constructor_typath p =
   match p with
   | Pident _ | Pdot _ | Papply _ -> false
-  | Pcstr_ty _ | Pext_ty _ -> true
+  | Pextra_ty _ -> true
 
 module T = struct
   type nonrec t = t
