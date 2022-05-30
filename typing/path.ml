@@ -34,7 +34,8 @@ let rec same p1 p2 =
       same_extra p1 p2
   | (_, _) -> false
 and same_extra p1 p2 =
-  match (p1, p2) with
+  p1 == p2
+  || match (p1, p2) with
     (Pcstr_ty(p1, s1), Pcstr_ty(p2, s2)) ->
     s1 = s2 && same p1 p2
   | (Pext_ty p1, Pext_ty p2) -> same p1 p2
@@ -48,22 +49,31 @@ let rec compare p1 p2 =
   | (Pdot(p1, s1), Pdot(p2, s2)) ->
       let h = compare p1 p2 in
       if h <> 0 then h else String.compare s1 s2
-  | (Pcstr_ty(p1, s1), Pcstr_ty(p2, s2)) ->
-      let h = compare p1 p2 in
-      if h <> 0 then h else String.compare s1 s2
-  | (Pext_ty p1, Pext_ty p2) -> compare p1 p2
   | (Papply(fun1, arg1), Papply(fun2, arg2)) ->
       let h = compare fun1 fun2 in
       if h <> 0 then h else compare arg1 arg2
-  | (Pident _, (Pdot _ | Pcstr_ty _ | Pext_ty _ | Papply _))
-  | (Pdot _, (Pcstr_ty _ | Pext_ty _ | Papply _ ))
-  | (Pcstr_ty _, (Pext_ty _ | Papply _))
-  | (Pext_ty _, Papply _)
+  | (Pextra_ty p1, Pextra_ty p2) -> compare_extra p1 p2
+  | (Pident _, (Pdot _ | Papply _ | Pextra_ty _))
+  | (Pdot _, (Papply _ | Pextra_ty _))
+  | (Papply _, Pextra_ty _)
     -> -1
-  | ((Papply _ | Pext_ty _ | Pcstr_ty _ | Pdot _), Pident _)
-  | ((Papply _ | Pext_ty _ | Pcstr_ty _) , Pdot _)
-  | ((Papply _ | Pext_ty _), Pcstr_ty _)
-  | (Papply _, Pext_ty _)
+  | ((Pextra_ty _ | Papply _ | Pdot _), Pident _)
+  | ((Pextra_ty _ | Papply _) , Pdot _)
+  | (Pextra_ty _, Papply _)
+    -> 1
+and compare_extra p1 p2
+  if p1 == p2 then 0
+  else match (p1, p2) with
+    (Pcstr_ty(p1, s1), Pcstr_ty(p2, s2)) ->
+      let h = compare p1 p2 in
+      if h <> 0 then h else String.compare s1 s2
+  | (Pext_ty p1, Pext_ty p2) -> compare p1 p2
+  | (Pcls p1, Pcls p2) -> compare p1 p2
+  | (Pcstr_ty _, (Pext_ty _ | Pcls _))
+  | (Pext_ty _, Pcls _)
+    -> -1
+  | ((Pcls _ | Pext_ty _), Pcstr_ty _)
+  | (Pcls _, Pext_ty _)
     -> 1
 
 let rec find_free_opt ids = function
