@@ -5372,6 +5372,7 @@ let nondep_cltype_declaration env ids decl =
       clty_variance = decl.clty_variance;
       clty_type = nondep_class_type env ids decl.clty_type;
       clty_path = decl.clty_path;
+      clty_ty = decl.clty_ty;
       clty_loc = decl.clty_loc;
       clty_attributes = decl.clty_attributes;
       clty_uid = decl.clty_uid;
