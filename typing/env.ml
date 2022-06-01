@@ -1144,7 +1144,7 @@ let rec find_type_data path env =
           | Pext_ty p ->
               let cda = find_extension p env in
               type_of_cstr path cda.cda_description
-          | Pcls p ->
+          | Pcls_ty p ->
               let clty = find_cltype p env in
               let decl = clty.clty_ty in
               {
@@ -1360,9 +1360,9 @@ let rec normalize_type_path oloc env path =
       | Pext_ty p ->
           let p2 = normalize_extension_path oloc env p in
           if p == p2 then path else Pextra_ty (Pext_ty p2)
-      | Pcls p ->
+      | Pcls_ty p ->
           let p2 = normalize_extension_path oloc env p in
-          if p == p2 then path else Pextra_ty (Pcls p2)
+          if p == p2 then path else Pextra_ty (Pcls_ty p2)
     end
 
 let rec normalize_modtype_path env path =

@@ -395,8 +395,8 @@ let rec rewrite_double_underscore_paths env p =
           Pcstr_ty (rewrite_double_underscore_paths env p, s)
       | Pext_ty p ->
           Pext_ty (rewrite_double_underscore_paths env p)
-      | Pcls p ->
-          Pcls (rewrite_double_underscore_paths env p)
+      | Pcls_ty p ->
+          Pcls_ty (rewrite_double_underscore_paths env p)
     end
   | Pident id ->
     let name = Ident.name id in
@@ -438,7 +438,7 @@ let rec tree_of_path namespace = function
           Oide_dot (tree_of_path Type p, s)
       | Pext_ty p ->
           tree_of_path Other p
-      | Pcls p ->
+      | Pcls_ty p ->
           tree_of_path Class_type p
     end
 
@@ -685,7 +685,7 @@ let rec path_size = function
       match p with
         Pcstr_ty (p, _) ->
           let (l, b) = path_size p in (1+l, b)
-      | Pext_ty p | Pcls p -> path_size p
+      | Pext_ty p | Pcls_ty p -> path_size p
     end
 
 let same_printing_env env =
@@ -741,7 +741,7 @@ let rec lid_of_path = function
       match p with
         Path.Pcstr_ty (p1, s) ->
           Longident.Ldot (lid_of_path p1, s)
-      | Path.Pext_ty p | Path.Pcls p -> lid_of_path p
+      | Path.Pext_ty p | Path.Pcls_ty p -> lid_of_path p
     end
 
 let is_unambiguous path env =

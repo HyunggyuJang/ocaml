@@ -1589,15 +1589,15 @@ let class_infos define_class kind
     with Ctype.Unify _ ->
       raise(Error(cl.pci_loc, env,
             Bad_parameters (ty_id,
-                            Ctype.newconstr (Path.Pextra_ty (Path.Pcls (Path.Pident ty_id)))
+                            Ctype.newconstr (Path.Pextra_ty (Path.Pcls_ty (Path.Pident ty_id)))
                                             cl_params,
-                            Ctype.newconstr (Path.Pextra_ty (Path.Pcls (Path.Pident ty_id)))
+                            Ctype.newconstr (Path.Pextra_ty (Path.Pcls_ty (Path.Pident ty_id)))
                                             cl_params')))
     end;
     begin try
       Ctype.unify env ty cl_ty
     with Ctype.Unify _ ->
-      let constr = Ctype.newconstr (Path.Pextra_ty (Path.Pcls (Path.Pident ty_id))) params in
+      let constr = Ctype.newconstr (Path.Pextra_ty (Path.Pcls_ty (Path.Pident ty_id))) params in
       raise(Error(cl.pci_loc, env, Abbrev_type_clash (constr, ty, cl_ty)))
     end
   end;

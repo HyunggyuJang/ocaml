@@ -103,7 +103,7 @@ let rec lident_of_path = function
   | Path.Pextra_ty p -> begin
       match p with
         Path.Pcstr_ty (p, s) -> Longident.Ldot (lident_of_path p, s)
-      | Path.Pext_ty p | Path.Pcls p -> lident_of_path p
+      | Path.Pext_ty p | Path.Pcls_ty p -> lident_of_path p
     end
 
 let map_loc sub {loc; txt} = {loc = sub.location sub loc; txt}

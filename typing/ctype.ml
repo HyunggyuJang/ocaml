@@ -196,7 +196,7 @@ let restore_global_level gl =
 
 let is_object_type path =
   match path with
-  | Path.Pextra_ty (Path.Pcls _) -> true
+  | Path.Pextra_ty (Path.Pcls_ty _) -> true
   | _ -> false
 
 (**** Control tracing of GADT instances *)

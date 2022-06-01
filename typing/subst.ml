@@ -131,7 +131,7 @@ let rec type_path s path =
          match p with
          | Pcstr_ty(p, n) -> Pcstr_ty(type_path s p, n)
          | Pext_ty p -> Pext_ty (extension_path s p)
-         | Pcls p -> Pcls (extension_path s p)
+         | Pcls_ty p -> Pcls_ty (extension_path s p)
        end
 
 let to_subst_by_type_function s p =

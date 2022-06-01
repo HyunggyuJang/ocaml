@@ -89,7 +89,7 @@ let rec path_concat head p =
       match p with
         Pcstr_ty (pre, s) -> Pcstr_ty (path_concat head pre, s)
       | Pext_ty p -> Pext_ty (path_concat head p)
-      | Pcls p -> Pcls (path_concat head p)
+      | Pcls_ty p -> Pcls_ty (path_concat head p)
     end
 
 (* Extract a signature from a module type *)

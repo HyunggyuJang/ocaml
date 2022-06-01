@@ -56,7 +56,7 @@ let rec fmt_path_aux f x =
   | Path.Pextra_ty p -> begin
       match p with
         Path.Pcstr_ty (y, s) -> fprintf f "%a.%s" fmt_path_aux y s
-      | Path.Pext_ty y | Path.Pcls y -> fmt_path_aux f y
+      | Path.Pext_ty y | Path.Pcls_ty y -> fmt_path_aux f y
     end
 
 let fmt_path f x = fprintf f "\"%a\"" fmt_path_aux x

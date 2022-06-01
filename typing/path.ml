@@ -17,17 +17,11 @@ type t =
     Pident of Ident.t
   | Pdot of t * string
   | Papply of t * t
-  | Pextra_ty of extra_ty
+  | Pextra_ty of t * extra_ty
 and extra_ty =
-  | Pcstr_ty of t * string
-  | Pext_ty of t
-  | Pcls of t
-
-let path_of_extra_ty = function
-  | Pcstr_ty (p, _)
-  | Pext_ty p
-  | Pcls p
-    -> p
+  | Pcstr_ty of string
+  | Pext_ty
+  | Pcls_ty
 
 let rec same p1 p2 =
   p1 == p2
@@ -45,7 +39,7 @@ and same_extra p1 p2 =
     (Pcstr_ty(p1, s1), Pcstr_ty(p2, s2)) ->
     s1 = s2 && same p1 p2
   | (Pext_ty p1, Pext_ty p2) -> same p1 p2
-  | (Pcls p1, Pcls p2) -> same p1 p2
+  | (Pcls_ty p1, Pcls_ty p2) -> same p1 p2
   | (_, _) -> false
 
 let rec compare p1 p2 =
@@ -74,12 +68,12 @@ and compare_extra p1 p2 =
       let h = compare p1 p2 in
       if h <> 0 then h else String.compare s1 s2
   | (Pext_ty p1, Pext_ty p2) -> compare p1 p2
-  | (Pcls p1, Pcls p2) -> compare p1 p2
-  | (Pcstr_ty _, (Pext_ty _ | Pcls _))
-  | (Pext_ty _, Pcls _)
+  | (Pcls_ty p1, Pcls_ty p2) -> compare p1 p2
+  | (Pcstr_ty _, (Pext_ty _ | Pcls_ty _))
+  | (Pext_ty _, Pcls_ty _)
     -> -1
-  | ((Pcls _ | Pext_ty _), Pcstr_ty _)
-  | (Pcls _, Pext_ty _)
+  | ((Pcls_ty _ | Pext_ty _), Pcstr_ty _)
+  | (Pcls_ty _, Pext_ty _)
     -> 1
 
 let rec find_free_opt ids = function
@@ -114,7 +108,7 @@ let rec name ?(paren=kfalse) = function
       match p with
         Pcstr_ty(p, s) ->
           name ~paren p ^ if paren s then ".( " ^ s ^ " )" else "." ^ s
-      | Pext_ty p | Pcls p -> name ~paren p
+      | Pext_ty p | Pcls_ty p -> name ~paren p
 
 
 let rec print ppf = function
@@ -124,7 +118,7 @@ let rec print ppf = function
   | Pextra_ty p ->
       match p with
         Pcstr_ty(p, s) -> Format.fprintf ppf "%a.%s" print p s
-      | Pext_ty p | Pcls p -> print ppf p
+      | Pext_ty p | Pcls_ty p -> print ppf p
 
 let rec head = function
     Pident id -> id
@@ -140,7 +134,7 @@ let flatten =
     | Pextra_ty p -> begin
         match p with
           Pcstr_ty(p, s) -> flatten (s :: acc) p
-        | Pext_ty p | Pcls p -> flatten acc p
+        | Pext_ty p | Pcls_ty p -> flatten acc p
       end
   in
   fun t -> flatten [] t
@@ -161,7 +155,7 @@ let rec last = function
   | Pextra_ty p ->
       match p with
         Pcstr_ty(_, s) -> s
-      | Pext_ty p | Pcls p -> last p
+      | Pext_ty p | Pcls_ty p -> last p
 
 let is_constructor_typath p =
   match p with

@@ -23,7 +23,7 @@ type t =
 and extra_ty =
   | Pcstr_ty of t * string
   | Pext_ty of t
-  | Pcls of t
+  | Pcls_ty of t
 
 val path_of_extra_ty: extra_ty -> t
 val same: t -> t -> bool

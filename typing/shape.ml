@@ -464,7 +464,7 @@ let of_path ~find_shape ~namespace =
         match p with
           Pcstr_ty (path, _) -> aux Type path
         | Pext_ty path -> aux Extension_constructor path
-        | Pcls path -> aux Class_type path
+        | Pcls_ty path -> aux Class_type path
       end
   in
   aux namespace
