@@ -796,22 +796,66 @@ let rec update_level env level expand ty =
         iter_type_expr (update_level env level expand) ty
   end
 
+let try_update_level env level ty =
+  update_level env level false ty
+
+let update_level_expand env level ty =
+  update_level env level true ty
+
 (* First try without expanding, then expand everything,
    to avoid combinatorial blow-up *)
 let update_level env level ty =
   if get_level ty > level then begin
     let snap = snapshot () in
     try
-      update_level env level false ty
+      try_update_level env level ty
     with Escape _ ->
       backtrack snap;
-      update_level env level true ty
+      update_level_expand env level ty
   end
 
 let update_level_for tr_exn env level ty =
   try
     update_level env level ty
   with Escape e -> raise_for tr_exn (Escape e)
+
+(* Roll back expansions *)
+
+let rec unexpand_type_expr env visited ty =
+  if TypeSet.mem ty !visited then () else begin
+    visited := TypeSet.add ty !visited;
+    let lv = get_level ty in
+    let tt = Transient_expr.coerce ty in
+    match tt.desc with
+    | Texpand (ty', path, args) ->
+        if lv < Path.scope path then
+          Transient_expr.set_desc tt (Tlink ty')
+        else begin
+          let snap = Btype.snapshot () in
+          try
+            let sc = get_scope ty in
+            let tc = newgenty (Tconstr (path, args, ref Mnil)) in
+            try_update_level env lv tc;
+            update_scope sc tc;
+            if is_Tconstr tc then begin
+              let tt' = Transient_expr.repr tc in
+              Transient_expr.set_desc tt tt'.desc;
+              Transient_expr.set_abbrevs tt tt'.abbrevs;
+              Transient_expr.set_level tt lv;
+              Transient_expr.set_scope tt sc;
+            end else
+              Transient_expr.set_desc tt (Tlink ty')
+          with Escape _ ->
+            Btype.backtrack snap;
+            Transient_expr.set_desc tt (Tlink ty')
+        end;
+        iter_type_expr (unexpand_type_expr env visited) ty
+    | _ ->
+        (* There may still be abbrevs, but we ignore them for now *)
+        iter_type_expr (unexpand_type_expr env visited) ty
+  end
+
+let unexpand_type_expr env ty = unexpand_type_expr env (ref TypeSet.empty) ty
 
 (* Lower level of type variables inside contravariant branches *)
 

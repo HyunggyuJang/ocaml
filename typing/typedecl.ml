@@ -982,9 +982,9 @@ let transl_type_decl env rec_flag sdecl_list =
   (* Check re-exportation *)
   List.iter2 (check_abbrev final_env) sdecl_list decls;
   (* Unexpand abbreviations *)
-  (* let it = { Btype.type_iterators with
-             it_type_expr = fun _ -> Btype.unexpand_type_expr } in
-  List.iter (fun (_, decl) -> it.it_type_declaration it decl) decls; *)
+  let it = { Btype.type_iterators with
+             it_type_expr = fun _ -> Ctype.unexpand_type_expr env } in
+  List.iter (fun (_, decl) -> it.it_type_declaration it decl) decls;
   (* Keep original declaration *)
   let final_decls =
     List.map2

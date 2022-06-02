@@ -139,6 +139,9 @@ val check_scope_escape : Env.t -> int -> type_expr -> unit
            to the level [lvl] without any scope escape.
            Raises [Escape] otherwise *)
 
+val unexpand_type_expr: Env.t -> type_expr -> unit
+        (* Roll back [Texpand] nodes, adjusting levels and scopes as needed *)
+
 val instance: ?partial:bool -> type_expr -> type_expr
         (* Take an instance of a type scheme *)
         (* partial=None  -> normal
