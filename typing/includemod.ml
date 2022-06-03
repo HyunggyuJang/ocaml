@@ -484,6 +484,9 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
       end
   | (Mty_signature sig1, Mty_signature sig2) ->
       begin match
+        Format.eprintf "@[Inclusion of@ %a@ in@ %a@]@."
+          Printtyp.raw_signature sig1
+          Printtyp.raw_signature sig2;
         signatures ~in_eq ~loc env ~mark subst sig1 sig2 orig_shape
       with
       | Ok _ as ok -> ok
