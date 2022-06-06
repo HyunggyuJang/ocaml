@@ -460,11 +460,11 @@ let of_path ~find_shape ~namespace =
     | Pident id -> find_shape ns id
     | Pdot (path, name) -> proj (aux Module path) (name, ns)
     | Papply (p1, p2) -> app (aux Module p1) ~arg:(aux Module p2)
-    | Pextra_ty p -> begin
-        match p with
-          Pcstr_ty (path, _) -> aux Type path
-        | Pext_ty path -> aux Extension_constructor path
-        | Pcls_ty path -> aux Class_type path
+    | Pextra_ty (path, extra) -> begin
+        match extra with
+          Pcstr_ty _ -> aux Type path
+        | Pext_ty -> aux Extension_constructor path
+        | Pcls_ty -> aux Class_type path
       end
   in
   aux namespace

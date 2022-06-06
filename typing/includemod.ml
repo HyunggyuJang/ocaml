@@ -905,9 +905,8 @@ and check_modtype_equiv ~in_eq ~loc env ~mark mty1 mty2 =
 let can_alias env path =
   let rec no_apply = function
     | Path.Pident _ -> true
-    | Path.Pdot(p, _) -> no_apply p
+    | Path.Pdot(p, _) | Path.Pextra_ty (p, _) -> no_apply p
     | Path.Papply _ -> false
-    | Path.Pextra_ty p -> no_apply (Path.path_of_extra_ty p)
   in
   no_apply path && not (Env.is_functor_arg path env)
 

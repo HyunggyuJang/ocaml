@@ -389,15 +389,8 @@ let rec rewrite_double_underscore_paths env p =
   | Papply (a, b) ->
     Papply (rewrite_double_underscore_paths env a,
             rewrite_double_underscore_paths env b)
-  | Pextra_ty p -> Pextra_ty begin
-      match p with
-        Pcstr_ty (p, s) ->
-          Pcstr_ty (rewrite_double_underscore_paths env p, s)
-      | Pext_ty p ->
-          Pext_ty (rewrite_double_underscore_paths env p)
-      | Pcls_ty p ->
-          Pcls_ty (rewrite_double_underscore_paths env p)
-    end
+  | Pextra_ty (p, extra) ->
+    Pextra_ty (rewrite_double_underscore_paths env p, extra)
   | Pident id ->
     let name = Ident.name id in
     match find_double_underscore name with
@@ -432,13 +425,13 @@ let rec tree_of_path namespace = function
       Oide_dot (tree_of_path Module p, s)
   | Papply(p1, p2) ->
       Oide_apply (tree_of_path Module p1, tree_of_path Module p2)
-  | Pextra_ty p -> begin
-      match p with
-        Pcstr_ty(p, s) ->
+  | Pextra_ty (p, extra) -> begin
+      match extra with
+        Pcstr_ty s ->
           Oide_dot (tree_of_path Type p, s)
-      | Pext_ty p ->
+      | Pext_ty ->
           tree_of_path Other p
-      | Pcls_ty p ->
+      | Pcls_ty ->
           tree_of_path Class_type p
     end
 
@@ -676,17 +669,12 @@ let penalty s =
 let rec path_size = function
     Pident id ->
       penalty (Ident.name id), -Ident.scope id
-  | Pdot (p, _) ->
+  | Pdot (p, _) | Pextra_ty (p, Pcstr_ty _) ->
       let (l, b) = path_size p in (1+l, b)
   | Papply (p1, p2) ->
       let (l, b) = path_size p1 in
       (l + fst (path_size p2), b)
-  | Pextra_ty p -> begin
-      match p with
-        Pcstr_ty (p, _) ->
-          let (l, b) = path_size p in (1+l, b)
-      | Pext_ty p | Pcls_ty p -> path_size p
-    end
+  | Pextra_ty (p, _) -> path_size p
 
 let same_printing_env env =
   let used_pers = Env.used_persistent () in
@@ -733,16 +721,11 @@ let wrap_printing_env ~error env f =
 let rec lid_of_path = function
     Path.Pident id ->
       Longident.Lident (Ident.name id)
-  | Path.Pdot (p1, s) ->
+  | Path.Pdot (p1, s) | Path.Pextra_ty (p1, Pcstr_ty s)  ->
       Longident.Ldot (lid_of_path p1, s)
   | Path.Papply (p1, p2) ->
       Longident.Lapply (lid_of_path p1, lid_of_path p2)
-  | Path.Pextra_ty p -> begin
-      match p with
-        Path.Pcstr_ty (p1, s) ->
-          Longident.Ldot (lid_of_path p1, s)
-      | Path.Pext_ty p | Path.Pcls_ty p -> lid_of_path p
-    end
+  | Path.Pextra_ty (p, _) -> lid_of_path p
 
 let is_unambiguous path env =
   let l = Env.find_shadowed_types path env in

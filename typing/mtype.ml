@@ -411,17 +411,15 @@ let contains_type env mty =
 
 let rec get_prefixes = function
   | Pident _ -> Path.Set.empty
-  | Pdot (p, _) | Papply (p, _) -> Path.Set.add p (get_prefixes p)
-  | Pextra_ty p -> get_prefixes (path_of_extra_ty p)
+  | Pdot (p, _) | Papply (p, _) | Pextra_ty (p, _) -> Path.Set.add p (get_prefixes p)
 
 let rec get_arg_paths = function
   | Pident _ -> Path.Set.empty
-  | Pdot (p, _) -> get_arg_paths p
+  | Pdot (p, _) | Pextra_ty (p, _) -> get_arg_paths p
   | Papply (p1, p2) ->
       Path.Set.add p2
         (Path.Set.union (get_prefixes p2)
            (Path.Set.union (get_arg_paths p1) (get_arg_paths p2)))
-  | Pextra_ty p -> get_arg_paths (path_of_extra_ty p)
 
 let rec rollback_path subst p =
   try Pident (Path.Map.find p subst)

@@ -127,12 +127,11 @@ let rec type_path s path =
         Pdot(module_path s p, n)
      | Papply _ ->
         fatal_error "Subst.type_path"
-     | Pextra_ty p -> Pextra_ty begin
-         match p with
-         | Pcstr_ty(p, n) -> Pcstr_ty(type_path s p, n)
-         | Pext_ty p -> Pext_ty (extension_path s p)
-         | Pcls_ty p -> Pcls_ty (extension_path s p)
-       end
+     | Pextra_ty (p, extra) ->
+         match extra with
+         | Pcstr_ty _ -> Pextra_ty (type_path s p, extra)
+         | Pext_ty -> Pextra_ty ((extension_path s p), extra)
+         | _ -> fatal_error "Subst.type_path"
 
 let to_subst_by_type_function s p =
   match Path.Map.find p s.types with

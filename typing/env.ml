@@ -1130,9 +1130,9 @@ let rec find_type_data path env =
           let sc = find_structure_components p env in
           NameMap.find s sc.comp_types
       | Papply _ -> raise Not_found
-      | Pextra_ty p -> begin
-          match p with
-          | Pcstr_ty(p, s) ->
+      | Pextra_ty (p, extra) -> begin
+          match extra with
+          | Pcstr_ty s ->
               let tda = find_type_data p env in
               let cstr =
                 match tda.tda_descriptions with
@@ -1141,10 +1141,10 @@ let rec find_type_data path env =
                 | Type_record _ | Type_abstract | Type_open -> raise Not_found
               in
               type_of_cstr path cstr
-          | Pext_ty p ->
+          | Pext_ty ->
               let cda = find_extension p env in
               type_of_cstr path cda.cda_description
-          | Pcls_ty p ->
+          | Pcls_ty ->
               let clty = find_cltype p env in
               let decl = clty.clty_ty in
               {
@@ -1352,17 +1352,16 @@ let rec normalize_type_path oloc env path =
       if p == p2 then path else Pdot (p2, s)
   | Papply _ ->
       assert false
-  | Pextra_ty p -> begin
-      match p with
-      | Pcstr_ty(p, s) ->
+  | Pextra_ty (p, extra) -> begin
+      match extra with
+      | Pcstr_ty _ ->
           let p2 = normalize_type_path oloc env p in
-          if p == p2 then path else Pextra_ty (Pcstr_ty (p2, s))
-      | Pext_ty p ->
+          if p == p2 then path else Pextra_ty (p2, extra)
+      | Pext_ty ->
           let p2 = normalize_extension_path oloc env p in
-          if p == p2 then path else Pextra_ty (Pext_ty p2)
-      | Pcls_ty p ->
-          let p2 = normalize_extension_path oloc env p in
-          if p == p2 then path else Pextra_ty (Pcls_ty p2)
+          if p == p2 then path else Pextra_ty (p2, extra)
+      | Pcls_ty ->
+          assert false
     end
 
 let rec normalize_modtype_path env path =
@@ -1423,9 +1422,8 @@ let rec is_functor_arg path env =
       begin try Ident.find_same id env.functor_args; true
       with Not_found -> false
       end
-  | Pdot (p, _) -> is_functor_arg p env
+  | Pdot (p, _) | Pextra_ty (p, _) -> is_functor_arg p env
   | Papply _ -> true
-  | Pextra_ty p -> is_functor_arg (path_of_extra_ty p) env
 
 (* Copying types associated with values *)
 

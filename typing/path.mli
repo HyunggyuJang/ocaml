@@ -19,15 +19,13 @@ type t =
     Pident of Ident.t
   | Pdot of t * string
   | Papply of t * t
-  | Pextra_ty of extra_ty
+  | Pextra_ty of t * extra_ty
 and extra_ty =
-  | Pcstr_ty of t * string
-  | Pext_ty of t
-  | Pcls_ty of t
+  | Pcstr_ty of string
+  | Pext_ty
+  | Pcls_ty
 
-val path_of_extra_ty: extra_ty -> t
 val same: t -> t -> bool
-val same_extra: extra_ty -> extra_ty -> bool
 val compare: t -> t -> int
 val compare_extra: extra_ty -> extra_ty -> int
 val find_free_opt: Ident.t list -> t -> Ident.t option

@@ -53,7 +53,6 @@ type 'a full_class = {
   cltydef: class_type_declaration;
   obj_id: Ident.t;
   obj_abbr: type_declaration;
-  cl_abbr: type_declaration;
   arity: int;
   pub_meths: string list;
   coe: Warnings.loc list;
@@ -1412,14 +1411,13 @@ let rec approx_description ct =
 
 (*******************************)
 
-let temp_abbrev loc env id arity uid =
+let temp_abbrev loc arity uid =
   let params = ref [] in
   for _i = 1 to arity do
     params := Ctype.newvar () :: !params
   done;
   let ty = Ctype.newobj (Ctype.newvar ()) in
-  let env =
-    Env.add_type ~check:true id
+  let ty_td =
       {type_params = !params;
        type_arity = arity;
        type_kind = Type_abstract;
@@ -1435,16 +1433,16 @@ let temp_abbrev loc env id arity uid =
        type_unboxed_default = false;
        type_uid = uid;
       }
-      env
   in
-  (!params, ty, env)
+  (!params, ty, ty_td)
 
 let initial_env define_class approx
     (res, env) (cl, id, ty_id, obj_id, uid) =
   (* Temporary abbreviations *)
   let arity = List.length cl.pci_params in
-  let (obj_params, obj_ty, env) = temp_abbrev cl.pci_loc env obj_id arity uid in
-  let (cl_params, cl_ty, env) = temp_abbrev cl.pci_loc env ty_id arity uid in
+  let (obj_params, obj_ty, obj_td) = temp_abbrev cl.pci_loc arity uid in
+  let env = Env.add_type ~check:true obj_id obj_td env in
+  let (cl_params, cl_ty, cl_td) = temp_abbrev cl.pci_loc arity uid in
 
   (* Temporary type for the class constructor *)
   if !Clflags.principal then Ctype.begin_def ();
@@ -1469,29 +1467,13 @@ let initial_env define_class approx
      cty_uid = uid;
     }
   in
-  let dummy_clty_ty =
-    {type_params = cl_params;
-     type_arity = arity;
-     type_kind = Type_abstract;
-     type_private = Public;
-     type_manifest = Some cl_ty;
-     type_variance = Variance.unknown_signature ~injective:false ~arity;
-     type_separability = Types.Separability.default_signature ~arity;
-     type_is_newtype = false;
-     type_expansion_scope = Btype.lowest_level;
-     type_loc = cl.pci_loc;
-     type_attributes = [];
-     type_immediate = Unknown;
-     type_unboxed_default = false;
-     type_uid = dummy_class.cty_uid;
-    } in
   let env =
     Env.add_cltype ty_id
       {clty_params = [];            (* Dummy value *)
        clty_variance = [];
        clty_type = dummy_cty;       (* Dummy value *)
        clty_path = unbound_class;
-       clty_ty = dummy_clty_ty;      (* Dummy value *)
+       clty_ty = cl_td;      (* Dummy value *)
        clty_loc = Location.none;
        clty_attributes = [];
        clty_uid = uid;
@@ -1505,16 +1487,16 @@ let initial_env define_class approx
   in
   ((cl, id, ty_id,
     obj_id, obj_params, obj_ty,
-    cl_params, cl_ty,
-    constr_type, dummy_clty_ty,
+    cl_params, cl_ty, cl_td,
+    constr_type,
     dummy_class)::res,
    env)
 
 let class_infos define_class kind
     (cl, id, ty_id,
      obj_id, obj_params, obj_ty,
-     cl_params, cl_ty,
-     constr_type, dummy_clty_ty,
+     cl_params, cl_ty, cl_td,
+     constr_type,
      dummy_class)
     (res, env) =
 
@@ -1589,15 +1571,15 @@ let class_infos define_class kind
     with Ctype.Unify _ ->
       raise(Error(cl.pci_loc, env,
             Bad_parameters (ty_id,
-                            Ctype.newconstr (Path.Pextra_ty (Path.Pcls_ty (Path.Pident ty_id)))
+                            Ctype.newconstr Path.(Pextra_ty ((Pident ty_id), Pcls_ty))
                                             cl_params,
-                            Ctype.newconstr (Path.Pextra_ty (Path.Pcls_ty (Path.Pident ty_id)))
+                            Ctype.newconstr Path.(Pextra_ty ((Pident ty_id), Pcls_ty))
                                             cl_params')))
     end;
     begin try
       Ctype.unify env ty cl_ty
     with Ctype.Unify _ ->
-      let constr = Ctype.newconstr (Path.Pextra_ty (Path.Pcls_ty (Path.Pident ty_id))) params in
+      let constr = Ctype.newconstr Path.(Pextra_ty ((Pident ty_id), Pcls_ty)) params in
       raise(Error(cl.pci_loc, env, Abbrev_type_clash (constr, ty, cl_ty)))
     end
   end;
@@ -1619,7 +1601,7 @@ let class_infos define_class kind
     {clty_params = params; clty_type = Btype.class_body typ;
      clty_variance = cty_variance;
      clty_path = Path.Pident obj_id;
-     clty_ty = dummy_clty_ty;
+     clty_ty = cl_td;
      clty_loc = cl.pci_loc;
      clty_attributes = cl.pci_attributes;
      clty_uid = dummy_class.cty_uid;
@@ -1688,22 +1670,9 @@ let class_infos define_class kind
   in
   Ctype.set_object_name obj_id cl_params cl_ty;
   let cl_abbr =
-    let arity = List.length cl_params in
-    {
+    { cl_td with
      type_params = cl_params;
-     type_arity = arity;
-     type_kind = Type_abstract;
-     type_private = Public;
-     type_manifest = Some cl_ty;
-     type_variance = Variance.unknown_signature ~injective:false ~arity;
-     type_separability = Types.Separability.default_signature ~arity;
-     type_is_newtype = false;
-     type_expansion_scope = Btype.lowest_level;
-     type_loc = cl.pci_loc;
-     type_attributes = []; (* or keep attrs from cl? *)
-     type_immediate = Unknown;
-     type_unboxed_default = false;
-     type_uid = dummy_class.cty_uid;
+     type_manifest = Some cl_ty
     }
   in
   let cltydef =
@@ -1754,7 +1723,7 @@ let final_decl env define_class
       in
       raise(Error(cl.pci_loc, env, Unbound_type_var(printer, reason)))
   end;
-  { id; clty; ty_id; cltydef; obj_id; obj_abbr; cl_abbr; arity;
+  { id; clty; ty_id; cltydef; obj_id; obj_abbr; arity;
     pub_meths; coe;
     id_loc = cl.pci_name;
     req = { ci_loc = cl.pci_loc;
@@ -1776,8 +1745,8 @@ let final_decl env define_class
 let class_infos define_class kind
     (cl, id, ty_id,
      obj_id, obj_params, obj_ty,
-     cl_params, cl_ty,
-     constr_type, dummy_clty_ty,
+     cl_params, cl_ty, cl_td,
+     constr_type,
      dummy_class)
     (res, env) =
   Builtin_attributes.warning_scope cl.pci_attributes
@@ -1785,17 +1754,17 @@ let class_infos define_class kind
        class_infos define_class kind
          (cl, id, ty_id,
           obj_id, obj_params, obj_ty,
-          cl_params, cl_ty,
-          constr_type, dummy_clty_ty,
+          cl_params, cl_ty, cl_td,
+          constr_type,
           dummy_class)
          (res, env)
     )
 
-let extract_type_decls { clty; cltydef; obj_id; obj_abbr; cl_abbr; req} decls =
-  (obj_id, obj_abbr, cl_abbr, clty, cltydef, req) :: decls
+let extract_type_decls { clty; cltydef; obj_id; obj_abbr; req} decls =
+  (obj_id, obj_abbr, clty, cltydef, req) :: decls
 
-let merge_type_decls decl (obj_abbr, cl_abbr, clty, cltydef) =
-  {decl with obj_abbr; cl_abbr; clty; cltydef}
+let merge_type_decls decl (obj_abbr, clty, cltydef) =
+  {decl with obj_abbr; clty; cltydef}
 
 let final_env define_class env { id; clty; ty_id; cltydef; obj_id; obj_abbr; } =
   (* Add definitions after cleaning them *)
@@ -1808,7 +1777,8 @@ let final_env define_class env { id; clty; ty_id; cltydef; obj_id; obj_abbr; } =
 
 (* Check that #c is coercible to c if there is a self-coercion *)
 let check_coercions env { id; id_loc; clty; ty_id; cltydef; obj_id; obj_abbr;
-    cl_abbr; arity; pub_meths; coe; req } =
+    arity; pub_meths; coe; req } =
+  let cl_abbr = cltydef.clty_ty in
   begin match coe with [] -> ()
   | loc :: _ ->
       let cl_ty, obj_ty =
