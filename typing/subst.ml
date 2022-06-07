@@ -130,8 +130,7 @@ let rec type_path s path =
      | Pextra_ty (p, extra) ->
          match extra with
          | Pcstr_ty _ -> Pextra_ty (type_path s p, extra)
-         | Pext_ty -> Pextra_ty ((extension_path s p), extra)
-         | _ -> fatal_error "Subst.type_path"
+         | Pext_ty | Pcls_ty -> Pextra_ty (extension_path s p, extra)
 
 let to_subst_by_type_function s p =
   match Path.Map.find p s.types with

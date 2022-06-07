@@ -725,7 +725,8 @@ let rec lid_of_path = function
       Longident.Ldot (lid_of_path p1, s)
   | Path.Papply (p1, p2) ->
       Longident.Lapply (lid_of_path p1, lid_of_path p2)
-  | Path.Pextra_ty (p, _) -> lid_of_path p
+  | Path.Pextra_ty (p, Pext_ty) -> lid_of_path p
+  | Path.Pextra_ty (p, Pcls_ty) -> Longident.Ldot (lid_of_path p, "#")
 
 let is_unambiguous path env =
   let l = Env.find_shadowed_types path env in

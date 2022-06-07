@@ -85,7 +85,7 @@ let rec path_concat head p =
     Pident tail -> Pdot (Pident head, Ident.name tail)
   | Pdot (pre, s) -> Pdot (path_concat head pre, s)
   | Papply _ -> assert false
-  | Pextra_ty (p, extra) -> Pextra_ty ((path_concat head p), extra)
+  | Pextra_ty (p, extra) -> Pextra_ty (path_concat head p, extra)
 
 (* Extract a signature from a module type *)
 

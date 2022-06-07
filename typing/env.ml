@@ -1305,9 +1305,9 @@ let rec normalize_module_path lax env = function
       let p2' = normalize_module_path true env p2 in
       if p1 == p1' && p2 == p2' then expand_module_path lax env path
       else expand_module_path lax env (Papply(p1', p2'))
-  | Pextra_ty _ as path -> path
   | Pident _ as path ->
       expand_module_path lax env path
+  | Pextra_ty _ -> assert false
 
 and expand_module_path lax env path =
   try match find_module_lazy ~alias:true path env with
@@ -1331,38 +1331,20 @@ let normalize_module_path oloc env path =
         error (Missing_module(loc, path,
                               normalize_module_path true env path))
 
-let normalize_path_prefix oloc env path =
+let rec normalize_path_prefix oloc env path =
   match path with
   | Pdot(p, s) ->
       let p2 = normalize_module_path oloc env p in
       if p == p2 then path else Pdot(p2, s)
   | Pident _ ->
       path
-  | Papply _ | Pextra_ty _ ->
+  | Pextra_ty (p, extra) ->
+      let p2 = normalize_path_prefix oloc env p in
+      if p == p2 then path else Pextra_ty (p2, extra)
+  | Papply _  ->
       assert false
 
-let normalize_extension_path = normalize_path_prefix
-
-let rec normalize_type_path oloc env path =
-  match path with
-  | Pident _ ->
-      path
-  | Pdot(p, s) ->
-      let p2 = normalize_module_path oloc env p in
-      if p == p2 then path else Pdot (p2, s)
-  | Papply _ ->
-      assert false
-  | Pextra_ty (p, extra) -> begin
-      match extra with
-      | Pcstr_ty _ ->
-          let p2 = normalize_type_path oloc env p in
-          if p == p2 then path else Pextra_ty (p2, extra)
-      | Pext_ty ->
-          let p2 = normalize_extension_path oloc env p in
-          if p == p2 then path else Pextra_ty (p2, extra)
-      | Pcls_ty ->
-          assert false
-    end
+let normalize_type_path = normalize_path_prefix
 
 let rec normalize_modtype_path env path =
   let path = normalize_path_prefix None env path in
