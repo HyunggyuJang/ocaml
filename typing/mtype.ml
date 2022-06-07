@@ -411,7 +411,8 @@ let contains_type env mty =
 
 let rec get_prefixes = function
   | Pident _ -> Path.Set.empty
-  | Pdot (p, _) | Papply (p, _) | Pextra_ty (p, _) -> Path.Set.add p (get_prefixes p)
+  | Pdot (p, _) | Papply (p, _) | Pextra_ty (p, _)
+    -> Path.Set.add p (get_prefixes p)
 
 let rec get_arg_paths = function
   | Pident _ -> Path.Set.empty
@@ -431,7 +432,8 @@ let rec rollback_path subst p =
         if Path.same p1 p1' then p else rollback_path subst (Pdot (p1', s))
     | Pextra_ty (p1, extra) ->
         let p1' = rollback_path subst p1 in
-        if Path.same p1 p1' then p else rollback_path subst (Pextra_ty (p1', extra))
+        if Path.same p1 p1' then p
+        else rollback_path subst (Pextra_ty (p1', extra))
 
 let rec collect_ids subst bindings p =
     begin match rollback_path subst p with

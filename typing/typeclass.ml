@@ -1570,16 +1570,18 @@ let class_infos define_class kind
       List.iter2 (Ctype.unify env) cl_params cl_params'
     with Ctype.Unify _ ->
       raise(Error(cl.pci_loc, env,
-            Bad_parameters (ty_id,
-                            Ctype.newconstr Path.(Pextra_ty ((Pident ty_id), Pcls_ty))
-                                            cl_params,
-                            Ctype.newconstr Path.(Pextra_ty ((Pident ty_id), Pcls_ty))
-                                            cl_params')))
+        Bad_parameters (
+          ty_id,
+          Ctype.newconstr Path.(Pextra_ty ((Pident ty_id), Pcls_ty))
+            cl_params,
+          Ctype.newconstr Path.(Pextra_ty ((Pident ty_id), Pcls_ty))
+            cl_params')))
     end;
     begin try
       Ctype.unify env ty cl_ty
     with Ctype.Unify _ ->
-      let constr = Ctype.newconstr Path.(Pextra_ty ((Pident ty_id), Pcls_ty)) params in
+      let constr =
+        Ctype.newconstr Path.(Pextra_ty ((Pident ty_id), Pcls_ty)) params in
       raise(Error(cl.pci_loc, env, Abbrev_type_clash (constr, ty, cl_ty)))
     end
   end;
