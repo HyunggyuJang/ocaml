@@ -22,6 +22,9 @@ Working version
 
 ### Internal/compiler-libs changes:
 
+- #11315: Encode inline record types and class types in Path.t
+  (Hyunggyu Jang, review by ??)
+
 ### Build system:
 
 ### Bug fixes:
