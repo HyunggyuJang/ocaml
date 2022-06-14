@@ -289,18 +289,9 @@ and transl_type_aux env policy styp =
             "old syntax for polymorphic variant type";
           ignore(Env.lookup_type ~loc:lid.loc lid.txt env);
           (path, decl,true)
-        with Not_found -> try
-          let lid2 =
-            match lid.txt with
-              Longident.Lident s     -> Longident.Lident ("#" ^ s)
-            | Longident.Ldot(r, s)   -> Longident.Ldot (r, "#" ^ s)
-            | Longident.Lapply(_, _) -> fatal_error "Typetexp.transl_type"
-          in
-          let path, decl = Env.find_type_by_name lid2 env in
-          ignore(Env.lookup_cltype ~loc:lid.loc lid.txt env);
-          (path, decl, false)
         with Not_found ->
-          ignore (Env.lookup_cltype ~loc:lid.loc lid.txt env); assert false
+          let path, decl = Env.lookup_cltype ~loc:lid.loc lid.txt env in
+          (Path.(Pextra_ty (path, Pcls_ty)), decl.clty_ty, false)
       in
       if List.length stl <> decl.type_arity then
         raise(Error(styp.ptyp_loc, env,
