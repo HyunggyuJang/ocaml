@@ -1088,7 +1088,9 @@ let rec copy ?partial ?keep_names scope ty =
           else generic_level
     in
     if forget <> generic_level then newty2 ~level:forget (Tvar None) else
-    let t = newstub ~scope:(get_scope ty) in
+    let ty_scope = get_scope ty in
+    let ty_expand = get_expand ty in
+    let t = newstub ~scope:ty_scope in
     For_copy.redirect_desc scope ty (Tsubst (t, None));
     let desc' =
       match desc with
@@ -1180,8 +1182,17 @@ let rec copy ?partial ?keep_names scope ty =
           Tobject (copy ty1, ref None)
       | _ -> copy_type_desc ?keep_names copy desc
     in
+    let t', desc' =
+      match ty_expand with
+        Some (path, args) ->
+          let args = List.map copy args in
+          let t' = new_scoped_ty ty_scope desc' in
+          (t', Texpand (t', path, args))
+      | None ->
+          (t, desc')
+    in
     Transient_expr.set_stub_desc t desc';
-    inherit_map_abbrevs ~from:ty ~into:t ~fpath:(fun x -> x) ~farg:copy;
+    inherit_map_abbrevs ~from:ty ~into:t' ~fpath:(fun x -> x) ~farg:copy;
     t
 
 (**** Variants of instantiations ****)
@@ -5182,14 +5193,19 @@ let rec nondep_type_rec ?(expand_private=false) env ids ty =
     if expand_private then try_expand_safe_opt env t
     else try_expand_safe env t
   in
-  match get_desc ty with
+  let desc =
+    match get_expand ty with
+      Some (path, tyl) -> Tconstr (path, tyl, ref Mnil)
+    | None -> get_desc ty
+  in
+  match desc with
     Tvar _ | Tunivar _ -> ty
   | _ -> try TypeHash.find nondep_hash ty
   with Not_found ->
     let ty' = newgenstub ~scope:(get_scope ty) in
     TypeHash.add nondep_hash ty ty';
     let desc' =
-      match get_desc ty with
+      match desc with
       | Tconstr(p, tl, _abbrev) as desc ->
           begin try
             (* First, try keeping the same type constructor p *)

@@ -155,7 +155,11 @@ let ctype_apply_env_empty = ref (fun _ -> assert false)
 
 (* Similar to [Ctype.nondep_type_rec]. *)
 let rec typexp copy_scope s ty =
-  let desc = get_desc ty in
+  let desc =
+    match get_expand ty with
+      Some (path, tyl) -> Tconstr (path, tyl, ref Mnil)
+    | None -> get_desc ty
+  in
   match desc with
     Tvar _ | Tunivar _ ->
       if s.for_saving || get_id ty < 0 then
