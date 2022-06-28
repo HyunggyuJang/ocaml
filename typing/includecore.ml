@@ -843,8 +843,8 @@ let type_manifest env ty1 params1 ty2 params2 priv2 kind2 =
           Ctype.equal env true (params1 @ [ty1]) (params2 @ [ty2])
       with
       | exception Ctype.Equality err ->
-          Format.eprintf "@[ty1=%a@ ty2=%a@]@." Printtyp.raw_type_expr ty1'
-            Printtyp.raw_type_expr ty2';
+          (*Format.eprintf "@[ty1=%a@ ty2=%a@]@." Printtyp.raw_type_expr ty1'
+            Printtyp.raw_type_expr ty2';*)
           Some (Manifest err)
       | () -> None
     end
@@ -858,9 +858,9 @@ let type_declarations ?(equality = false) ~loc env ~mark name
     decl1.type_attributes decl2.type_attributes
     name;
   if decl1.type_arity <> decl2.type_arity then Some Arity else
-  (*let it = { Btype.type_iterators with
+  let it = { Btype.type_iterators with
              it_type_expr = fun _ -> Ctype.unexpand_type_expr env } in
-  List.iter (it.it_type_declaration it) [decl1; decl2];*)
+  List.iter (it.it_type_declaration it) [decl1; decl2];
   let err =
     match privacy_mismatch env decl1 decl2 with
     | Some err -> Some (Privacy err)
