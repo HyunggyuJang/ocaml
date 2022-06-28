@@ -2678,9 +2678,9 @@ let rec unify (env:Env.t ref) t1 t2 =
   try
     type_changed := true;
     begin match (get_desc t1, get_desc t2) with
-      (Tvar _, Tconstr _) when deep_occur t1 t2 ->
+      (Tvar _, Tconstr (_, _::_, _)) ->
         unify2 env t1 t2
-    | (Tconstr _, Tvar _) when deep_occur t2 t1 ->
+    | (Tconstr (_, _::_, _), Tvar _) ->
         unify2 env t1 t2
     | (Tvar _, _) ->
         if unify1_var !env t1 t2 then () else unify2 env t1 t2
