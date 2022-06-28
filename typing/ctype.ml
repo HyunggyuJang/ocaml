@@ -740,6 +740,8 @@ let rec update_level env level expand ty =
       List.filter (fun (p,_) -> level >= Path.scope p) abbrevs in
     if List.length abbrevs <> List.length abbrevs' then
       Transient_expr.(set_abbrevs (repr ty) abbrevs'); *)
+    (* Remove out-of-scope Texpand *)
+    iter_expand (fun p _ -> if level < Path.scope p then forget_expand ty) ty;
     match get_desc ty with
       Tconstr(p, _tl, _abbrev) when level < Path.scope p ->
         (* Try first to replace an abbreviation by its expansion. *)
@@ -1559,7 +1561,7 @@ let check_abbrev_env env =
    4. The expansion requires the expansion of another abbreviation,
       and this other expansion fails.
 *)
-let expand_abbrev_gen kind find_type_expansion env ty =
+let expand_abbrev_gen link kind find_type_expansion env ty =
   check_abbrev_env env;
   match get_desc ty with
     Tconstr (path, args, abbrev) ->
@@ -1613,25 +1615,25 @@ let expand_abbrev_gen kind find_type_expansion env ty =
       in
       (* set [ty.desc] to [Texpand (ty', path, args)].
          [eq_type ty ty'] is true, but they are distinct *)
-      if kind = Public then link_expand ty ty';
+      if link && kind = Public then link_expand ty ty';
       ty'
   | _ ->
       assert false
 
 (* Expand respecting privacy *)
-let expand_abbrev env ty =
-  expand_abbrev_gen Public Env.find_type_expansion env ty
+let expand_abbrev link env ty =
+  expand_abbrev_gen link Public Env.find_type_expansion env ty
 
 (* Expand once the head of a type *)
 let expand_head_once env ty =
   try
-    expand_abbrev env ty
+    expand_abbrev true env ty
   with Cannot_expand | Escape _ -> assert false
 
 (* Check whether a type can be expanded *)
 let safe_abbrev env ty =
   let snap = Btype.snapshot () in
-  try ignore (expand_abbrev env ty); true with
+  try ignore (expand_abbrev false env ty); true with
     Cannot_expand ->
       Btype.backtrack snap;
       false
@@ -1645,7 +1647,7 @@ let safe_abbrev env ty =
    May raise Escape, if a recursion was hidden in the type. *)
 let try_expand_once env ty =
   match get_desc ty with
-    Tconstr _ -> expand_abbrev env ty
+    Tconstr _ -> expand_abbrev true env ty
   | _ -> raise Cannot_expand
 
 (* This one only raises Cannot_expand *)
@@ -1719,7 +1721,7 @@ let rec extract_concrete_typedecl env ty =
    the private abbreviation. *)
 
 let expand_abbrev_opt env ty =
-  expand_abbrev_gen Private Env.find_type_expansion_opt env ty
+  expand_abbrev_gen false Private Env.find_type_expansion_opt env ty
 
 let safe_abbrev_opt env ty =
   let snap = Btype.snapshot () in
@@ -4547,7 +4549,7 @@ let find_cltype_for_path env p =
   | None -> assert false
 
 let has_constr_row' env t =
-  has_constr_row (expand_abbrev env t)
+  has_constr_row (expand_abbrev false env t)
 
 let rec build_subtype env (visited : transient_expr list)
     (loops : (int * type_expr) list) posi level t =
@@ -4585,7 +4587,7 @@ let rec build_subtype env (visited : transient_expr list)
   | Tconstr(p, tl, abbrev)
     when level > 0 && generic_abbrev env p && safe_abbrev env t
     && not (has_constr_row' env t) ->
-      let t' = expand_abbrev env t in
+      let t' = expand_abbrev false env t in
       let level' = pred_expand level in
       begin try match get_desc t' with
         Tobject _ when posi && not (opened_object t') ->
@@ -4777,10 +4779,10 @@ let rec subtype_rec env trace t1 t2 cstrs =
         cstrs
     | (Tconstr(p1, _tl1, _abbrev1), _)
       when generic_abbrev env p1 && safe_abbrev env t1 ->
-        subtype_rec env trace (expand_abbrev env t1) t2 cstrs
+        subtype_rec env trace (expand_abbrev false env t1) t2 cstrs
     | (_, Tconstr(p2, _tl2, _abbrev2))
       when generic_abbrev env p2 && safe_abbrev env t2 ->
-        subtype_rec env trace t1 (expand_abbrev env t2) cstrs
+        subtype_rec env trace t1 (expand_abbrev false env t2) cstrs
     | (Tconstr(p1, tl1, _), Tconstr(p2, tl2, _)) when Path.same p1 p2 ->
         begin try
           let decl = Env.find_type p1 env in

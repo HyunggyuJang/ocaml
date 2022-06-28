@@ -229,6 +229,8 @@ val get_scope: type_expr -> int
 val get_id: type_expr -> int
 
 val get_expand: type_expr -> (Path.t * type_expr list) option
+val iter_expand: (Path.t -> type_expr list -> unit) -> type_expr -> unit
+val forget_expand: type_expr -> unit
 
 (** Transient [type_expr].
     Should only be used immediately after [Transient_expr.repr] *)

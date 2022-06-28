@@ -567,6 +567,10 @@ let get_expand t =
   ignore (repr t);
   match t.desc with Texpand (_, path, args) -> Some (path, args) | _ -> None
 
+let iter_expand f t =
+  ignore (repr t);
+  match t.desc with Texpand (_, path, args) -> f path args | _ -> ()
+
 (* transient type_expr *)
 
 module Transient_expr = struct
@@ -769,7 +773,7 @@ let inherit_map_abbrevs ~from:ty ~into:ty' ~fpath ~farg =
         
 
 
-let link_expand ty ty'  =
+let link_expand ty ty' =
   let ty = repr ty in
   let ty' = repr ty' in
   if ty == ty' then () else
@@ -781,6 +785,14 @@ let link_expand ty ty'  =
       log_type ty;
       Transient_expr.set_desc ty (Texpand (ty', path, args))
   | _ -> Misc.fatal_error "Types.link_expand"
+
+let forget_expand ty =
+  ignore (repr ty);
+  match ty.desc with
+    Texpand (ty', _, _) ->
+      log_type ty;
+      ty.desc <- Tlink ty'
+  | _ -> ()
 
 let link_type ty ty' =
   let ty = repr ty in
