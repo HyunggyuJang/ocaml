@@ -88,17 +88,6 @@ type 'a t =
   { other : int
   ; alphabeta : ('a alpha_of_gamma, 'a beta_of_delta) alphabeta
   }
-[%%expect{|
-type 'a alpha = 'b constraint 'a = < alpha : 'b >
-type 'a beta = 'b constraint 'a = < beta : 'b >
-type 'a gamma = 'b constraint 'a = < delta : 'c; gamma : 'b >
-type 'a delta = 'b constraint 'a = < delta : 'b; gamma : 'c >
-Line 7, characters 0-39:
-7 | type 'a alpha_of_gamma = 'a gamma alpha
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Error: The definition of alpha_of_gamma contains a cycle:
-       < delta : 'b; gamma : < alpha : 'd > as 'c > as 'a
-|}]
 
 let create
       (input : ('a delta, 'a alpha_of_gamma) Alphabeta.t)
@@ -112,8 +101,13 @@ let create
   t
 ;;
 [%%expect{|
-Line 2, characters 45-56:
-2 |       (input : ('a delta, 'a alpha_of_gamma) Alphabeta.t)
-                                                 ^^^^^^^^^^^
-Error: Unbound module Alphabeta
+type 'a alpha = 'b constraint 'a = < alpha : 'b >
+type 'a beta = 'b constraint 'a = < beta : 'b >
+type 'a gamma = 'b constraint 'a = < delta : 'c; gamma : 'b >
+type 'a delta = 'b constraint 'a = < delta : 'b; gamma : 'c >
+Line 7, characters 0-39:
+7 | type 'a alpha_of_gamma = 'a gamma alpha
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error: The definition of alpha_of_gamma contains a cycle:
+       < delta : 'b; gamma : < alpha : 'd > as 'c > as 'a
 |}]
