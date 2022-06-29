@@ -80,7 +80,7 @@ Line 4, characters 32-33:
 4 |   | Refl -> if true then x else y
                                     ^
 Error: This expression has type a but an expression was expected of type t
-       This instance of a is ambiguous:
+       This instance of < m : int * 'a > as 'a is ambiguous:
        it would escape the scope of its equation
 |}]
 
@@ -94,8 +94,13 @@ type t2 = < m : 'a. 'a * ('a * 'b) > as 'b
 Line 3, characters 22-23:
 3 | let f (x : t1) : t2 = x;;
                           ^
-Error: This expression has type t1 but an expression was expected of type t2
-       The method m has type 'c. 'c * ('a * < m : 'c. 'b >) as 'b,
+Error: This expression has type
+         t1 = < m : 'a. 'a * ('a * < m : 'c. 'c * 'b > as 'b) >
+       but an expression was expected of type
+         t2 as 'd = < m : 'a. 'a * ('a * 'd) >
+       Type < m : 'c. 'c * ('a * 'e) > as 'e is not compatible with type
+         t2 as 'd = < m : 'a. 'a * ('a * 'd) >
+       The method m has type 'c. 'c * ('a * < m : 'c. 'f >) as 'f,
        but the expected method type was 'a. 'a * ('a * t2)
        The universal variable 'a would escape its scope
 |}]

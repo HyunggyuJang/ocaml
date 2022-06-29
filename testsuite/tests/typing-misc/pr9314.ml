@@ -31,6 +31,7 @@ Error: Values do not match:
          val o : < gamma : 'a gamma > as 'a
        The type < gamma : int > is not compatible with the type
          < gamma : 'b > as 'a
+       Type int is not compatible with type 'b
        Types for method gamma are incompatible
 |}, Principal{|
 type 'a gamma = 'b constraint 'a = < gamma : 'b >

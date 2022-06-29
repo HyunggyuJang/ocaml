@@ -1766,6 +1766,7 @@ let full_expand ~may_forget_scope env ty =
         ty
     else expand_head env ty
   in
+  let ty = Transient_expr.(type_expr (repr ty)) in (* forget Texpand *)
   match get_desc ty with
     Tobject (fi, {contents = Some (_, v::_)}) when is_Tvar v ->
       newty2 ~level:(get_level ty) (Tobject (fi, ref None))

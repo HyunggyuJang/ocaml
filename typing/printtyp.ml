@@ -739,10 +739,17 @@ let rec uniq = function
     [] -> true
   | a :: l -> not (List.memq (a : int) l) && uniq l
 
+let printer_get_desc ty =
+  match get_expand ty with
+    Some (path, args)
+    when not (is_Tvar ty || List.exists (deep_occur ty) args) ->
+      Tconstr (path, args, ref Mnil)
+  | _ -> get_desc ty
+
 let rec normalize_type_path ?(cache=false) env p =
   try
     let (params, ty, _) = Env.find_type_expansion p env in
-    match get_desc ty with
+    match printer_get_desc ty with
       Tconstr (p1, tyl, _) ->
         if List.length params = List.length tyl
         && List.for_all2 eq_type params tyl
@@ -897,13 +904,6 @@ let nameable_row row =
            row_closed row && if c then l = [] else List.length l = 1
        | _ -> true)
     (row_fields row)
-
-let printer_get_desc ty =
-  match get_expand ty with
-    Some (path, args)
-    when not (is_Tvar ty || List.exists (deep_occur ty) args) ->
-      Tconstr (path, args, ref Mnil)
-  | _ -> get_desc ty
 
 (* This specialized version of [Btype.iter_type_expr] normalizes and
    short-circuits the traversal of the [type_expr], so that it covers only the
@@ -1126,14 +1126,14 @@ let add_printed_alias_proxy px =
 let add_printed_alias ty = add_printed_alias_proxy (proxy ty)
 
 let aliasable ty =
-  match get_desc ty with
+  match printer_get_desc ty with
     Tvar _ | Tunivar _ | Tpoly _ -> false
   | Tconstr (p, _, _) ->
       not (is_nth (snd (best_type_path p)))
   | _ -> true
 
 let should_visit_object ty =
-  match get_desc ty with
+  match printer_get_desc ty with
   | Tvariant row -> not (static_row row)
   | Tobject _ -> opened_object ty
   | _ -> false
@@ -1203,7 +1203,7 @@ let rec tree_of_typexp mode ty =
         in
         let t1 =
           if is_optional l then
-            match get_desc ty1 with
+            match printer_get_desc ty1 with
             | Tconstr(path, [ty], _)
               when Path.same path Predef.path_option ->
                 tree_of_typexp mode ty
@@ -1448,7 +1448,7 @@ let rec tree_of_type_decl id decl =
     | Some ty ->
         let ty =
           (* Special hack to hide variant name *)
-          match get_desc ty with
+          match printer_get_desc ty with
             Tvariant row ->
               begin match row_name row with
                 Some (Pident id', _) when Ident.same id id' ->
@@ -2105,8 +2105,8 @@ let incompatibility_phrase (type variety) : variety trace_format -> string =
 (* Print a unification error *)
 
 let same_path t t' =
-  eq_type t t' ||
-  match get_desc t, get_desc t' with
+  eq_type t t' && get_expand t = None && get_expand t' = None ||
+  match printer_get_desc t, printer_get_desc t' with
     Tconstr(p,tl,_), Tconstr(p',tl',_) ->
       let (p1, s1) = best_type_path p and (p2, s2)  = best_type_path p' in
       begin match s1, s2 with
@@ -2226,7 +2226,7 @@ let type_path_list =
 
 (* Hide variant name and var, to force printing the expanded type *)
 let hide_variant_name t =
-  match get_desc t with
+  match printer_get_desc t with
   | Tvariant row ->
       let Row {fields; more; name; fixed; closed} = row_repr row in
       if name = None then t else
@@ -2243,7 +2243,7 @@ let prepare_expansion Errortrace.{ty; expanded} =
   Errortrace.{ty; expanded}
 
 let may_prepare_expansion compact (Errortrace.{ty; expanded} as ty_exp) =
-  match get_desc expanded with
+  match printer_get_desc expanded with
     Tvariant _ | Tobject _ when compact ->
       reserve_names ty; Errortrace.{ty; expanded = ty}
   | _ -> prepare_expansion ty_exp
