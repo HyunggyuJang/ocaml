@@ -645,11 +645,11 @@ let check_well_founded env loc path to_check ty =
     let check_parent ty' =
       match get_expand ty, get_expand ty' with
         Some (p, _), Some (p', _) -> Path.same p p'
-      (* | None, None -> eq_type ty ty' *)
+      | None, None -> eq_type ty ty'
       | _ -> false
     in
     if TypeSet.exists check_parent parents then begin
-      Format.eprintf "@[%a@]@." Printtyp.raw_type_expr ty;
+      (*Format.eprintf "@[%a@]@." Printtyp.raw_type_expr ty;*)
       if match get_desc ty0 with
       | Tconstr (p, _, _) -> Path.same p path
       | _ -> false
