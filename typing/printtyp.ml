@@ -898,11 +898,18 @@ let nameable_row row =
        | _ -> true)
     (row_fields row)
 
+let printer_get_desc ty =
+  match get_expand ty with
+    Some (path, args)
+    when not (is_Tvar ty || List.exists (deep_occur ty) args) ->
+      Tconstr (path, args, ref Mnil)
+  | _ -> get_desc ty
+
 (* This specialized version of [Btype.iter_type_expr] normalizes and
    short-circuits the traversal of the [type_expr], so that it covers only the
    subterms that would be printed by the type printer. *)
 let printer_iter_type_expr f ty =
-  match get_desc ty with
+  match printer_get_desc ty with
   | Tconstr(p, tyl, _) ->
       let (_p', s) = best_type_path p in
       List.iter f (apply_subst s tyl)
@@ -1134,9 +1141,8 @@ let should_visit_object ty =
 let rec mark_loops_rec visited ty =
   let px = proxy ty in
   if List.memq px visited && aliasable ty then add_alias_proxy px else
-    let tty = Transient_expr.repr ty in
     let visited = px :: visited in
-    match tty.desc with
+    match printer_get_desc ty with
     | Tvariant _ | Tobject _ ->
         if List.memq px !visited_objects then add_alias_proxy px else begin
           if should_visit_object ty then
@@ -1184,7 +1190,7 @@ let rec tree_of_typexp mode ty =
 
   let pr_typ () =
     let tty = Transient_expr.repr ty in
-    match tty.desc with
+    match printer_get_desc ty with
     | Tvar _ ->
         let non_gen = is_non_gen mode ty in
         let name_gen =

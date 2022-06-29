@@ -288,15 +288,20 @@ let fold_type_desc f init = function
 
 let rec fold_type_expr f init ty =
   let result = fold_type_desc f init (get_desc ty) in
-  let fold_abbrev init (_, args) =
-    List.fold_left (fold_type_expr f) init args in
-  let result =
-    Option.fold ~none:result ~some:(fold_abbrev result) (get_expand ty) in
+  Option.fold ~none:result ~some:(fold_abbrev f result) (get_expand ty)
+
+and fold_abbrev f init (_, args) =
+  List.fold_left (fold_type_expr f) init args
+
+let fold_abbrevs f init ty =
   let abbrevs = get_abbrevs ty in
-  List.fold_left fold_abbrev result abbrevs
+  List.fold_left (fold_abbrev f) init abbrevs
 
 let iter_type_expr f ty =
   fold_type_expr (fun () v -> f v) () ty
+
+let iter_abbrevs f ty =
+  fold_abbrevs (fun () v -> f v) () ty
 
 let rec iter_abbrev f = function
     Mnil                   -> ()

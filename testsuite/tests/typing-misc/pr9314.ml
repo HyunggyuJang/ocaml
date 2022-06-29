@@ -61,27 +61,11 @@ module type T = sig
   x -> 'a t
 end
 [%%expect{|
-module type T =
-  sig
-    type 'a alpha = 'b constraint 'a = < alpha : 'b >
-    type 'a beta = 'b constraint 'a = < beta : 'b >
-    type 'a gamma = 'b constraint 'a = < delta : 'c; gamma : 'b >
-    type 'a delta = 'b constraint 'a = < delta : 'b; gamma : 'c >
-    type 'a alpha_of_gamma = 'd
-      constraint 'a = < delta : 'b; gamma : < alpha : 'd > as 'c >
-    type 'a beta_of_delta = 'c
-      constraint 'a = < delta : < beta : 'c > as 'b; gamma : 'd >
-    type ('a, 'b) w = W
-    type ('a, 'just_alpha) x = { field : ('a beta, 'just_alpha) w; }
-      constraint 'a = < beta : 'b >
-    type 'a t = A of ('a alpha_of_gamma, 'a beta_of_delta) w
-      constraint 'a =
-        < delta : < beta : 'c > as 'b; gamma : < alpha : 'e > as 'd >
-    val create :
-      (< beta : 'b > as 'a,
-       (< delta : 'a; gamma : < alpha : 'b > as 'd > as 'c) alpha_of_gamma)
-      x -> 'c t
-  end
+Line 6, characters 2-41:
+6 |   type 'a alpha_of_gamma = 'a gamma alpha
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error: The definition of alpha_of_gamma contains a cycle:
+       < delta : 'b; gamma : < alpha : 'd > as 'c > as 'a
 |}]
 
 (* Original by smuenzel-js *)
@@ -109,23 +93,11 @@ type 'a alpha = 'b constraint 'a = < alpha : 'b >
 type 'a beta = 'b constraint 'a = < beta : 'b >
 type 'a gamma = 'b constraint 'a = < delta : 'c; gamma : 'b >
 type 'a delta = 'b constraint 'a = < delta : 'b; gamma : 'c >
-type 'a alpha_of_gamma = 'd
-  constraint 'a = < delta : 'b; gamma : < alpha : 'd > as 'c >
-type 'a beta_of_delta = 'c
-  constraint 'a = < delta : < beta : 'c > as 'b; gamma : 'd >
-type ('a, 'b) alphabeta
-module Alphabeta :
-  sig
-    type ('a, 'just_alpha) t = {
-      alphabeta : ('just_alpha, 'a beta) alphabeta;
-    } constraint 'a = < beta : 'b >
-  end
-type 'a t = {
-  other : int;
-  alphabeta : ('a alpha_of_gamma, 'a beta_of_delta) alphabeta;
-}
-  constraint 'a =
-    < delta : < beta : 'c > as 'b; gamma : < alpha : 'e > as 'd >
+Line 7, characters 0-39:
+7 | type 'a alpha_of_gamma = 'a gamma alpha
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error: The definition of alpha_of_gamma contains a cycle:
+       < delta : 'b; gamma : < alpha : 'd > as 'c > as 'a
 |}]
 
 let create
@@ -140,13 +112,8 @@ let create
   t
 ;;
 [%%expect{|
-val create :
-  (< beta : 'b > as 'a,
-   (< delta : 'a; gamma : < alpha : 'e > as 'd > as 'c) alpha_of_gamma)
-  Alphabeta.t -> 'c t = <fun>
-|}, Principal{|
-val create :
-  (< beta : 'a >,
-   < delta : < beta : 'a >; gamma : < alpha : 'b > > alpha_of_gamma)
-  Alphabeta.t -> < delta : < beta : 'a >; gamma : < alpha : 'b > > t = <fun>
+Line 2, characters 45-56:
+2 |       (input : ('a delta, 'a alpha_of_gamma) Alphabeta.t)
+                                                 ^^^^^^^^^^^
+Error: Unbound module Alphabeta
 |}]

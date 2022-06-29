@@ -652,6 +652,8 @@ let check_well_founded env loc path to_check ty =
       (*Format.eprintf "@[%a@]@." Printtyp.raw_type_expr ty;*)
       if match get_desc ty0 with
       | Tconstr (p, _, _) -> Path.same p path
+      | _ -> match get_expand ty0 with
+      | Some (p, _) -> Path.same p path
       | _ -> false
       then raise (Error (loc, Recursive_abbrev (Path.name path)))
       else raise (Error (loc, Cycle_in_def (Path.name path, ty0)))
