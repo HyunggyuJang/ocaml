@@ -107,7 +107,7 @@ let is_absrow env ty =
          included into (usually numbered with "2" in this file).  In this case,
          the abstract row variable has been substituted for an object or variant
          type. *)
-      begin match get_desc (Ctype.expand_head env ty) with
+      begin match get_desc (Ctype.expand_head_nolink env ty) with
       | Tobject _|Tvariant _ -> true
       | _ -> false
       end

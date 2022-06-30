@@ -1645,15 +1645,15 @@ let safe_abbrev env ty =
 (* Expand the head of a type once.
    Raise Cannot_expand if the type cannot be expanded.
    May raise Escape, if a recursion was hidden in the type. *)
-let try_expand_once env ty =
+let try_expand_once link env ty =
   match get_desc ty with
-    Tconstr _ -> expand_abbrev true env ty
+    Tconstr _ -> expand_abbrev link env ty
   | _ -> raise Cannot_expand
 
 (* This one only raises Cannot_expand *)
-let try_expand_safe env ty =
+let try_expand_safe link env ty =
   let snap = Btype.snapshot () in
-  try try_expand_once env ty
+  try try_expand_once link env ty
   with Escape _ ->
     Btype.backtrack snap; cleanup_abbrev (); raise Cannot_expand
 
@@ -1667,16 +1667,20 @@ let rec try_expand_head
 (* Unsafe full expansion, may raise [Unify [Escape _]]. *)
 let expand_head_unif env ty =
   try
-    try_expand_head try_expand_once env ty
+    try_expand_head (try_expand_once true) env ty
   with
   | Cannot_expand -> ty
   | Escape e -> raise_for Unify (Escape e)
 
 (* Safe version of expand_head, never fails *)
-let expand_head env ty =
-  try try_expand_head try_expand_safe env ty
+let expand_head link env ty =
+  try try_expand_head (try_expand_safe link) env ty
   with Cannot_expand -> ty
 
+let expand_head_nolink = expand_head false
+let expand_head = expand_head true
+
+let try_expand_safe = try_expand_safe true
 let _ = forward_try_expand_safe := try_expand_safe
 
 
@@ -1820,7 +1824,7 @@ let rec occur_rec env allow_recursive visited ty0 ty =
         let visited = TypeSet.add ty visited in
         iter_type_expr (occur_rec env allow_recursive visited ty0) ty
       with Occur -> try
-        let ty' = try_expand_head try_expand_once env ty in
+        let ty' = try_expand_head (try_expand_once true) env ty in
         (* This call used to be inlined, but there seems no reason for it.
            Message was referring to change in rev. 1.58 of the CVS repo. *)
         occur_rec env allow_recursive visited ty0 ty'
