@@ -16,7 +16,7 @@
  (modules tsl_lexer)
  (mode fallback))
 
-(ocamlyacc
+(menhir
  (modules tsl_parser)
  (mode fallback))
 
