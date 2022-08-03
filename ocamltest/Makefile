@@ -137,6 +137,11 @@ ocamltest_unix.%: flags+=$(ocamltest_unix_include) -opaque
 ocamltest$(EXE): $(deps_byte) $(bytecode_modules)
 	$(ocamlc_cmd) $(ocamltest_unix_include)-custom -o $@ $^
 
+MKLIB=$(OCAMLRUN) $(ROOTDIR)/tools/ocamlmklib
+
+ocamltest.cma: $(deps_byte) $(filter-out main.% options.%,$(bytecode_modules))
+	$(MKLIB) -custom -o ocamltest -ocamlc '$(ocamlc) $(unix_include)' -linkall $^
+
 %.cmo: %.ml $(deps_byte)
 	$(ocamlc) -c $<
 
