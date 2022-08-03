@@ -1,4 +1,5 @@
 (* TEST
+   ld_library_path += "${ocamlsrcdir}/ocamltest ${ocamlsrcdir}/otherlibs/unix"
    flags = "-I ${ocamlsrcdir}/ocamltest"
    * expect
 *)
