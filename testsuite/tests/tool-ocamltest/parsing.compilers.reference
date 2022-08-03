@@ -1,0 +1,19 @@
+val block : Tsl_ast.tsl_block =
+  [Tsl_ast.Environment_statement
+    {Tsl_ast.node =
+      Tsl_ast.Assignment (false, {Tsl_ast.node = "flags"; loc = <abstr>},
+       {Tsl_ast.node = "-I ${ocamlsrcdir}/ocamltest"; loc = <abstr>});
+     loc = <abstr>};
+   Tsl_ast.Test (1, {Tsl_ast.node = "expect"; loc = <abstr>}, [])]
+- : Tsl_ast.environment_statement Tsl_ast.located list *
+    Tsl_semantics.test_tree list
+=
+([{node =
+    Assignment (false, {node = "flags"; loc = <abstr>},
+     {node = "-I ${ocamlsrcdir}/ocamltest"; loc = <abstr>});
+   loc = <abstr>}],
+ [Node ([],
+   {Tests.test_name = "expect"; test_run_by_default = false;
+    test_actions = [<abstr>; <abstr>; <abstr>]},
+   [], [])])
+

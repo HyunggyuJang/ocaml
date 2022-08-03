@@ -4,7 +4,11 @@
 *)
 
 #load "ocamltest.cma";;
-let block = Tsl_parser.tsl_block Tsl_lexer.token (Lexing.from_string {xx|
+open Tsl_parser
+open Tsl_lexer
+open Tsl_semantics
+open Tsl_ast
+let block = tsl_block token (Lexing.from_string {xx|
 (* TEST
    flags = "-I ${ocamlsrcdir}/ocamltest"
    * expect
@@ -29,4 +33,4 @@ Tsl_parser.tsl_block Tsl_lexer.token (Lexing.from_string {|
  Tsl_ast.Test (1, {Tsl_ast.node = "expect"; loc = <abstr>}, [])]
 |}];;
 |xx});;
-Tsl_semantics.test_trees_of_tsl_block block;;
+test_trees_of_tsl_block block;;
