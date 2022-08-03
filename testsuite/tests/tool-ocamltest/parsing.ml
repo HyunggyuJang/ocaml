@@ -1,6 +1,6 @@
 (* TEST
    flags = "-I ${ocamlsrcdir}/ocamltest"
-   * toplevel
+   * expect
 *)
 
 #load "ocamltest.cma";;
@@ -34,3 +34,23 @@ Tsl_parser.tsl_block Tsl_lexer.token (Lexing.from_string {|
 |}];;
 |xx});;
 test_trees_of_tsl_block block;;
+[%%expect {|
+val block : Tsl_ast.tsl_block =
+  [Environment_statement
+    {node =
+      Assignment (false, {node = "flags"; loc = <abstr>},
+       {node = "-I ${ocamlsrcdir}/ocamltest"; loc = <abstr>});
+     loc = <abstr>};
+   Test (1, {node = "expect"; loc = <abstr>}, [])]
+- : Tsl_ast.environment_statement Tsl_ast.located list *
+    Tsl_semantics.test_tree list
+=
+([{node =
+    Assignment (false, {node = "flags"; loc = <abstr>},
+     {node = "-I ${ocamlsrcdir}/ocamltest"; loc = <abstr>});
+   loc = <abstr>}],
+ [Node ([],
+   {Tests.test_name = "expect"; test_run_by_default = false;
+    test_actions = [<abstr>; <abstr>; <abstr>]},
+   [], [])])
+|}];;
