@@ -356,6 +356,8 @@ let args =
          the stdlib from the current source tree rather than the installed one."
       ; "-keep-original-error-size", Arg.Set keep_original_error_size,
         " truncate long error messages as the compiler would"
+      ; "-dump-unification", Arg.Unit (fun () -> Clflags.dump_unification := true),
+        "dump unification"
       ] @ Options.list
     )
 

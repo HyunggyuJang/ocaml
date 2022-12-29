@@ -344,8 +344,9 @@ let is_principal ty =
 
 (* unification inside type_exp and type_expect *)
 let unify_exp_types loc env ty expected_ty =
-  (* Format.eprintf "@[%a@ %a@]@." Printtyp.raw_type_expr exp.exp_type
-    Printtyp.raw_type_expr expected_ty; *)
+  if !Clflags.dump_unification then
+    Format.eprintf "@[%a@ %a@]@." Printtyp.raw_type_expr ty
+      Printtyp.raw_type_expr expected_ty;
   try
     unify env ty expected_ty
   with

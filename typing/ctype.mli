@@ -227,6 +227,7 @@ type typedecl_extraction_result =
 val extract_concrete_typedecl:
         Env.t -> type_expr -> typedecl_extraction_result
 
+val unify_eq: type_expr -> type_expr -> bool
 val unify: Env.t -> type_expr -> type_expr -> unit
         (* Unify the two types given. Raise [Unify] if not possible. *)
 val unify_gadt:
