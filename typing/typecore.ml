@@ -2917,6 +2917,8 @@ and type_expect_
         | _ ->
             Texp_ident(path, lid, desc)
       in
+      if !Clflags.dump_unification then
+        Format.eprintf "@[In type_expect_, Pexp_ident: %a @ expected: %a@]@." Printtyp.raw_type_expr desc.val_type Printtyp.raw_type_expr ty_expected;
       rue {
         exp_desc; exp_loc = loc; exp_extra = [];
         exp_type = instance desc.val_type;
@@ -3051,8 +3053,18 @@ and type_expect_
         wrap_trace_gadt_instances env (lower_args TypeSet.empty) ty;
         funct
       in
+      if !Clflags.dump_unification then
+        Format.eprintf "@[In type_let, arg length: @ %d@]@." (List.length sargs);
       let funct, sargs =
         let funct = type_sfunct sfunct in
+        if !Clflags.dump_unification then
+          begin
+            match funct.exp_desc with
+              Texp_ident (_, _,
+                          {val_kind = Val_prim {prim_name}; _})
+              -> Format.eprintf "@[In type_let, prim_name: @ %s@]@." prim_name
+            | _ -> assert false
+          end;
         match funct.exp_desc, sargs with
         | Texp_ident (_, _,
                       {val_kind = Val_prim {prim_name="%revapply"}; val_type}),
@@ -3068,6 +3080,8 @@ and type_expect_
         | _ ->
             funct, sargs
       in
+      if !Clflags.dump_unification then
+        Format.eprintf "@[In type_let, funct type: @ %a@]@." Printtyp.raw_type_expr funct.exp_type;
       begin_def ();
       let (args, ty_res) = type_application env funct sargs in
       end_def ();
@@ -4625,8 +4639,15 @@ and type_application env funct sargs =
        true)
     end
   in
+  if !Clflags.dump_unification then
+    Format.eprintf "@[In type_application, ignore_labels: @ %b@]@." ignore_labels;
   let warned = ref false in
   let rec type_args args ty_fun ty_fun0 sargs =
+    if !Clflags.dump_unification then
+      Format.eprintf "@[In type_application, type_args: @ ty_fun: %a@ ty_fun0:@ %a@ sargs len: @ %d@]@."
+        Printtyp.raw_type_expr ty_fun
+        Printtyp.raw_type_expr ty_fun0
+        (List.length sargs);
     let type_unknown_args () =
       (* We're not looking at a *known* function type anymore, or there are no
          arguments left. *)
@@ -4748,6 +4769,8 @@ and type_application env funct sargs =
 
 and type_construct env loc lid sarg ty_expected_explained attrs =
   let { ty = ty_expected; explanation } = ty_expected_explained in
+  if !Clflags.dump_unification then
+    Format.eprintf "@[In type_construct: lid: %a @ expected: %a@]@." Printtyp.longident lid.txt Printtyp.raw_type_expr ty_expected;
   let expected_type =
     match extract_concrete_variant env ty_expected with
     | Variant_type(p0, p,_) ->

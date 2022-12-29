@@ -435,18 +435,49 @@ In type_expect_: sexp: expression ([1,0+8]..[1,0+14])
   ]
 
 expected: {id=30350;level=1;scope=0;desc=Tvar None}
+In type_let, arg length:  1
 In type_expect_: sexp: expression ([1,0+8]..[1,0+11])
   Pexp_ident "ref" ([1,0+8]..[1,0+11])
 
+expected: {id=30351;level=2;scope=0;desc=Tvar None}
+In type_expect_, Pexp_ident: {id=1377;level=100000000;scope=0;desc=
+                              Tarrow("",
+                               {id=135;level=100000000;scope=0;desc=Tvar "a"},
+                               {id=1378;level=100000000;scope=0;desc=
+                                Tconstr(ref,[{id=135}],[])},Cok)}
 expected: {id=30351;level=2;scope=0;desc=Tvar None}
 In unify1_var: {id=30351;level=2;scope=0;desc=Tvar None}
 {id=30352;level=2;scope=0;desc=
  Tarrow("",{id=30354;level=2;scope=0;desc=Tvar None},
   {id=30353;level=2;scope=0;desc=Tconstr(ref,[{id=30354}],[])},Cok)}
+In type_let, prim_name:  %makemutable
+In type_let, funct type:
+{id=30352;level=2;scope=0;desc=
+ Tarrow("",{id=30354;level=1;scope=0;desc=Tvar None},
+  {id=30353;level=2;scope=0;desc=Tconstr(ref,[{id=30354}],[])},Cok)}
+In type_application, ignore_labels:  false
+In type_application, type_args:
+ty_fun: {id=30352;level=2;scope=0;desc=
+         Tarrow("",{id=30354;level=1;scope=0;desc=Tvar None},
+          {id=30353;level=2;scope=0;desc=Tconstr(ref,[{id=30354}],[])},Cok)}
+ty_fun0:
+{id=30352;level=2;scope=0;desc=
+ Tarrow("",{id=30354;level=1;scope=0;desc=Tvar None},
+  {id=30353;level=2;scope=0;desc=Tconstr(ref,[{id=30354}],[])},Cok)}
+sargs len:  1
+In type_application, type_args:
+ty_fun: {id=30353;level=2;scope=0;desc=
+         Tconstr(ref,[{id=30354;level=1;scope=0;desc=Tvar None}],[])}
+ty_fun0:
+{id=30353;level=2;scope=0;desc=
+ Tconstr(ref,[{id=30354;level=1;scope=0;desc=Tvar None}],[])}
+sargs len:  0
 In type_expect_: sexp: expression ([1,0+12]..[1,0+14])
   Pexp_construct "[]" ([1,0+12]..[1,0+14])
   None
 
+expected: {id=30354;level=1;scope=0;desc=Tvar None}
+In type_construct: lid: []
 expected: {id=30354;level=1;scope=0;desc=Tvar None}
 In unify1_var: {id=30354;level=1;scope=0;desc=Tvar None}
 {id=30356;level=2;scope=0;desc=
@@ -644,18 +675,50 @@ In type_expect_: sexp: expression ([1,0+8]..[1,0+14])
   ]
 
 expected: {id=30479;level=1;scope=0;desc=Tvar None}
+In type_let, arg length:  1
 In type_expect_: sexp: expression ([1,0+8]..[1,0+11])
   Pexp_ident "ref" ([1,0+8]..[1,0+11])
 
+expected: {id=30480;level=3;scope=0;desc=Tvar None}
+In type_expect_, Pexp_ident: {id=1377;level=100000000;scope=0;desc=
+                              Tarrow("",
+                               {id=135;level=100000000;scope=0;desc=Tvar "a"},
+                               {id=1378;level=100000000;scope=0;desc=
+                                Tconstr(ref,[{id=135}],[])},Cok)}
 expected: {id=30480;level=3;scope=0;desc=Tvar None}
 In unify1_var: {id=30480;level=3;scope=0;desc=Tvar None}
 {id=30481;level=3;scope=0;desc=
  Tarrow("",{id=30483;level=3;scope=0;desc=Tvar None},
   {id=30482;level=3;scope=0;desc=Tconstr(ref,[{id=30483}],[])},Cok)}
+In type_let, prim_name:  %makemutable
+In type_let, funct type:
+{id=30481;level=100000000;scope=0;desc=
+ Tarrow("",{id=30483;level=1;scope=0;desc=Tvar None},
+  {id=30482;level=100000000;scope=0;desc=Tconstr(ref,[{id=30483}],[])},Cok)}
+In type_application, ignore_labels:  false
+In type_application, type_args:
+ty_fun: {id=30481;level=100000000;scope=0;desc=
+         Tarrow("",{id=30483;level=1;scope=0;desc=Tvar None},
+          {id=30482;level=100000000;scope=0;desc=
+           Tconstr(ref,[{id=30483}],[])},Cok)}
+ty_fun0:
+{id=30487;level=2;scope=0;desc=
+ Tarrow("",{id=30483;level=1;scope=0;desc=Tvar None},
+  {id=30488;level=2;scope=0;desc=Tconstr(ref,[{id=30483}],[])},Cok)}
+sargs len:  1
+In type_application, type_args:
+ty_fun: {id=30482;level=100000000;scope=0;desc=
+         Tconstr(ref,[{id=30483;level=1;scope=0;desc=Tvar None}],[])}
+ty_fun0:
+{id=30488;level=2;scope=0;desc=
+ Tconstr(ref,[{id=30483;level=1;scope=0;desc=Tvar None}],[])}
+sargs len:  0
 In type_expect_: sexp: expression ([1,0+12]..[1,0+14])
   Pexp_construct "[]" ([1,0+12]..[1,0+14])
   None
 
+expected: {id=30483;level=1;scope=0;desc=Tvar None}
+In type_construct: lid: []
 expected: {id=30483;level=1;scope=0;desc=Tvar None}
 In unify1_var: {id=30483;level=1;scope=0;desc=Tvar None}
 {id=30491;level=3;scope=0;desc=
