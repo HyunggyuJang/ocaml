@@ -422,10 +422,32 @@ let t1 = Typemod.type_structure_with_dump !Topcommon.toplevel_env e1;;
 In type_let, new variables: [{id=30350;level=1;scope=0;desc=Tvar None}]
 In type_let, pattern variables: [{id=30350}]
 In type_let, pattern vars:  [{id=30350}]
+In type_expect_: sexp: expression ([1,0+8]..[1,0+14])
+  Pexp_apply
+  expression ([1,0+8]..[1,0+11])
+    Pexp_ident "ref" ([1,0+8]..[1,0+11])
+  [
+    <arg>
+    Nolabel
+      expression ([1,0+12]..[1,0+14])
+        Pexp_construct "[]" ([1,0+12]..[1,0+14])
+        None
+  ]
+
+expected: {id=30350;level=1;scope=0;desc=Tvar None}
+In type_expect_: sexp: expression ([1,0+8]..[1,0+11])
+  Pexp_ident "ref" ([1,0+8]..[1,0+11])
+
+expected: {id=30351;level=2;scope=0;desc=Tvar None}
 In unify1_var: {id=30351;level=2;scope=0;desc=Tvar None}
 {id=30352;level=2;scope=0;desc=
  Tarrow("",{id=30354;level=2;scope=0;desc=Tvar None},
   {id=30353;level=2;scope=0;desc=Tconstr(ref,[{id=30354}],[])},Cok)}
+In type_expect_: sexp: expression ([1,0+12]..[1,0+14])
+  Pexp_construct "[]" ([1,0+12]..[1,0+14])
+  None
+
+expected: {id=30354;level=1;scope=0;desc=Tvar None}
 In unify1_var: {id=30354;level=1;scope=0;desc=Tvar None}
 {id=30356;level=2;scope=0;desc=
  Tconstr(list,[{id=30357;level=2;scope=0;desc=Tvar None}],[])}
@@ -609,10 +631,32 @@ val t1 :
 In type_let, new variables: [{id=30479;level=2;scope=0;desc=Tvar None}]
 In type_let, pattern variables: [{id=30479}]
 In type_let, pattern vars:  [{id=30479}]
+In type_expect_: sexp: expression ([1,0+8]..[1,0+14])
+  Pexp_apply
+  expression ([1,0+8]..[1,0+11])
+    Pexp_ident "ref" ([1,0+8]..[1,0+11])
+  [
+    <arg>
+    Nolabel
+      expression ([1,0+12]..[1,0+14])
+        Pexp_construct "[]" ([1,0+12]..[1,0+14])
+        None
+  ]
+
+expected: {id=30479;level=1;scope=0;desc=Tvar None}
+In type_expect_: sexp: expression ([1,0+8]..[1,0+11])
+  Pexp_ident "ref" ([1,0+8]..[1,0+11])
+
+expected: {id=30480;level=3;scope=0;desc=Tvar None}
 In unify1_var: {id=30480;level=3;scope=0;desc=Tvar None}
 {id=30481;level=3;scope=0;desc=
  Tarrow("",{id=30483;level=3;scope=0;desc=Tvar None},
   {id=30482;level=3;scope=0;desc=Tconstr(ref,[{id=30483}],[])},Cok)}
+In type_expect_: sexp: expression ([1,0+12]..[1,0+14])
+  Pexp_construct "[]" ([1,0+12]..[1,0+14])
+  None
+
+expected: {id=30483;level=1;scope=0;desc=Tvar None}
 In unify1_var: {id=30483;level=1;scope=0;desc=Tvar None}
 {id=30491;level=3;scope=0;desc=
  Tconstr(list,[{id=30490;level=3;scope=0;desc=Tvar None}],[])}

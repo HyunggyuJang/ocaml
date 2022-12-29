@@ -2893,6 +2893,8 @@ and type_expect_
       unify_exp ~sdesc_for_hint:desc env (re exp) (instance ty_expected));
     exp
   in
+  if !Clflags.dump_unification then
+    Format.eprintf "@[In type_expect_: sexp: %a @ expected: %a@]@." (Printast.expression 0) sexp Printtyp.raw_type_expr ty_expected;
   match desc with
   | Pexp_ident lid ->
       let path, desc = type_ident env ~recarg lid in
