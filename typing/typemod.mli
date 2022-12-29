@@ -34,6 +34,10 @@ val type_structure:
   Env.t -> Parsetree.structure ->
   Typedtree.structure * Types.signature * Signature_names.t * Shape.t *
   Env.t
+val type_structure_with_dump:
+  Env.t -> Parsetree.structure ->
+  Typedtree.structure * Types.signature * Signature_names.t * Shape.t *
+  Env.t
 val type_toplevel_phrase:
   Env.t -> Parsetree.structure ->
   Typedtree.structure * Types.signature * Signature_names.t * Shape.t *

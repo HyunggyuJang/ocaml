@@ -342,11 +342,17 @@ let is_principal ty =
 
 (* Typing of patterns *)
 
+let unify_with_dump env ty1 ty2 =
+  Clflags.dump_unification := true;
+  Format.eprintf "@[Before: %a@ %a@]@." Printtyp.raw_type_expr ty1
+    Printtyp.raw_type_expr ty2;
+  unify env ty1 ty2;
+  Format.eprintf "@[After: %a@ %a@]@." Printtyp.raw_type_expr ty1
+    Printtyp.raw_type_expr ty2;
+  Clflags.dump_unification := false
+
 (* unification inside type_exp and type_expect *)
 let unify_exp_types loc env ty expected_ty =
-  if !Clflags.dump_unification then
-    Format.eprintf "@[%a@ %a@]@." Printtyp.raw_type_expr ty
-      Printtyp.raw_type_expr expected_ty;
   try
     unify env ty expected_ty
   with
@@ -366,6 +372,9 @@ let nothing_equated = TypePairs.create 0
 
 (* unification inside type_pat*)
 let unify_pat_types_return_equated_pairs ?(refine = None) loc env ty ty' =
+  if !Clflags.dump_unification then
+    Format.eprintf "@[In unification inside type_pat: %a@ %a@]@." !Btype.print_raw ty
+      !Btype.print_raw ty';
   try
     match refine with
     | Some allow_recursive ->
@@ -5140,8 +5149,14 @@ and type_let
         | _ -> spat)
       spat_sexp_list in
   let nvs = List.map (fun _ -> newvar ()) spatl in
+  if !Clflags.dump_unification then
+    Format.eprintf "@[In type_let, new variables:@ %a@]@." Printtyp.raw_type_list nvs;
+
   let (pat_list, new_env, force, pvs, unpacks) =
     type_pattern_list Value existential_context env spatl nvs allow in
+  if !Clflags.dump_unification then
+    Format.eprintf "@[In type_let, pattern variables:@ %a@]@." Printtyp.raw_type_list
+      (List.map (fun {pv_type} -> pv_type) pvs);
   let attrs_list = List.map fst spatl in
   let is_recursive = (rec_flag = Recursive) in
   (* If recursive, first unify with an approximation of the expression *)
@@ -5176,6 +5191,10 @@ and type_let
     end else
       pat_list
   in
+  if !Clflags.dump_unification then
+    Format.eprintf "@[In type_let, pattern vars: @ %a@]@."
+      Printtyp.raw_type_list (List.map (fun {pat_type} -> pat_type) pat_list);
+
   (* Only bind pattern variables after generalizing *)
   List.iter (fun f -> f()) force;
   let sexp_is_fun { pvb_expr = sexp; _ } =
@@ -5301,6 +5320,9 @@ and type_let
             in
             exp, None)
       spat_sexp_list pat_slot_list in
+  if !Clflags.dump_unification then
+    Format.eprintf "@[In type_let, exp_list:@ %a@]@." Printtyp.raw_type_list
+  (List.map (fun ({exp_type}, _) -> exp_type) exp_list);
   current_slot := None;
   if is_recursive && not !rec_needed then begin
     let {pvb_pat; pvb_attributes} = List.hd spat_sexp_list in

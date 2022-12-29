@@ -2807,6 +2807,11 @@ let type_toplevel_phrase env s =
 let type_module_alias = type_module ~alias:true true false None
 let type_module = type_module true false None
 let type_structure = type_structure false None
+let type_structure_with_dump env sstr =
+  Clflags.dump_unification := true;
+  let result = type_structure env sstr in
+  Clflags.dump_unification := false;
+  result
 
 (* Normalize types in a signature *)
 

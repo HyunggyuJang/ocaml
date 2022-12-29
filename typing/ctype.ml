@@ -2523,6 +2523,9 @@ let unify_eq t1 t2 =
 
 let unify1_var env t1 t2 =
   assert (is_Tvar t1);
+  if !Clflags.dump_unification then
+    Format.eprintf "@[In unify1_var: %a@ %a@]@." !Btype.print_raw t1
+      !Btype.print_raw t2;
   occur_for Unify env t1 t2;
   match occur_univar_for Unify env t2 with
   | () ->
@@ -2584,7 +2587,13 @@ let unify3_var env t1' t2 t2' =
 
 let rec unify (env:Env.t ref) t1 t2 =
   (* First step: special cases (optimizations) *)
-  if unify_eq t1 t2 then () else
+  if unify_eq t1 t2 then begin
+    if !Clflags.dump_unification then
+    Format.eprintf "@[In unify_eq: %a@ %a@]@." !Btype.print_raw t1
+      !Btype.print_raw t2;
+    ()
+  end
+  else
   let reset_tracing = check_trace_gadt_instances !env in
 
   try
@@ -2645,6 +2654,9 @@ and unify2_rec env t10 t1 t20 t2 =
     unify2_expand env t10 t1 t20 t2
 
 and unify2_expand env t1 t1' t2 t2' =
+  if !Clflags.dump_unification then
+    Format.eprintf "@[In unify2_expand: %a@ %a@]@." !Btype.print_raw t1
+      !Btype.print_raw t2;
   (* Second step: expansion of abbreviations *)
   (* Expansion may change the representative of the types. *)
   ignore (expand_head_unif !env t1');
@@ -3165,8 +3177,6 @@ let unify_pairs env ty1 ty2 pairs =
 
 let unify env ty1 ty2 =
   unify_pairs (ref env) ty1 ty2 []
-
-
 
 (**** Special cases of unification ****)
 
