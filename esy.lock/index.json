@@ -1,0 +1,15 @@
+{
+  "checksum": "0cc961f41dbf4ff5ab5654751a4ba36e",
+  "root": "ocaml@link-dev:./esy.json",
+  "node": {
+    "ocaml@link-dev:./esy.json": {
+      "id": "ocaml@link-dev:./esy.json",
+      "name": "ocaml",
+      "version": "link-dev:./esy.json",
+      "source": { "type": "link-dev", "path": ".", "manifest": "esy.json" },
+      "overrides": [],
+      "dependencies": [],
+      "devDependencies": []
+    }
+  }
+}
