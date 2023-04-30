@@ -1,26 +1,19 @@
 {
-    "name": "ocaml",
-    "version": "5.2.0",
-    "esy": {
-        "build": [
-            "./configure --prefix $cur__install",
-            "make -j4",
-            "make install"
-        ],
-        "buildsInSource": true,
-        "exportedEnv": {
-            "OCAMLLIB": {
-                "val": "#{ocaml.lib / 'ocaml'}",
-                "scope": "global"
-            },
-            "CAML_LD_LIBRARY_PATH": {
-                "val": "#{ocaml.lib / 'ocaml' / 'stublibs' : ocaml.lib / 'ocaml' : $CAML_LD_LIBRARY_PATH}",
-                "scope": "global"
-            },
-            "OCAML_TOPLEVEL_PATH": {
-                "val": "#{ocaml.lib / 'ocaml'}",
-                "scope": "global"
+    "name": "ocaml-dev",
+    "dependencies": {
+        "ocaml": "*"
+    },
+    "resolutions": {
+        "ocaml": {
+            "source": "HyunggyuJang/ocaml#5e12c1fd245adae75ac2ba2ed97d84f2f35643ee",
+            "override": {
+                "version": "5.2.0"
             }
         }
+    },
+    "devDependencies": {
+        "@opam/ocaml-lsp-server": "1.12.2",
+        "@opam/ocp-indent": "1.8.1",
+        "@opam/ocamlformat": "0.24.1"
     }
 }
