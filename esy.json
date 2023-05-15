@@ -1,9 +1,5 @@
 {
     "name": "ocaml-dev",
-    "esy": {
-        "build": ["./configure", "make clean", "dune build @libs"],
-        "buildsInSource": true
-    },
     "dependencies": {
         "@opam/dune": "3.1.1",
         "ocaml": "4.14.0"
