@@ -1,15 +1,12 @@
 {
     "name": "ocaml-dev",
-    "dependencies": {
-        "ocaml": "*"
+    "esy": {
+        "build": ["./configure", "make clean", "dune build @libs"],
+        "buildsInSource": true
     },
-    "resolutions": {
-        "ocaml": {
-            "source": "HyunggyuJang/ocaml#5e12c1fd245adae75ac2ba2ed97d84f2f35643ee",
-            "override": {
-                "version": "5.2.0"
-            }
-        }
+    "dependencies": {
+        "@opam/dune": "3.1.1",
+        "ocaml": "4.14.0"
     },
     "devDependencies": {
         "@opam/ocaml-lsp-server": "1.12.2",
